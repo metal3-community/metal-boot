@@ -11,9 +11,9 @@ import (
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=config.yaml https://opendev.org/airship/go-redfish/raw/branch/master/spec/openapi.yaml
 
 func main() {
-	server := redfish.NewRedfishServer()
+	server := redfish.NewRedfishServer(true)
 
-	err := server.SetupConfigFile()
+	err := setupConfigFile()
 
 	if err != nil {
 		log.Default().Fatal(err)
@@ -21,7 +21,7 @@ func main() {
 
 	h := gin.Default()
 
-	redfish.RegisterHandlers(r, server)
+	redfish.RegisterHandlers(h, server)
 
 	s := &http.Server{
 		Handler: h,
