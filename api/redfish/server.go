@@ -2,6 +2,7 @@ package redfish
 
 import (
 	"github.com/gin-gonic/gin"
+	"github.com/ubiquiti-community/go-unifi/unifi"
 )
 
 type RedfishSystem struct {
@@ -12,10 +13,20 @@ type RedfishSystem struct {
 
 type RedfishServer struct {
 	Systems map[string]RedfishSystem
+
+	client *unifi.Client
 }
 
 // CreateVirtualDisk implements ServerInterface.
 func (r *RedfishServer) CreateVirtualDisk(c *gin.Context, computerSystemId string, storageControllerId string) {
+
+	req := CreateVirtualDiskRequestBody{}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
 	panic("unimplemented")
 }
 
@@ -111,6 +122,17 @@ func (r *RedfishServer) ResetSystem(c *gin.Context, computerSystemId string) {
 
 // SetSystem implements ServerInterface.
 func (r *RedfishServer) SetSystem(c *gin.Context, systemId string) {
+
+	req := SetSystemJSONRequestBody{}
+
+	if err := c.BindJSON(&req); err != nil {
+		c.JSON(400, gin.H{"error": err.Error()})
+		return
+	}
+
+	if req.PowerState == "On" {
+		
+
 	panic("unimplemented")
 }
 
