@@ -51,5 +51,5 @@ release:
 
 dockers:
 - image_templates:
-  - "gcr.io/appkins-org/{{.ProjectName}}:{{.Version}}"
-  - "gcr.io/appkins-org/{{.ProjectName}}:latest"
+  - "ghcr.io/appkins-org/{{.ProjectName}}:{{.Version}}"
+  - "ghcr.io/appkins-org/{{.ProjectName}}:latest"

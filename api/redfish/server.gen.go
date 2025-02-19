@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/gin-gonic/gin"
-	"github.com/oapi-codegen/nullable"
 	"github.com/oapi-codegen/runtime"
 	openapi_types "github.com/oapi-codegen/runtime/types"
 )
@@ -188,7 +187,7 @@ type Collection struct {
 	OdataType string `json:"@odata.type"`
 
 	// Description description
-	Description nullable.Nullable[string] `json:"Description,omitempty"`
+	Description *string `json:"Description"`
 
 	// Members Contains the members of this collection.
 	Members *[]IdRef `json:"Members,omitempty"`
@@ -320,24 +319,24 @@ type Manager struct {
 	OdataId *string `json:"@odata.id,omitempty"`
 
 	// OdataType The type of a resource.
-	OdataType *string                   `json:"@odata.type,omitempty"`
-	DateTime  nullable.Nullable[string] `json:"DateTime,omitempty"`
+	OdataType *string `json:"@odata.type,omitempty"`
+	DateTime  *string `json:"DateTime"`
 
 	// DateTimeLocalOffset The time offset from UTC that the DateTime property is set to in format: +06:00 .
-	DateTimeLocalOffset nullable.Nullable[string] `json:"DateTimeLocalOffset,omitempty"`
+	DateTimeLocalOffset *string `json:"DateTimeLocalOffset"`
 
 	// Description description
-	Description nullable.Nullable[string] `json:"Description,omitempty"`
+	Description *string `json:"Description"`
 
 	// EthernetInterfaces A reference to a resource.
-	EthernetInterfaces *IdRef                    `json:"EthernetInterfaces,omitempty"`
-	FirmwareVersion    nullable.Nullable[string] `json:"FirmwareVersion,omitempty"`
+	EthernetInterfaces *IdRef  `json:"EthernetInterfaces,omitempty"`
+	FirmwareVersion    *string `json:"FirmwareVersion"`
 
 	// Id The name of the resource.
-	Id          *string                   `json:"Id,omitempty"`
-	Links       *ManagerLinks             `json:"Links,omitempty"`
-	ManagerType *ManagerType              `json:"ManagerType,omitempty"`
-	Model       nullable.Nullable[string] `json:"Model,omitempty"`
+	Id          *string       `json:"Id,omitempty"`
+	Links       *ManagerLinks `json:"Links,omitempty"`
+	ManagerType *ManagerType  `json:"ManagerType,omitempty"`
+	Model       *string       `json:"Model"`
 
 	// Name The name of the resource.
 	Name                  *string     `json:"Name,omitempty"`
@@ -363,9 +362,9 @@ type ManagerType string
 
 // MemorySummary defines model for MemorySummary.
 type MemorySummary struct {
-	Status                         *Status                    `json:"Status,omitempty"`
-	TotalSystemMemoryGiB           nullable.Nullable[float32] `json:"TotalSystemMemoryGiB,omitempty"`
-	TotalSystemPersistentMemoryGiB nullable.Nullable[float32] `json:"TotalSystemPersistentMemoryGiB,omitempty"`
+	Status                         *Status  `json:"Status,omitempty"`
+	TotalSystemMemoryGiB           *float32 `json:"TotalSystemMemoryGiB"`
+	TotalSystemPersistentMemoryGiB *float32 `json:"TotalSystemPersistentMemoryGiB"`
 }
 
 // Message defines model for Message.
@@ -398,8 +397,8 @@ type PowerState string
 
 // ProcessorSummary defines model for ProcessorSummary.
 type ProcessorSummary struct {
-	Count  nullable.Nullable[int] `json:"Count,omitempty"`
-	Status *Status                `json:"Status,omitempty"`
+	Count  *int    `json:"Count"`
+	Status *Status `json:"Status,omitempty"`
 }
 
 // RedfishError Contains an error payload from a Redfish Service.
@@ -459,23 +458,23 @@ type SimpleUpdateRequestBody struct {
 
 // SoftwareInventory This schema defines an inventory of software components.
 type SoftwareInventory struct {
-	OdataContext           *string                      `json:"@odata.context,omitempty"`
-	OdataEtag              *string                      `json:"@odata.etag,omitempty"`
-	OdataId                *string                      `json:"@odata.id,omitempty"`
-	OdataType              *string                      `json:"@odata.type,omitempty"`
-	Description            nullable.Nullable[string]    `json:"Description,omitempty"`
-	Id                     *string                      `json:"Id,omitempty"`
-	LowestSupportedVersion nullable.Nullable[string]    `json:"LowestSupportedVersion,omitempty"`
-	Manufacturer           nullable.Nullable[string]    `json:"Manufacturer,omitempty"`
-	Name                   *string                      `json:"Name,omitempty"`
-	RelatedItem            *[]IdRef                     `json:"RelatedItem,omitempty"`
-	RelatedItemOdataCount  nullable.Nullable[int]       `json:"RelatedItem@odata.count,omitempty"`
-	ReleaseDate            nullable.Nullable[time.Time] `json:"ReleaseDate,omitempty"`
-	SoftwareId             *string                      `json:"SoftwareId,omitempty"`
-	Status                 *Status                      `json:"Status,omitempty"`
-	UefiDevicePaths        *[]string                    `json:"UefiDevicePaths,omitempty"`
-	Updateable             nullable.Nullable[bool]      `json:"Updateable,omitempty"`
-	Version                nullable.Nullable[string]    `json:"Version,omitempty"`
+	OdataContext           *string    `json:"@odata.context,omitempty"`
+	OdataEtag              *string    `json:"@odata.etag,omitempty"`
+	OdataId                *string    `json:"@odata.id,omitempty"`
+	OdataType              *string    `json:"@odata.type,omitempty"`
+	Description            *string    `json:"Description"`
+	Id                     *string    `json:"Id,omitempty"`
+	LowestSupportedVersion *string    `json:"LowestSupportedVersion"`
+	Manufacturer           *string    `json:"Manufacturer"`
+	Name                   *string    `json:"Name,omitempty"`
+	RelatedItem            *[]IdRef   `json:"RelatedItem,omitempty"`
+	RelatedItemOdataCount  *int       `json:"RelatedItem@odata.count"`
+	ReleaseDate            *time.Time `json:"ReleaseDate"`
+	SoftwareId             *string    `json:"SoftwareId,omitempty"`
+	Status                 *Status    `json:"Status,omitempty"`
+	UefiDevicePaths        *[]string  `json:"UefiDevicePaths,omitempty"`
+	Updateable             *bool      `json:"Updateable"`
+	Version                *string    `json:"Version"`
 }
 
 // State defines model for State.
@@ -509,7 +508,7 @@ type Task struct {
 	OdataType *string `json:"@odata.type,omitempty"`
 
 	// Description description
-	Description nullable.Nullable[string] `json:"Description,omitempty"`
+	Description *string `json:"Description"`
 
 	// EndTime The date-time stamp that the task was last completed.
 	EndTime *string `json:"EndTime,omitempty"`
@@ -563,16 +562,16 @@ type UpdateService struct {
 	Actions   *UpdateServiceActions `json:"Actions,omitempty"`
 
 	// Description description
-	Description       nullable.Nullable[string] `json:"Description,omitempty"`
-	FirmwareInventory *FirmwareInventory        `json:"FirmwareInventory,omitempty"`
-	HttpPushUri       *string                   `json:"HttpPushUri,omitempty"`
+	Description       *string            `json:"Description"`
+	FirmwareInventory *FirmwareInventory `json:"FirmwareInventory,omitempty"`
+	HttpPushUri       *string            `json:"HttpPushUri,omitempty"`
 
 	// Id The name of the resource.
 	Id *string `json:"Id,omitempty"`
 
 	// Name The name of the resource.
-	Name           *string                 `json:"Name,omitempty"`
-	ServiceEnabled nullable.Nullable[bool] `json:"ServiceEnabled,omitempty"`
+	Name           *string `json:"Name,omitempty"`
+	ServiceEnabled *bool   `json:"ServiceEnabled"`
 }
 
 // UpdateServiceActions defines model for UpdateService_Actions.
@@ -598,22 +597,22 @@ type VirtualMedia struct {
 	ConnectedVia *ConnectedVia        `json:"ConnectedVia,omitempty"`
 
 	// Description description
-	Description nullable.Nullable[string] `json:"Description,omitempty"`
+	Description *string `json:"Description"`
 
 	// Id The name of the resource.
-	Id         *string                   `json:"Id,omitempty"`
-	Image      nullable.Nullable[string] `json:"Image,omitempty"`
-	ImageName  nullable.Nullable[string] `json:"ImageName,omitempty"`
-	Inserted   nullable.Nullable[bool]   `json:"Inserted,omitempty"`
-	MediaTypes *[]string                 `json:"MediaTypes,omitempty"`
+	Id         *string   `json:"Id,omitempty"`
+	Image      *string   `json:"Image"`
+	ImageName  *string   `json:"ImageName"`
+	Inserted   *bool     `json:"Inserted"`
+	MediaTypes *[]string `json:"MediaTypes,omitempty"`
 
 	// Name The name of the resource.
-	Name                 *string                   `json:"Name,omitempty"`
-	Password             nullable.Nullable[string] `json:"Password,omitempty"`
-	TransferMethod       *TransferMethod           `json:"TransferMethod,omitempty"`
-	TransferProtocolType *TransferProtocolType     `json:"TransferProtocolType,omitempty"`
-	UserName             nullable.Nullable[string] `json:"UserName,omitempty"`
-	WriteProtected       nullable.Nullable[bool]   `json:"WriteProtected,omitempty"`
+	Name                 *string               `json:"Name,omitempty"`
+	Password             *string               `json:"Password"`
+	TransferMethod       *TransferMethod       `json:"TransferMethod,omitempty"`
+	TransferProtocolType *TransferProtocolType `json:"TransferProtocolType,omitempty"`
+	UserName             *string               `json:"UserName"`
+	WriteProtected       *bool                 `json:"WriteProtected"`
 }
 
 // VirtualMediaActions defines model for VirtualMedia_Actions.
@@ -708,11 +707,11 @@ type ServerInterface interface {
 	// (POST /redfish/v1/Systems/{ComputerSystemId}/Storage/{StorageControllerId}/Volumes)
 	CreateVirtualDisk(c *gin.Context, computerSystemId string, storageControllerId string)
 
-	// (GET /redfish/v1/Systems/{systemId})
-	GetSystem(c *gin.Context, systemId string)
+	// (GET /redfish/v1/Systems/{ComputerSystemId})
+	GetSystem(c *gin.Context, ComputerSystemId string)
 
-	// (PATCH /redfish/v1/Systems/{systemId})
-	SetSystem(c *gin.Context, systemId string)
+	// (PATCH /redfish/v1/Systems/{ComputerSystemId})
+	SetSystem(c *gin.Context, ComputerSystemId string)
 
 	// (GET /redfish/v1/TaskService/Tasks)
 	GetTaskList(c *gin.Context)
@@ -1072,12 +1071,12 @@ func (siw *ServerInterfaceWrapper) GetSystem(c *gin.Context) {
 
 	var err error
 
-	// ------------- Path parameter "systemId" -------------
-	var systemId string
+	// ------------- Path parameter "ComputerSystemId" -------------
+	var ComputerSystemId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "systemId", c.Param("systemId"), &systemId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", c.Param("ComputerSystemId"), &ComputerSystemId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter systemId: %w", err), http.StatusBadRequest)
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter ComputerSystemId: %w", err), http.StatusBadRequest)
 		return
 	}
 
@@ -1088,7 +1087,7 @@ func (siw *ServerInterfaceWrapper) GetSystem(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.GetSystem(c, systemId)
+	siw.Handler.GetSystem(c, ComputerSystemId)
 }
 
 // SetSystem operation middleware
@@ -1096,12 +1095,12 @@ func (siw *ServerInterfaceWrapper) SetSystem(c *gin.Context) {
 
 	var err error
 
-	// ------------- Path parameter "systemId" -------------
-	var systemId string
+	// ------------- Path parameter "ComputerSystemId" -------------
+	var ComputerSystemId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "systemId", c.Param("systemId"), &systemId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", c.Param("ComputerSystemId"), &ComputerSystemId, runtime.BindStyledParameterOptions{Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter systemId: %w", err), http.StatusBadRequest)
+		siw.ErrorHandler(c, fmt.Errorf("Invalid format for parameter ComputerSystemId: %w", err), http.StatusBadRequest)
 		return
 	}
 
@@ -1112,7 +1111,7 @@ func (siw *ServerInterfaceWrapper) SetSystem(c *gin.Context) {
 		}
 	}
 
-	siw.Handler.SetSystem(c, systemId)
+	siw.Handler.SetSystem(c, ComputerSystemId)
 }
 
 // GetTaskList operation middleware
@@ -1268,8 +1267,8 @@ func RegisterHandlersWithOptions(router gin.IRouter, si ServerInterface, options
 	router.DELETE(options.BaseURL+"/redfish/v1/Systems/:ComputerSystemId/Storage/Volumes/:StorageId", wrapper.DeleteVirtualdisk)
 	router.GET(options.BaseURL+"/redfish/v1/Systems/:ComputerSystemId/Storage/:StorageControllerId/Volumes", wrapper.GetVolumes)
 	router.POST(options.BaseURL+"/redfish/v1/Systems/:ComputerSystemId/Storage/:StorageControllerId/Volumes", wrapper.CreateVirtualDisk)
-	router.GET(options.BaseURL+"/redfish/v1/Systems/:systemId", wrapper.GetSystem)
-	router.PATCH(options.BaseURL+"/redfish/v1/Systems/:systemId", wrapper.SetSystem)
+	router.GET(options.BaseURL+"/redfish/v1/Systems/:ComputerSystemId", wrapper.GetSystem)
+	router.PATCH(options.BaseURL+"/redfish/v1/Systems/:ComputerSystemId", wrapper.SetSystem)
 	router.GET(options.BaseURL+"/redfish/v1/TaskService/Tasks", wrapper.GetTaskList)
 	router.GET(options.BaseURL+"/redfish/v1/TaskService/Tasks/:taskId", wrapper.GetTask)
 	router.GET(options.BaseURL+"/redfish/v1/UpdateService", wrapper.UpdateService)
