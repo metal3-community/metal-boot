@@ -8,7 +8,6 @@ require (
 	github.com/gin-gonic/gin v1.9.1
 	github.com/go-logr/logr v1.4.2
 	github.com/google/go-cmp v0.6.0
-	github.com/hashicorp/go-retryablehttp v0.7.4
 	github.com/oapi-codegen/nullable v1.1.0
 	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1
 	github.com/oapi-codegen/runtime v1.1.1
@@ -17,11 +16,10 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/squarefactory/ipmitool v0.0.0-20230411131013-f36f270ea246
 	github.com/tinkerbell/ipxedust v0.0.0-20250129162407-3c29a914f8be
-	github.com/ubiquiti-community/go-unifi v1.33.4
+	github.com/ubiquiti-community/go-unifi v1.33.7
 	go.opentelemetry.io/otel v1.32.0
 	go.opentelemetry.io/otel/trace v1.32.0
 	go.uber.org/multierr v1.11.0
-	golang.org/x/net v0.33.0
 	golang.org/x/sys v0.29.0
 )
 
@@ -44,7 +42,6 @@ require (
 	github.com/go-test/deep v1.1.0 // indirect
 	github.com/goccy/go-json v0.10.2 // indirect
 	github.com/google/uuid v1.6.0 // indirect
-	github.com/hashicorp/go-cleanhttp v0.5.2 // indirect
 	github.com/hashicorp/hcl v1.0.1-vault-5 // indirect
 	github.com/invopop/yaml v0.3.1 // indirect
 	github.com/josharian/intern v1.0.0 // indirect
@@ -78,6 +75,7 @@ require (
 	golang.org/x/crypto v0.32.0 // indirect
 	golang.org/x/exp v0.0.0-20240909161429-701f63a606c0 // indirect
 	golang.org/x/mod v0.22.0 // indirect
+	golang.org/x/net v0.33.0 // indirect
 	golang.org/x/sync v0.10.0 // indirect
 	golang.org/x/text v0.21.0 // indirect
 	golang.org/x/tools v0.27.0 // indirect
