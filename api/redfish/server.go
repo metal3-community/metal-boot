@@ -8,11 +8,21 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"slices"
+	"strconv"
 	"time"
 
 	"github.com/gin-gonic/gin"
 	"github.com/ubiquiti-community/go-unifi/unifi"
 )
+
+type RedfishServerConfig struct {
+	Insecure      bool
+	UnifiUser     string
+	UnifiPass     string
+	UnifiEndpoint string
+	UnifiSite     string
+	UnifiDevice   string
+}
 
 type RedfishSystem struct {
 	MacAddress string `yaml:"mac"`
@@ -20,20 +30,39 @@ type RedfishSystem struct {
 	UnifiPort  int    `yaml:"port"`
 	SiteID     string `yaml:"site"`
 	DeviceMac  string `yaml:"device_mac"`
+	PoeMode    string `yaml:"poe_mode"`
+}
+
+func (r *RedfishSystem) GetPowerState() *PowerState {
+	state := Off
+	switch r.PoeMode {
+	case "auto":
+		state = On
+	case "off":
+		state = Off
+	default:
+		state = Off
+	}
+	return &state
 }
 
 type RedfishServer struct {
-	Systems map[string]RedfishSystem
+	Systems map[int]RedfishSystem
+
+	Config *RedfishServerConfig
 
 	client *unifi.Client
 }
 
-func NewRedfishServer(insecure bool) ServerInterface {
+func NewRedfishServer(cfg RedfishServerConfig) ServerInterface {
 	client := unifi.Client{}
+
+	if err := client.SetBaseURL(cfg.UnifiEndpoint); err != nil {
+		panic(fmt.Sprintf("failed to set base url: %s", err))
+	}
 
 	httpClient := &http.Client{}
 	httpClient.Transport = &http.Transport{
-		Proxy: http.ProxyFromEnvironment,
 		DialContext: (&net.Dialer{
 			Timeout:   30 * time.Second,
 			KeepAlive: 30 * time.Second,
@@ -45,7 +74,7 @@ func NewRedfishServer(insecure bool) ServerInterface {
 		ExpectContinueTimeout: 1 * time.Second,
 
 		TLSClientConfig: &tls.Config{
-			InsecureSkipVerify: insecure,
+			InsecureSkipVerify: cfg.Insecure,
 		},
 	}
 
@@ -56,33 +85,73 @@ func NewRedfishServer(insecure bool) ServerInterface {
 		panic(fmt.Sprintf("failed to set http client: %s", err))
 	}
 
-	if err := client.Login(context.Background(), "admin", "password"); err != nil {
+	if err := client.Login(context.Background(), cfg.UnifiUser, cfg.UnifiPass); err != nil {
 		panic(fmt.Sprintf("failed to login: %s", err))
 	}
 
-	rfSystems := make(map[string]RedfishSystem)
+	rfSystems := make(map[int]RedfishSystem)
 
-	if clients, err := client.ListActiveClients(context.Background(), "default"); err != nil {
+	server := &RedfishServer{
+		Systems: rfSystems,
+		client:  &client,
+		Config:  &cfg,
+	}
+
+	server.refreshSystems(context.Background())
+
+	return server
+}
+
+func (r *RedfishServer) refreshSystems(ctx context.Context) (err error) {
+	device, err := r.client.GetDeviceByMAC(ctx, r.Config.UnifiSite, r.Config.UnifiDevice)
+	if err != nil {
+		panic(err)
+	}
+
+	if device.PortOverrides == nil {
+		panic("no port overrides found")
+	}
+
+	for _, port := range device.PortOverrides {
+
+		sys, ok := r.Systems[port.PortIDX]
+		if !ok {
+			sys = RedfishSystem{
+				UnifiPort: port.PortIDX,
+				DeviceMac: device.MAC,
+				SiteID:    device.SiteID,
+			}
+		}
+		sys.PoeMode = port.PoeMode
+
+		r.Systems[port.PortIDX] = sys
+	}
+
+	if clients, err := r.client.ListActiveClients(ctx, r.Config.UnifiSite); err != nil {
 		panic(err)
 	} else {
 		for _, c := range clients {
 
-			rfSystem := RedfishSystem{
-				MacAddress: c.Mac,
-				IpAddress:  c.IP,
-				UnifiPort:  c.SwPort,
-				SiteID:     c.SiteID,
-				DeviceMac:  c.UplinkMac,
-			}
+			if c.UplinkMac == r.Config.UnifiDevice {
 
-			rfSystems[c.Mac] = rfSystem
+				sys, ok := r.Systems[c.SwPort]
+				if !ok {
+					sys = RedfishSystem{
+						UnifiPort: c.SwPort,
+						DeviceMac: c.UplinkMac,
+						SiteID:    c.SiteID,
+					}
+				}
+
+				sys.MacAddress = c.Mac
+				sys.IpAddress = c.IP
+
+				r.Systems[c.SwPort] = sys
+			}
 		}
 	}
 
-	return &RedfishServer{
-		Systems: rfSystems,
-		client:  &client,
-	}
+	return
 }
 
 func (r *RedfishServer) getPortState(ctx context.Context, macAddress string, p int) (deviceId string, port unifi.DevicePortOverrides, err error) {
@@ -99,7 +168,7 @@ func (r *RedfishServer) getPortState(ctx context.Context, macAddress string, p i
 	})
 
 	if iPort == -1 {
-		err = fmt.Errorf("port %s not found on device %s", p, deviceId)
+		err = fmt.Errorf("port %d not found on device %s", p, deviceId)
 		return
 	}
 
@@ -109,7 +178,7 @@ func (r *RedfishServer) getPortState(ctx context.Context, macAddress string, p i
 }
 
 // CreateVirtualDisk implements ServerInterface.
-func (r *RedfishServer) CreateVirtualDisk(c *gin.Context, computerSystemId string, storageControllerId string) {
+func (r *RedfishServer) CreateVirtualDisk(c *gin.Context, systemId string, storageControllerId string) {
 
 	req := CreateVirtualDiskRequestBody{}
 
@@ -122,7 +191,7 @@ func (r *RedfishServer) CreateVirtualDisk(c *gin.Context, computerSystemId strin
 }
 
 // DeleteVirtualdisk implements ServerInterface.
-func (r *RedfishServer) DeleteVirtualdisk(c *gin.Context, computerSystemId string, storageId string) {
+func (r *RedfishServer) DeleteVirtualdisk(c *gin.Context, systemId string, storageId string) {
 	panic("unimplemented")
 }
 
@@ -164,31 +233,20 @@ func (r *RedfishServer) GetSoftwareInventory(c *gin.Context, softwareId string) 
 // GetSystem implements ServerInterface.
 func (r *RedfishServer) GetSystem(c *gin.Context, systemId string) {
 
-	s := r.Systems[systemId]
-
-	_, powerState, err := r.getPortState(c, s.DeviceMac, s.UnifiPort)
+	systemIdInt, err := strconv.ParseInt(systemId, 10, 64)
 	if err != nil {
 		c.JSON(400, gin.H{"error": err.Error()})
 		return
 	}
 
-	powerstate := PowerState(Off)
-
-	switch powerState.PoeMode {
-	case "auto":
-		powerstate = On
-	case "off":
-		powerstate = Off
-	}
+	s := r.Systems[int(systemIdInt)]
 
 	resp := ComputerSystem{
 		Id:         &systemId,
-		PowerState: &powerstate,
+		PowerState: s.GetPowerState(),
 	}
 
 	c.JSON(200, &resp)
-
-	return
 }
 
 // GetTask implements ServerInterface.
@@ -202,7 +260,7 @@ func (r *RedfishServer) GetTaskList(c *gin.Context) {
 }
 
 // GetVolumes implements ServerInterface.
-func (r *RedfishServer) GetVolumes(c *gin.Context, computerSystemId string, storageControllerId string) {
+func (r *RedfishServer) GetVolumes(c *gin.Context, systemId string, storageControllerId string) {
 	panic("unimplemented")
 }
 
@@ -232,7 +290,7 @@ func (r *RedfishServer) ResetIdrac(c *gin.Context) {
 }
 
 // ResetSystem implements ServerInterface.
-func (r *RedfishServer) ResetSystem(c *gin.Context, computerSystemId string) {
+func (r *RedfishServer) ResetSystem(c *gin.Context, systemId string) {
 	panic("unimplemented")
 }
 

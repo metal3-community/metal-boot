@@ -1,0 +1,8 @@
+address: "0.0.0.0"
+port: 8080
+unifi:
+  username: admin
+  password: password
+  endpoint: https://192.168.0.1
+  site: "default"
+  device: "aa:bb:dd:cc:ee:ff"

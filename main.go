@@ -1,6 +1,7 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"net/http"
 
@@ -8,16 +9,25 @@ import (
 	"github.com/gin-gonic/gin"
 )
 
-//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=config.yaml https://opendev.org/airship/go-redfish/raw/branch/master/spec/openapi.yaml
+//go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen --config=oapi.yaml https://opendev.org/airship/go-redfish/raw/branch/master/spec/openapi.yaml
 
 func main() {
-	server := redfish.NewRedfishServer(true)
-
-	err := setupConfigFile()
-
+	conf, err := NewConfig()
 	if err != nil {
 		log.Default().Fatal(err)
+		panic(err)
 	}
+
+	server := redfish.NewRedfishServer(redfish.RedfishServerConfig{
+		Insecure:      true,
+		UnifiUser:     conf.Unifi.Username,
+		UnifiPass:     conf.Unifi.Password,
+		UnifiEndpoint: conf.Unifi.Endpoint,
+		UnifiSite:     conf.Unifi.Site,
+		UnifiDevice:   conf.Unifi.Device,
+	})
+
+	addr := fmt.Sprintf("%s:%d", conf.Address, conf.Port)
 
 	h := gin.Default()
 
@@ -25,7 +35,7 @@ func main() {
 
 	s := &http.Server{
 		Handler: h,
-		Addr:    "0.0.0.0:8080",
+		Addr:    addr,
 	}
 
 	// And we serve HTTP until the world ends.
