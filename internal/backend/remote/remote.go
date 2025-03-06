@@ -98,15 +98,18 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 	return backend, nil
 }
 
-func (w *Remote) getNetBoot(mac net.HardwareAddr) (*data.Netboot, error) {
+func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
 
-	for k, netboot := range w.netboot {
-		if kMac, err := net.ParseMAC(k); err == nil && kMac.String() == mac.String() {
-			return &netboot, nil
+	if w.netboot != nil {
+		if netboot, ok := w.netboot[mac.String()]; ok {
+			return &netboot
 		}
 	}
 
-	return nil, fmt.Errorf("no netboot found")
+	return &data.Netboot{
+		AllowNetboot: true,
+		OSIE:         data.OSIE{},
+	}
 }
 
 func (w *Remote) loadConfigs() error {
@@ -204,7 +207,7 @@ func (w *Remote) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHCP
 		w.power[mac.String()] = power
 	}
 
-	netboot, _ := w.getNetBoot(mac)
+	netboot := w.getNetBoot(mac)
 
 	if activeClient, err := w.getActiveClientByMac(ctx, mac); err == nil {
 
@@ -412,7 +415,7 @@ func (w *Remote) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netb
 
 	power := data.Power{}
 
-	netboot := &data.Netboot{}
+	netboot := w.getNetBoot(dhcp.MACAddress)
 
 	if activeClient, err := w.getActiveClientByIP(ctx, ip); err == nil {
 
@@ -480,8 +483,6 @@ func (w *Remote) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netb
 	if dhcp.MACAddress.String() == "" {
 		return nil, nil, nil, errRecordNotFound
 	}
-
-	netboot, _ = w.getNetBoot(dhcp.MACAddress)
 
 	if portOverrides, err := w.getPortOverride(ctx, power.Port); err == nil {
 		power.State = portOverrides.PoeMode
