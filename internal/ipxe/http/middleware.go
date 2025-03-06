@@ -62,7 +62,6 @@ func (w *responseWriter) WriteHeader(code int) {
 	if w.statusCode == 0 {
 		w.statusCode = code
 	}
-	w.ResponseWriter.WriteHeader(code)
 }
 
 func clientIP(str string) string {

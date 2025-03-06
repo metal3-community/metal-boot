@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 
 	"github.com/fsnotify/fsnotify"
@@ -147,16 +148,51 @@ func (c *Config) GetOsieUrl() (*url.URL, error) {
 	}
 }
 
+type defaultNetworkInfo struct {
+	BindIP     string
+	ExternalIP string
+	Iface      string
+	Port       int
+}
+
+func GetDefaultIpAddrInfo() defaultNetworkInfo {
+	res := defaultNetworkInfo{}
+	addr, iface, err := GetLocalIP()
+	if err != nil {
+		if addr, ok := os.LookupEnv("EXTERNAL_IP"); !ok {
+			res.ExternalIP = "127.0.0.1"
+		} else {
+			res.ExternalIP = addr
+		}
+		if iface, ok := os.LookupEnv("INTERFACE"); !ok {
+			res.Iface = "eth0"
+		} else {
+			res.Iface = iface
+		}
+	} else {
+		res.ExternalIP = addr
+		res.Iface = iface
+	}
+
+	if port, ok := os.LookupEnv("PORT"); !ok {
+		res.Port = 8080
+	} else {
+		res.Port, _ = strconv.Atoi(port)
+	}
+
+	if bindIP, ok := os.LookupEnv("BIND_IP"); !ok {
+		res.BindIP = "0.0.0.0"
+	} else {
+		res.BindIP = bindIP
+	}
+
+	return res
+}
+
 func NewConfig() (conf *Config, err error) {
 	conf = &Config{}
 
-	defaultPort := 8080
-
-	defaultIp, defaultIface, err := GetLocalIP()
-	if err != nil {
-		defaultIp = "0.0.0.0"
-		defaultIface = "eth0"
-	}
+	netInfo := GetDefaultIpAddrInfo()
 
 	viper.SetConfigName("redfish")
 
@@ -164,34 +200,36 @@ func NewConfig() (conf *Config, err error) {
 	viper.AddConfigPath("/config/")
 	viper.AddConfigPath(".")
 
-	viper.SetDefault("address", "0.0.0.0")
-	viper.SetDefault("port", defaultPort)
+	viper.SetDefault("address", netInfo.BindIP)
+	viper.SetDefault("port", netInfo.Port)
 	viper.SetDefault("trusted_proxies", "")
 	viper.SetDefault("backend_file_path", "backend.yaml")
+
 	viper.SetDefault("unifi.username", "")
 	viper.SetDefault("unifi.password", "")
 	viper.SetDefault("unifi.endpoint", "")
 	viper.SetDefault("unifi.site", "default")
 	viper.SetDefault("unifi.device", "")
 	viper.SetDefault("unifi.insecure", true)
-	viper.SetDefault("tftp.address", "0.0.0.0")
+
+	viper.SetDefault("tftp.address", netInfo.BindIP)
 	viper.SetDefault("tftp.port", 69)
 	viper.SetDefault("tftp.root_directory", "/tftpboot")
 	viper.SetDefault("tftp.ipxe_patch", ipxePatchDefault)
 
-	viper.SetDefault("dhcp.interface", defaultIface)
-	viper.SetDefault("dhcp.address", "0.0.0.0")
+	viper.SetDefault("dhcp.interface", netInfo.Iface)
+	viper.SetDefault("dhcp.address", netInfo.BindIP)
 	viper.SetDefault("dhcp.port", 67)
 	viper.SetDefault("dhcp.ipxe_http_script_url", "")
-	viper.SetDefault("dhcp.ipxe_binary_url.address", defaultIp)
-	viper.SetDefault("dhcp.ipxe_binary_url.port", defaultPort)
+	viper.SetDefault("dhcp.ipxe_binary_url.address", netInfo.ExternalIP)
+	viper.SetDefault("dhcp.ipxe_binary_url.port", netInfo.Port)
 	viper.SetDefault("dhcp.ipxe_binary_url.scheme", "http")
 	viper.SetDefault("dhcp.ipxe_binary_url.path", "/ipxe/")
-	viper.SetDefault("dhcp.ipxe_http_url.address", defaultIp)
-	viper.SetDefault("dhcp.ipxe_http_url.port", defaultPort)
+	viper.SetDefault("dhcp.ipxe_http_url.address", netInfo.ExternalIP)
+	viper.SetDefault("dhcp.ipxe_http_url.port", netInfo.Port)
 	viper.SetDefault("dhcp.ipxe_http_url.scheme", "http")
 	viper.SetDefault("dhcp.ipxe_http_url.path", "/auto.ipxe")
-	viper.SetDefault("dhcp.tftp_address", defaultIp)
+	viper.SetDefault("dhcp.tftp_address", netInfo.ExternalIP)
 	viper.SetDefault("dhcp.tftp_port", 69)
 	viper.SetDefault("dhcp.syslog_ip", "")
 
