@@ -1,0 +1,24 @@
+# Use a Debian-based image with necessary tools
+FROM alpine:latest AS base
+
+COPY virt-firmware.diff /virt-firmware.diff
+
+RUN apk add --no-cache ca-certificates py3-installer py3-cryptography py3-pip git binutils && \
+    rm -rf /var/lib/apt/lists/* && \
+    pip install pyinstaller --break-system-packages && \
+    git clone https://gitlab.com/kraxel/virt-firmware.git && \
+    cd virt-firmware && \
+    git pull origin tags/v24.11 && \
+    git apply /virt-firmware.diff
+
+COPY virt-fw-vars.py /virt-firmware/virt-fw-vars.py
+
+WORKDIR /virt-firmware
+
+RUN pyinstaller --onefile virt-fw-vars.py
+
+# Set the output directory as a volume
+VOLUME [ "/firmware" ]
+
+# Define the entrypoint to copy the output when running the container
+CMD cp /virt-firmware/dist/virt-fw-vars /firmware/internal/firmware/varstore/virt-fw-vars-linux-amd64

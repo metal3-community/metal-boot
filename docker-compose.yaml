@@ -1,0 +1,12 @@
+services:
+  redfish:
+    build: .
+    network_mode: host
+    volumes:
+      - .:/code
+    configs:
+      - source: redfish
+        target: /config/redfish.yaml
+configs:
+  redfish:
+    file: ./redfish.yaml

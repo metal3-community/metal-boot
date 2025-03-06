@@ -1,0 +1,29 @@
+"e0:92:8f:45:b4:40":
+  Arch: arm64
+  BroadcastAddress: invalid IP
+  DefaultGateway: 10.0.0.1
+  Disabled: false
+  DomainName: ""
+  DomainSearch: null
+  Hostname: kube-ctrl-1
+  IPAddress: 10.0.155.110
+  LeaseTime: 0
+  MACAddress: e0:92:8f:45:b4:40
+  NTPServers: []
+  NameServers:
+  - 10.0.0.1
+  - 1.1.1.1
+  - 1.0.0.1
+  Netboot:
+    AllowPXE: true
+    Console: ""
+    Facility: ""
+    IPXEScript: ""
+    IPXEScriptURL: ""
+  Power:
+    device_id: f4:e2:c6:50:60:bb
+    mode: "PowerOn"
+    port: 2
+    state: "on"
+  SubnetMask: <nil>
+  VLANID: ""

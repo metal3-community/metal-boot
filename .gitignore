@@ -1,0 +1,19 @@
+redfish.yaml
+# Added by goreleaser init:
+dist/
+tftpboot/
+.DS_Store
+gofish
+bin/*
+**/env/*
+**/gofiles/*
+**/*.zip
+**/DSP*
+tools/gofiles*
+**/node_modules/*
+**/vendor/*
+**/dist/*
+**/dist-*
+images/
+!images/*.go
+tools/*.json

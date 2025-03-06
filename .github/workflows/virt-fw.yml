@@ -1,0 +1,40 @@
+# .github/workflows/virt-fw.yml
+name: Build Virt Firmware
+
+on:
+  workflow_dispatch:
+
+
+permissions:
+  contents: write
+  packages: write
+  issues: write
+  id-token: write
+
+jobs:
+  virt-fw:
+    runs-on: ubuntu-latest
+    steps:
+    - name: Checkout
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up QEMU
+      uses: docker/setup-qemu-action@v3
+
+    - name: Set up Docker Buildx
+      uses: docker/setup-buildx-action@v3
+
+    - name: Build Virt Firmware
+      run: |
+        docker build -t virt-fw -f hack/Dockerfile.virt-fw .
+        docker run --rm -v $(pwd):/firmware virt-fw
+
+    - name: Commit Virt Firmware
+      run: |
+        git config --global user.email "github-actions[bot]@users.noreply.github.com"
+        git config --global user.name "github-actions[bot]"
+        git add internal/firmware/varstore/virt-fw-vars-linux-amd64
+        git commit -m "Add Virt Firmware"
+        git push

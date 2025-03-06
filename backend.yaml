@@ -1,0 +1,37 @@
+"e0:92:8f:45:b4:40":
+  Arch: arm64
+  BroadcastAddress: invalid IP
+  DefaultGateway: 10.0.0.1
+  Disabled: false
+  DomainName: ""
+  DomainSearch: null
+  Hostname: kube-ctrl-1
+  IPAddress: 10.0.155.110
+  LeaseTime: 0
+  MACAddress: e0:92:8f:45:b4:40
+  NTPServers: []
+  NameServers:
+  - 10.0.0.1
+  - 1.1.1.1
+  - 1.0.0.1
+  Netboot:
+    AllowPXE: true
+    Console: ""
+    Facility: ""
+    IPXEScript: |
+      :retry_boot
+      echo In inspector.ipxe
+      imgfree
+      # NOTE(dtantsur): keep inspection kernel params in [mdns]params in
+      # ironic-inspector-image and configuration in configure-ironic.sh
+      kernel --timeout 60000 http://10.0.71.238:8080/images/ironic-python-agent.kernel ipa-insecure=1 ipa-inspection-collectors={{ env.IRONIC_IPA_COLLECTORS }} systemd.journald.forward_to_console=yes BOOTIF=${mac} ipa-debug=1 ipa-enable-vlan-interfaces= ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1 initrd=ironic-python-agent.initramfs ipa-inspection-callback-url=http://10.0.50.1:6385/v1/continue_inspection || goto retry_boot
+      initrd --timeout 60000 http://10.0.71.238:8080/images/ironic-python-agent.initramfs || goto retry_boot
+      boot
+    IPXEScriptURL: ""
+  Power:
+    device_id: f4:e2:c6:50:60:bb
+    mode: "PowerOn"
+    port: 2
+    state: "on"
+  SubnetMask: <nil>
+  VLANID: ""
