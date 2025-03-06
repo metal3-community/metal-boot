@@ -3,6 +3,7 @@ package images
 
 import (
 	"context"
+	"crypto/tls"
 	"fmt"
 	"io"
 	"net"
@@ -42,6 +43,24 @@ func (s Handler) DownloadImages() error {
 
 	defer root.Close()
 
+	httpClient := &http.Client{
+		Transport: &http.Transport{
+			DialContext: (&net.Dialer{
+				Timeout:   30 * time.Second,
+				KeepAlive: 30 * time.Second,
+				DualStack: true,
+			}).DialContext,
+			MaxIdleConns:          100,
+			IdleConnTimeout:       90 * time.Second,
+			TLSHandshakeTimeout:   10 * time.Second,
+			ExpectContinueTimeout: 1 * time.Second,
+
+			TLSClientConfig: &tls.Config{
+				InsecureSkipVerify: true,
+			},
+		},
+	}
+
 	for _, image := range s.ImageURLs {
 
 		if util.ExistsInRoot(root, image.Path) {
@@ -55,7 +74,7 @@ func (s Handler) DownloadImages() error {
 		}
 		defer out.Close()
 
-		resp, err := http.Get(image.URL)
+		resp, err := httpClient.Get(image.URL)
 		if err != nil {
 			return err
 		}
