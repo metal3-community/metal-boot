@@ -11,6 +11,7 @@ import (
 	"os"
 	"path/filepath"
 	"regexp"
+	"strings"
 	"time"
 
 	"github.com/bmcpi/pibmc/internal/config"
@@ -22,9 +23,10 @@ import (
 )
 
 func DownloadImages(c *config.Config) error {
+	log := c.Log.WithName("download images")
 	root, err := os.OpenRoot(c.Images.RootDirectory)
 	if err != nil {
-		c.Log.Error(err, "failed to open root directory")
+		log.Error(err, "failed to open root directory")
 		return err
 	}
 
@@ -51,7 +53,7 @@ func DownloadImages(c *config.Config) error {
 	for _, image := range c.Images.ImageURLs {
 
 		if util.ExistsInRoot(root, image.Path) {
-			c.Log.Info("file already exists", "path", image.Path)
+			log.Info("file already exists", "path", image.Path)
 			continue
 		}
 
@@ -85,14 +87,15 @@ func DownloadImages(c *config.Config) error {
 // Handle handles GET and HEAD responses to HTTP requests.
 // Serves embedded iPXE binaries.
 func HandlerFunc(c *config.Config) http.HandlerFunc {
+	log := c.Log.WithName("static handler")
 	return func(w http.ResponseWriter, req *http.Request) {
-		c.Log.V(1).Info("handling request", "method", req.Method, "path", req.URL.Path)
+		log.V(1).Info("handling request", "method", req.Method, "path", req.URL.Path)
 		if req.Method != http.MethodGet && req.Method != http.MethodHead {
 			http.Error(w, "Method not allowed", http.StatusMethodNotAllowed)
 			return
 		}
 		host, port, _ := net.SplitHostPort(req.RemoteAddr)
-		log := c.Log.WithValues("host", host, "port", port)
+		log := log.WithValues("host", host, "port", port)
 
 		filename := filepath.Base(req.URL.Path)
 		log = log.WithValues("filename", filename)
@@ -119,7 +122,8 @@ func HandlerFunc(c *config.Config) http.HandlerFunc {
 		)
 		defer span.End()
 
-		path := req.URL.Path
+		path := filepath.Clean(req.URL.Path)
+		path = strings.TrimPrefix(path, "/")
 		rootDirectory := c.Images.RootDirectory
 		pathParts := filepath.SplitList(path)
 		rootUrl := pathParts[0]
@@ -139,7 +143,7 @@ func HandlerFunc(c *config.Config) http.HandlerFunc {
 		if util.ExistsInRoot(root, path) {
 			file, err := root.OpenFile(path, os.O_RDONLY, 0o755)
 			if err != nil {
-				log.Error(err, "file not found", "path", path)
+				log.Error(err, "error locating file in root", "path", path)
 				http.NotFound(w, req)
 				return
 			}
@@ -154,7 +158,7 @@ func HandlerFunc(c *config.Config) http.HandlerFunc {
 
 			span.SetStatus(codes.Ok, filename)
 		} else {
-			log.Info("file not found", "path", path)
+			log.Info("end of static handler file not found", "path", path)
 			http.NotFound(w, req)
 		}
 	}
