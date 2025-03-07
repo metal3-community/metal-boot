@@ -1,14 +1,6 @@
 #!/bin/bash
 # SPDX-License-Identifier: BSD-3-Clause
 
-# Generates a list of schema object from a given schema zip or directory then
-# generates go files based on the provided generate_from_schema.py tool and
-# accompanying source.tmpl file.
-
-# Set correct name for python3 executable. Some platforms just call it python
-# while others call it python3.
-PYTHON="python3"
-
 # Find the schema document name by going here:
 #
 #     https://www.dmtf.org/standards/redfish
@@ -21,6 +13,46 @@ schemadoc="DSP8010_2023.3"
 if [[ "$#" -eq 1 ]]; then
     schemadoc="${1}"
 fi
+
+# See if we already have this locally or if we need to fetch it
+if [[ ! -d $schemadoc ]]; then
+    if [[ ! -f "${schemadoc}.zip" ]]; then
+        # Use curl instead of wget because it is more likely to be present
+        echo "Fetching schema document $schemadoc"
+        curl -G -L "https://www.dmtf.org/sites/default/files/standards/documents/${schemadoc}.zip" > "${schemadoc}.zip"
+    fi
+
+    echo "Extracting schema files..."
+    unzip -q "${schemadoc}.zip" -d "${schemadoc}"
+fi
+
+schema_objects=$(find "${schemadoc}/openapi" -name "*.yaml" | cut -d '/' -f 3 | cut -d '.' -f 1 | sort | uniq )
+for schema in ${schema_objects}; do
+    latest_schema=$(find "${schemadoc}/openapi" -name "${schema}.*.yaml" | cut -d '/' -f 3 | cut -d '.' -f 2 | sort | uniq | tail -n1)
+    if [[ -z "${latest_schema}" ]]; then
+        schema_collection=("${schema_collection[@]}" "${schemadoc}/openapi/${schema}.yaml")
+    else
+        schema_collection=("${schema_collection[@]}" "${schemadoc}/openapi/${schema}.yaml" "${schemadoc}/openapi/${schema}.${latest_schema}.yaml")
+    fi
+done
+
+unset 'schema_collection[${#schema_collection[@]}-1]'
+
+printf '%s\n' "${schema_collection[@]}" | grep -v "${schemadoc}/openapi/odata.yaml" | sort | uniq | jq -Rn '{ inputs: [inputs | { inputFile: "\(.)" }], output: "./output.swagger.json" }' > openapi-merge.json
+
+npx openapi-merge-cli
+
+go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -package redfish -o redfish/server.gen.go -generate std-http-server,models output.swagger.json
+
+exit 0
+
+# Generates a list of schema object from a given schema zip or directory then
+# generates go files based on the provided generate_from_schema.py tool and
+# accompanying source.tmpl file.
+
+# Set correct name for python3 executable. Some platforms just call it python
+# while others call it python3.
+PYTHON="python3"
 
 # Make sure we're running in a virtual environment
 if [[ -z "$VIRTUAL_ENV" ]]; then
@@ -37,17 +69,7 @@ if [[ -z "$VIRTUAL_ENV" ]]; then
     $PYTHON -m pip install -r requirements.txt
 fi
 
-# See if we already have this locally or if we need to fetch it
-if [[ ! -d $schemadoc ]]; then
-    if [[ ! -f "${schemadoc}.zip" ]]; then
-        # Use curl instead of wget because it is more likely to be present
-        echo "Fetching schema document $schemadoc"
-        curl -G -L "https://www.dmtf.org/sites/default/files/standards/documents/${schemadoc}.zip" > "${schemadoc}.zip"
-    fi
 
-    echo "Extracting schema files..."
-    unzip -q "${schemadoc}.zip" -d "${schemadoc}"
-fi
 
 find "${schemadoc}/openapi" -name "*.yaml" | jq -Rn '{ inputs: [inputs | { inputFile: "\(.)" }], output: "./output.swagger.json" }' > openapi-merge.json
 
@@ -65,7 +87,9 @@ go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -package redfish
 # General process is get a list of the json-schema objects from the zip, drop
 # things we don't need/want, and clip the column we want generating a file of
 # object names we can use later.
-schema_objects=$(find "${schemadoc}/json-schema" -name "*.json" | cut -d '/' -f 3 | cut -d '.' -f 1 | grep -Fiv -e 'collection' -e 'redfish-' -e 'odata' -e 'protocol' | sort | uniq )
+
+
+exit 0
 
 # Now we're ready to generate the go source based on these files
 if [[ ! -d gofiles ]]; then

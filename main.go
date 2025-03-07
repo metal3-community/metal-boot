@@ -14,13 +14,13 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bmcpi/pibmc/api/images"
-	"github.com/bmcpi/pibmc/api/ipxe"
 	"github.com/bmcpi/pibmc/api/redfish"
 	"github.com/bmcpi/pibmc/internal/backend/remote"
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/ipxe/http"
+	"github.com/bmcpi/pibmc/internal/ipxe/ihttp"
 	"github.com/bmcpi/pibmc/internal/ipxe/script"
+	"github.com/bmcpi/pibmc/internal/ipxe/static"
 	"github.com/bmcpi/pibmc/internal/iso"
 	"github.com/bmcpi/pibmc/internal/metric"
 	"github.com/bmcpi/pibmc/internal/otel"
@@ -82,21 +82,22 @@ func main() {
 
 	handlers := redfishServer.GetHandlers()
 
-	handlers["/ipxe/"] = ipxe.Handler{
-		Log:   log.WithValues("service", "github.com/bmcpi/pibmc").WithName("github.com/bmcpi/pibmc/api/ipxe"),
-		Patch: []byte(cfg.Tftp.IpxePatch),
-	}.HandlerFunc()
+	// create the http server before our merged handlers
+	tp := parseTrustedProxies(cfg.TrustedProxies)
+	httpServer := &http.Config{
+		GitRev:         GitRev,
+		StartTime:      startTime,
+		Logger:         log,
+		TrustedProxies: tp,
 
-	if cfg.IpxeHttpScript.Enabled {
-		imagesHandler := images.Handler{
-			Log:           log.WithValues("service", "github.com/bmcpi/pibmc").WithName("github.com/bmcpi/pibmc/api/images"),
-			ImageURLs:     cfg.Images.ImageURLs,
-			RootDirectory: cfg.Images.RootDirectory,
-		}
-		handlers["/images/"] = imagesHandler.HandlerFunc()
+		ScriptHandler: nil,
+		IHttpHandler:  ihttp.HandlerFunc(cfg),
+		StaticHandler: static.HandlerFunc(cfg),
+	}
 
+	if len(cfg.Images.ImageURLs) > 0 {
 		g.Go(func() error {
-			return imagesHandler.DownloadImages()
+			return static.DownloadImages(cfg)
 		})
 	}
 
@@ -110,7 +111,7 @@ func main() {
 			Logger:                log,
 			Backend:               backend,
 			OSIEURL:               osieUrl.String(),
-			ExtraKernelParams:     strings.Split(cfg.IpxeHttpScript.ExtraKernelArgs, " "),
+			ExtraKernelParams:     cfg.IpxeHttpScript.ExtraKernelArgs,
 			PublicSyslogFQDN:      cfg.Dhcp.SyslogIP,
 			TinkServerTLS:         cfg.IpxeHttpScript.TinkServerUseTLS,
 			TinkServerInsecureTLS: cfg.IpxeHttpScript.TinkServerInsecureTLS,
@@ -120,16 +121,17 @@ func main() {
 			StaticIPXEEnabled:     cfg.IpxeHttpScript.StaticIPXEEnabled,
 		}
 
-		// serve ipxe script from the "/" URI.
-		handlers["/"] = jh.HandlerFunc()
+		httpServer.ScriptHandler = jh.HandlerFunc()
 	}
+
+	handlers["/"] = httpServer.HandlerFunc()
 
 	if cfg.Iso.Enabled {
 		ih := iso.Handler{
 			Logger:             log,
 			Backend:            backend,
 			SourceISO:          cfg.Iso.Url,
-			ExtraKernelParams:  strings.Split(cfg.IpxeHttpScript.ExtraKernelArgs, " "),
+			ExtraKernelParams:  cfg.IpxeHttpScript.ExtraKernelArgs,
 			Syslog:             cfg.Dhcp.SyslogIP,
 			TinkServerTLS:      false,
 			TinkServerGRPCAddr: "",
@@ -147,13 +149,6 @@ func main() {
 
 	if len(handlers) > 0 {
 		// start the http server for ipxe binaries and scripts
-		tp := parseTrustedProxies(cfg.TrustedProxies)
-		httpServer := &http.Config{
-			GitRev:         GitRev,
-			StartTime:      startTime,
-			Logger:         log,
-			TrustedProxies: tp,
-		}
 		bindAddr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
 		log.Info("serving http", "addr", bindAddr, "trusted_proxies", tp)
 		g.Go(func() error {

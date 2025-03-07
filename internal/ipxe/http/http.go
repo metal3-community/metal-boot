@@ -7,11 +7,13 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"path/filepath"
 	"runtime"
 	"time"
 
 	"github.com/go-logr/logr"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
+	"github.com/tinkerbell/ipxedust/binary"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 )
 
@@ -21,6 +23,10 @@ type Config struct {
 	StartTime      time.Time
 	Logger         logr.Logger
 	TrustedProxies []string
+
+	ScriptHandler http.HandlerFunc
+	IHttpHandler  http.HandlerFunc
+	StaticHandler http.HandlerFunc
 }
 
 // HandlerMapping is a map of routes to http.HandlerFuncs.
@@ -111,4 +117,23 @@ func (s *Config) serveHealthchecker(rev string, start time.Time) http.HandlerFun
 // with otelhttp, and returns the route again and http.Handler all set for mux.Handle().
 func otelFuncWrapper(route string, h func(w http.ResponseWriter, req *http.Request)) (string, http.Handler) {
 	return route, otelhttp.WithRouteTag(route, http.HandlerFunc(h))
+}
+
+func (c *Config) HandlerFunc() http.HandlerFunc {
+	return func(w http.ResponseWriter, req *http.Request) {
+
+		basePath := filepath.Base(req.URL.Path)
+
+		if _, ok := binary.Files[basePath]; ok {
+			c.IHttpHandler(w, req)
+			return
+		}
+
+		if basePath == "auto.ipxe" {
+			c.ScriptHandler(w, req)
+			return
+		}
+
+		c.StaticHandler(w, req)
+	}
 }

@@ -83,15 +83,15 @@ type DhcpConfig struct {
 }
 
 type IpxeHttpScript struct {
-	Enabled               bool   `yaml:"enabled" mapstructure:"enabled"`
-	Retries               int    `yaml:"retries" mapstructure:"retries"`
-	RetryDelay            int    `yaml:"retry_delay" mapstructure:"retry_delay"`
-	TinkServer            string `yaml:"tink_server" mapstructure:"tink_server"`
-	HookURL               string `yaml:"hook_url" mapstructure:"hook_url"`
-	TinkServerInsecureTLS bool   `yaml:"tink_server_insecure_tls" mapstructure:"tink_server_insecure_tls"`
-	TinkServerUseTLS      bool   `yaml:"tink_server_use_tls" mapstructure:"tink_server_use_tls"`
-	ExtraKernelArgs       string `yaml:"extra_kernel_args" mapstructure:"extra_kernel_args"`
-	StaticIPXEEnabled     bool   `yaml:"static_ipxe_enabled" mapstructure:"static_ipxe_enabled"`
+	Enabled               bool     `yaml:"enabled" mapstructure:"enabled"`
+	Retries               int      `yaml:"retries" mapstructure:"retries"`
+	RetryDelay            int      `yaml:"retry_delay" mapstructure:"retry_delay"`
+	TinkServer            string   `yaml:"tink_server" mapstructure:"tink_server"`
+	HookURL               string   `yaml:"hook_url" mapstructure:"hook_url"`
+	TinkServerInsecureTLS bool     `yaml:"tink_server_insecure_tls" mapstructure:"tink_server_insecure_tls"`
+	TinkServerUseTLS      bool     `yaml:"tink_server_use_tls" mapstructure:"tink_server_use_tls"`
+	ExtraKernelArgs       []string `yaml:"extra_kernel_args" mapstructure:"extra_kernel_args"`
+	StaticIPXEEnabled     bool     `yaml:"static_ipxe_enabled" mapstructure:"static_ipxe_enabled"`
 }
 
 type IsoConfig struct {
@@ -244,7 +244,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ipxe_http_script.hook_url", "")
 	viper.SetDefault("ipxe_http_script.tink_server_insecure_tls", true)
 	viper.SetDefault("ipxe_http_script.tink_server_use_tls", false)
-	viper.SetDefault("ipxe_http_script.extra_kernel_args", "")
+	viper.SetDefault("ipxe_http_script.extra_kernel_args", []string{})
 	viper.SetDefault("ipxe_http_script.static_ipxe_enabled", false)
 
 	viper.SetDefault("otel.endpoint", "")
