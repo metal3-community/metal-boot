@@ -42,7 +42,9 @@ printf '%s\n' "${schema_collection[@]}" | grep -v "${schemadoc}/openapi/odata.ya
 
 npx openapi-merge-cli
 
-go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -package redfish -o redfish/server.gen.go -generate std-http-server,models output.swagger.json
+go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -package redfish -o redfish/server.gen.go -generate std-http-server,models \
+    --import-mapping http://redfish.dmtf.org/schemas/v1/ServiceRoot.v1_16_1.yaml \
+    output.swagger.json
 
 exit 0
 

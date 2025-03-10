@@ -14,6 +14,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"strings"
 	"time"
 
 	"github.com/bmcpi/pibmc/internal/config"
@@ -319,6 +320,14 @@ func (w *Remote) getActiveClientsForDevice(ctx context.Context) (unifi.ClientLis
 
 	device, err := w.client.GetDeviceByMACv2(ctx, w.config.Unifi.Site, deviceMac)
 	if err != nil {
+		if strings.HasPrefix(err.Error(), "(401 Unauthorized)") {
+			if err = w.client.Login(ctx, w.config.Unifi.Username, w.config.Unifi.Password); err != nil {
+				return w.getActiveClientsForDevice(ctx)
+			} else {
+				return nil, err
+			}
+		}
+
 		return nil, err
 	}
 	if device.PortTable != nil {
@@ -383,7 +392,7 @@ func (w *Remote) getPortOverride(ctx context.Context, port int) (*unifi.DevicePo
 		return i.PortIDX == port
 	})
 	if idx == -1 {
-		return nil, fmt.Errorf("no port 1 found")
+		return nil, fmt.Errorf("no port %d found", port)
 	}
 
 	return &device.PortOverrides[idx], nil
