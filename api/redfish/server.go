@@ -222,6 +222,16 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 
 	defaultName := fmt.Sprintf("System %s", systemId)
 
+	pwrState := Off
+	switch pwr.State {
+	case "auto":
+		pwrState = On
+	case "off":
+		pwrState = Off
+	default:
+		pwrState = Off
+	}
+
 	if dhcp != nil {
 		if dhcp.Hostname != "" {
 			defaultName = dhcp.Hostname
@@ -229,7 +239,7 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 	}
 	resp := ComputerSystem{
 		Id:         &systemId,
-		PowerState: (*PowerState)(&pwr.State),
+		PowerState: (*PowerState)(&pwrState),
 		Links: &SystemLinks{
 			Chassis:   &[]IdRef{{OdataId: util.Ptr("/redfish/v1/Chassis/1")}},
 			ManagedBy: &[]IdRef{{OdataId: util.Ptr("/redfish/v1/Managers/1")}},
