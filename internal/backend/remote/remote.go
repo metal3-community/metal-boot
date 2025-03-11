@@ -107,21 +107,20 @@ func (w *Remote) isTokenExpired() bool {
 		w.jar, _ = cookiejar.New(nil)
 	}
 
-	cookies := w.jar.Cookies(&url.URL{
-		Path: "/",
-	})
-
-	i := slices.IndexFunc(cookies, func(i *http.Cookie) bool {
-		return i.Name == "TOKEN"
-	})
-
-	if i == -1 {
+	unifiURL, err := url.Parse(w.config.Unifi.Endpoint)
+	if err != nil {
 		return true
 	}
 
-	cookie := cookies[i]
+	cookies := w.jar.Cookies(unifiURL)
 
-	return cookie.Expires.Before(time.Now())
+	if len(cookies) == 0 {
+		return true
+	}
+
+	return slices.IndexFunc(cookies, func(c *http.Cookie) bool {
+		return c.Name == "TOKEN"
+	}) == -1
 }
 
 func (w *Remote) login(ctx context.Context) error {
