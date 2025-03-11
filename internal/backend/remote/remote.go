@@ -542,14 +542,14 @@ func (w *Remote) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n 
 		}
 
 		i := slices.IndexFunc(device.PortOverrides, func(i unifi.DevicePortOverrides) bool {
-			return i.PortIDX == p.Port
+			return i.PortIDX == pwr.Port
 		})
 		if i == -1 {
-			return fmt.Errorf("no port %d found", p.Port)
+			return fmt.Errorf("no port %d found", pwr.Port)
 		}
 
-		if device.PortOverrides[i].PoeMode != p.State {
-			device.PortOverrides[i].PoeMode = p.State
+		if device.PortOverrides[i].PoeMode != pwr.State {
+			device.PortOverrides[i].PoeMode = pwr.State
 
 			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, device); err != nil {
 				return err
