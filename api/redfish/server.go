@@ -15,6 +15,7 @@ import (
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
+	"go.opentelemetry.io/otel"
 )
 
 func (s *PowerState) GetPoeMode() string {
@@ -34,6 +35,8 @@ func (s *PowerState) GetPoeMode() string {
 		return "off"
 	}
 }
+
+const tracerName = "github.com/bmcpi/pibmc/api/redfish"
 
 type RedfishServerConfig struct {
 	Insecure      bool
@@ -199,6 +202,9 @@ func (s *RedfishServer) GetSoftwareInventory(w http.ResponseWriter, r *http.Requ
 func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
 
 	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetSystem")
+	defer span.End()
 
 	err := s.refreshSystems(ctx)
 	if err != nil {
@@ -206,6 +212,8 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 		s.Log.Error(err, "error refreshing systems", "system", systemId)
 		return
 	}
+
+	s.Log.Info("getting system", "system", systemId)
 
 	systemIdAddr, err := net.ParseMAC(systemId)
 	if err != nil {
@@ -312,6 +320,10 @@ func (s *RedfishServer) InsertVirtualMedia(w http.ResponseWriter, r *http.Reques
 
 // ListManagerVirtualMedia implements ServerInterface.
 func (s *RedfishServer) ListManagerVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string) {
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListManagerVirtualMedia")
+	defer span.End()
 
 	ids := make([]IdRef, 0)
 
@@ -337,6 +349,12 @@ func (s *RedfishServer) ListManagerVirtualMedia(w http.ResponseWriter, r *http.R
 
 // ListManagers implements ServerInterface.
 func (s *RedfishServer) ListManagers(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListManagers")
+	defer span.End()
+
+	s.Log.Info("listing managers", "url", r.URL)
 
 	ids := make([]IdRef, 0)
 
@@ -363,6 +381,13 @@ func (s *RedfishServer) ListManagers(w http.ResponseWriter, r *http.Request) {
 
 // ListSystems implements ServerInterface.
 func (s *RedfishServer) ListSystems(w http.ResponseWriter, r *http.Request) {
+
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListSystems")
+	defer span.End()
+
+	s.Log.Info("listing systems", "url", r.URL)
 
 	ids := make([]IdRef, 0)
 
@@ -404,6 +429,9 @@ func (s *RedfishServer) ResetIdrac(w http.ResponseWriter, r *http.Request) {
 func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
 
 	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListManagerVirtualMedia")
+	defer span.End()
 
 	req := ResetSystemJSONRequestBody{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -411,6 +439,8 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		s.Log.Error(err, "error decoding request")
 		return
 	}
+
+	s.Log.Info("resetting system", "system", systemId, "resetType", req.ResetType)
 
 	systemIdAddr, err := net.ParseMAC(systemId)
 	if err != nil {
@@ -487,6 +517,9 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
 
 	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.SetSystem")
+	defer span.End()
 
 	req := SetSystemJSONRequestBody{}
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -494,6 +527,8 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		s.Log.Error(err, "error decoding request")
 		return
 	}
+
+	s.Log.Info("setting system", "system", systemId, "systemInfo", req)
 
 	systemIdAddr, err := net.ParseMAC(systemId)
 	if err != nil {
