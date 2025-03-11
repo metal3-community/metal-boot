@@ -437,16 +437,6 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		resetType = *req.ResetType
 	}
 
-	pwrState := Off
-	switch pwr.State {
-	case "auto":
-		pwrState = On
-	case "off":
-		pwrState = Off
-	default:
-		pwrState = Off
-	}
-
 	if resetType == ResetTypePowerCycle {
 		err := s.backend.PowerCycle(ctx, systemIdAddr)
 		if err != nil {
