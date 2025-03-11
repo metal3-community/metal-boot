@@ -440,7 +440,10 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 	if pwr.State == "off" {
 
 		err := s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-			State: "off",
+			State:    "off",
+			Port:     pwr.Port,
+			DeviceId: pwr.DeviceId,
+			SiteId:   pwr.SiteId,
 		})
 		if err != nil {
 			s.Log.Error(err, "error setting power state", "system", systemId)
@@ -467,7 +470,10 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 			state = "off"
 		}
 		err := s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-			State: state,
+			State:    state,
+			Port:     pwr.Port,
+			DeviceId: pwr.DeviceId,
+			SiteId:   pwr.SiteId,
 		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)

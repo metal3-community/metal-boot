@@ -17,3 +17,4 @@ tools/gofiles*
 images/
 !images/*.go
 tools/*.json
+_out/
