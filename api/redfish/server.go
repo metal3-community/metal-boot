@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net"
 	"net/http"
+	"time"
 
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
@@ -431,26 +432,22 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		return
 	}
 
-	if *req.ResetType == ResetTypeOn && pwr.State == string(On) {
-		w.WriteHeader(http.StatusNoContent)
-		s.Log.Info("system already on", "system", systemId)
-		return
+	resetType := ResetTypePowerCycle
+	if req.ResetType != nil {
+		resetType = *req.ResetType
 	}
 
-	if pwr.State == "off" {
+	pwrState := Off
+	switch pwr.State {
+	case "auto":
+		pwrState = On
+	case "off":
+		pwrState = Off
+	default:
+		pwrState = Off
+	}
 
-		err := s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-			State:    "off",
-			Port:     pwr.Port,
-			DeviceId: pwr.DeviceId,
-			SiteId:   pwr.SiteId,
-		})
-		if err != nil {
-			s.Log.Error(err, "error setting power state", "system", systemId)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
-	} else if *req.ResetType == ResetTypePowerCycle {
+	if resetType == ResetTypePowerCycle {
 		err := s.backend.PowerCycle(ctx, systemIdAddr)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -459,28 +456,41 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
-	} else {
-		state := "auto"
-		switch *req.ResetType {
-		case ResetTypeOn:
-			state = "auto"
-		case ResetTypeForceOn:
-			state = "auto"
-		case ResetTypeForceOff:
-			state = "off"
-		}
-		err := s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-			State:    state,
+	}
+
+	state := "off"
+	if pwr.State == "off" {
+		state = "auto"
+	}
+
+	err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
+		State:    state,
+		Port:     pwr.Port,
+		DeviceId: pwr.DeviceId,
+		SiteId:   pwr.SiteId,
+	})
+	if err != nil {
+		s.Log.Error(err, "error setting power state", "system", systemId)
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	if state == "off" {
+		time.Sleep(10 * time.Second)
+		err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
+			State:    "auto",
 			Port:     pwr.Port,
 			DeviceId: pwr.DeviceId,
 			SiteId:   pwr.SiteId,
 		})
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
 			s.Log.Error(err, "error setting power state", "system", systemId)
+			w.WriteHeader(http.StatusInternalServerError)
 			return
 		}
 	}
+
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // SetSystem implements ServerInterface.

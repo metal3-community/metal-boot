@@ -10,11 +10,11 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/netip"
+	"net/url"
 	"os"
 	"path"
 	"path/filepath"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/bmcpi/pibmc/internal/config"
@@ -40,6 +40,8 @@ type Remote struct {
 	config *config.Config
 
 	client *unifi.Client
+
+	jar *cookiejar.Jar
 
 	dhcp map[string]data.DHCP
 
@@ -89,6 +91,7 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 		Log:     l,
 		client:  &client,
 		config:  config,
+		jar:     jar,
 		dhcp:    map[string]data.DHCP{},
 		netboot: map[string]data.Netboot{},
 		power:   map[string]data.Power{},
@@ -97,6 +100,38 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 	backend.loadConfigs()
 
 	return backend, nil
+}
+
+func (w *Remote) isTokenExpired() bool {
+	if w.jar == nil {
+		w.jar, _ = cookiejar.New(nil)
+	}
+
+	cookies := w.jar.Cookies(&url.URL{
+		Path: "/",
+	})
+
+	i := slices.IndexFunc(cookies, func(i *http.Cookie) bool {
+		return i.Name == "TOKEN"
+	})
+
+	if i == -1 {
+		return true
+	}
+
+	cookie := cookies[i]
+
+	return cookie.Expires.Before(time.Now())
+}
+
+func (w *Remote) login(ctx context.Context) error {
+	if w.isTokenExpired() {
+		if err := w.client.Login(ctx, w.config.Unifi.Username, w.config.Unifi.Password); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
 func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
@@ -320,14 +355,6 @@ func (w *Remote) getActiveClientsForDevice(ctx context.Context) (unifi.ClientLis
 
 	device, err := w.client.GetDeviceByMACv2(ctx, w.config.Unifi.Site, deviceMac)
 	if err != nil {
-		if strings.HasPrefix(err.Error(), "(401 Unauthorized)") {
-			if err = w.client.Login(ctx, w.config.Unifi.Username, w.config.Unifi.Password); err != nil {
-				return w.getActiveClientsForDevice(ctx)
-			} else {
-				return nil, err
-			}
-		}
-
 		return nil, err
 	}
 	if device.PortTable != nil {
@@ -401,6 +428,12 @@ func (w *Remote) getPortOverride(ctx context.Context, port int) (*unifi.DevicePo
 // GetByIP is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
 func (w *Remote) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
+
+	err := w.login(ctx)
+	if err != nil {
+		return nil, nil, nil, err
+	}
+
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.GetByIP")
 	defer span.End()
@@ -510,6 +543,11 @@ func (w *Remote) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n 
 	_, span := tracer.Start(ctx, "backend.remote.Put")
 	defer span.End()
 
+	err := w.login(ctx)
+	if err != nil {
+		return err
+	}
+
 	if p != nil {
 
 		pwr := data.Power{}
@@ -566,6 +604,11 @@ func (w *Remote) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
 	_, span := tracer.Start(ctx, "backend.remote.GetKeys")
 	defer span.End()
 
+	err := w.login(ctx)
+	if err != nil {
+		return nil, err
+	}
+
 	var keys []net.HardwareAddr
 
 	clients, err := w.getActiveClientsForDevice(ctx)
@@ -588,6 +631,11 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.PowerCycle")
 	defer span.End()
+
+	err := w.login(ctx)
+	if err != nil {
+		return err
+	}
 
 	pwr, ok := w.power[mac.String()]
 
