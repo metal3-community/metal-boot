@@ -130,6 +130,7 @@ type Config struct {
 	TrustedProxies  string         `yaml:"trusted_proxies" mapstructure:"trusted_proxies"`
 	Otel            OtelConfig     `yaml:"otel" mapstructure:"otel"`
 	Images          ImagesConfig   `yaml:"images" mapstructure:"images"`
+	ResetDelaySec   int            `yaml:"reset_delay_sec" mapstructure:"reset_delay_sec"`
 }
 
 func (c *Config) GetIpxeHttpUrl() (*url.URL, error) {
@@ -199,6 +200,8 @@ func NewConfig() (conf *Config, err error) {
 	viper.AddConfigPath("/app/")
 	viper.AddConfigPath("/config/")
 	viper.AddConfigPath(".")
+
+	viper.SetDefault("reset_delay_sec", 45)
 
 	viper.SetDefault("address", netInfo.BindIP)
 	viper.SetDefault("port", netInfo.Port)

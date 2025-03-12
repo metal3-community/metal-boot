@@ -496,18 +496,20 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 	}
 
 	if state == "off" {
-		time.Sleep(10 * time.Second)
-		err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-			State:    "auto",
-			Port:     pwr.Port,
-			DeviceId: pwr.DeviceId,
-			SiteId:   pwr.SiteId,
-		})
-		if err != nil {
-			s.Log.Error(err, "error setting power state", "system", systemId)
-			w.WriteHeader(http.StatusInternalServerError)
-			return
-		}
+		defer func() {
+			time.Sleep(time.Duration(s.Config.ResetDelaySec) * time.Second)
+			err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
+				State:    "auto",
+				Port:     pwr.Port,
+				DeviceId: pwr.DeviceId,
+				SiteId:   pwr.SiteId,
+			})
+			if err != nil {
+				s.Log.Error(err, "error setting power state", "system", systemId)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+		}()
 	}
 
 	w.WriteHeader(http.StatusNoContent)
