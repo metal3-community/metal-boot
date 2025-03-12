@@ -483,6 +483,10 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		state = "auto"
 	}
 
+	if resetType == ResetTypeForceOff {
+		state = "off"
+	}
+
 	err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
 		State:    state,
 		Port:     pwr.Port,
@@ -495,7 +499,7 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		return
 	}
 
-	if state == "off" {
+	if state == "off" && resetType != ResetTypeForceOff {
 		defer func() {
 			time.Sleep(time.Duration(s.Config.ResetDelaySec) * time.Second)
 			err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
