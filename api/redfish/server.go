@@ -544,13 +544,23 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		return
 	}
 
-	poeMode := req.PowerState.GetPoeMode()
+	powerState := On
+	if req.PowerState != nil {
+		powerState = *req.PowerState
+	}
 
-	if poeMode != "" && pwr.Mode != poeMode {
+	poeState := "auto"
+	if powerState == Off || powerState == PoweringOff {
+		poeState = "off"
+	}
 
-		pwr.Mode = poeMode
-
-		err := s.backend.Put(ctx, systemIdAddr, nil, nil, pwr)
+	if pwr.State != poeState {
+		err := s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
+			State:    poeState,
+			Port:     pwr.Port,
+			DeviceId: pwr.DeviceId,
+			SiteId:   pwr.SiteId,
+		})
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			s.Log.Error(err, "error setting power state", "system", systemId)

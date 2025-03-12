@@ -313,6 +313,8 @@ func (w *Remote) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHCP
 		power.DeviceId = w.config.Unifi.Device
 		power.SiteId = w.config.Unifi.Site
 		power.Port = portOverrides.PortIDX
+
+		w.power[mac.String()] = power
 	} else {
 		w.Log.Error(err, "failed to get port override")
 	}
@@ -352,7 +354,7 @@ func (w *Remote) getActiveClientsForDevice(ctx context.Context) (unifi.ClientLis
 	deviceMac := w.config.Unifi.Device
 	lastSeenMacLookup := map[string]int{}
 
-	device, err := w.client.GetDeviceByMACv2(ctx, w.config.Unifi.Site, deviceMac)
+	device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, deviceMac)
 	if err != nil {
 		return nil, err
 	}
@@ -578,17 +580,23 @@ func (w *Remote) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n 
 			return err
 		}
 
-		i := slices.IndexFunc(device.PortOverrides, func(i unifi.DevicePortOverrides) bool {
+		portOverrides := device.PortOverrides
+
+		i := slices.IndexFunc(portOverrides, func(i unifi.DevicePortOverrides) bool {
 			return i.PortIDX == pwr.Port
 		})
 		if i == -1 {
 			return fmt.Errorf("no port %d found", pwr.Port)
 		}
 
-		if device.PortOverrides[i].PoeMode != pwr.State {
-			device.PortOverrides[i].PoeMode = pwr.State
+		if portOverrides[i].PoeMode != pwr.State {
+			portOverrides[i].PoeMode = pwr.State
+			portOverrides[i].PortPoe = util.Ptr(pwr.State == "auto")
 
-			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, device); err != nil {
+			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, &unifi.Device{
+				ID:            device.ID,
+				PortOverrides: portOverrides,
+			}); err != nil {
 				return err
 			}
 		}
