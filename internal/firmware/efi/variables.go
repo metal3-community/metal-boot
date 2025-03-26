@@ -72,6 +72,7 @@ type EfiVar struct {
 	Data  []byte
 	Count int
 	Time  *time.Time
+	PkIdx int
 }
 
 // NewEfiVar creates a new EFI variable
@@ -130,8 +131,8 @@ func NewEfiVar(name interface{}, guid *string, attr uint32, data []byte, count i
 	return v, nil
 }
 
-// parseTime parses an EFI_TIME structure
-func (v *EfiVar) parseTime(data []byte, offset int) error {
+// ParseTime parses an EFI_TIME structure
+func (v *EfiVar) ParseTime(data []byte, offset int) error {
 	if len(data) < offset+16 {
 		return errors.New("data too short for EFI_TIME")
 	}
@@ -158,8 +159,8 @@ func (v *EfiVar) parseTime(data []byte, offset int) error {
 	return nil
 }
 
-// bytesTime generates an EFI_TIME structure
-func (v *EfiVar) bytesTime() []byte {
+// BytesTime generates an EFI_TIME structure
+func (v *EfiVar) BytesTime() []byte {
 	if v.Time == nil {
 		return bytes.Repeat([]byte{0}, 16)
 	}

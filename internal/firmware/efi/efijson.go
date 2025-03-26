@@ -34,7 +34,7 @@ func (e *JSONEncoder) MarshalEfiVar(v *EfiVar) EfiVarJSON {
 	}
 
 	if v.Time != nil {
-		result.Time = hex.EncodeToString(v.bytesTime())
+		result.Time = hex.EncodeToString(v.BytesTime())
 	}
 
 	return result
@@ -95,7 +95,7 @@ func (v *EfiVar) UnmarshalJSON(data []byte) error {
 		if err != nil {
 			return err
 		}
-		if err := v.parseTime(timeData, 0); err != nil {
+		if err := v.ParseTime(timeData, 0); err != nil {
 			return err
 		}
 	}

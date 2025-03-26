@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"github.com/bmcpi/pibmc/internal/firmware/efi"
+	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 )
 
 // type BootEntry struct {
@@ -167,6 +168,11 @@ func encodeDWord(value uint32) string {
 // }
 
 func main() {
+
+	readFile()
+
+	return
+
 	// Encoded UEFI PXE data
 	encodedHex := "0100000044005500450046004900200050005800450076003400200028004d00410043003a0044003800330041004400440035004100340034003000430029000000030b2500d83add5a440c000000000000000000000000000000000000000000000000000001030c1b0000000000000000000000000000000000000000000000007fff04004eac0881119f594d850ee21a522c59b2"
 
@@ -214,4 +220,23 @@ func main() {
 	// 	return
 	// }
 	// fmt.Println(decodedOutput)
+}
+
+func readFile() {
+	vs := varstore.NewEdk2VarStore("/Users/atkini01/src/go/pibmc/cmd/pibmc/RPI_EFI.fd")
+
+	efiVarList := vs.GetVarList()
+
+	bootEntries, err := efiVarList.ListBootEntries()
+	if err != nil {
+		panic(fmt.Errorf("error listing boot entries: %v", err))
+	}
+
+	for index, entry := range bootEntries {
+		fmt.Printf("Boot%04X: %s\n", index, entry)
+	}
+
+	for k, v := range efiVarList {
+		fmt.Printf("%s: %s\n", k, v)
+	}
 }

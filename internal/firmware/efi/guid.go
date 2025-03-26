@@ -8,6 +8,14 @@ import (
 	"strings"
 )
 
+func GuidName(guid GUID) string {
+	name, ok := GuidNameTable[guid.String()]
+	if !ok {
+		return guid.String()
+	}
+	return name
+}
+
 var GuidNameTable = map[string]string{
 	// firmware volumes
 	Ffs:          "Ffs",

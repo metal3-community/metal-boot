@@ -12,6 +12,13 @@
       "program": "${workspaceFolder}"
     },
     {
+      "name": "Launch CMD",
+      "type": "go",
+      "request": "launch",
+      "mode": "auto",
+      "program": "${workspaceFolder}/cmd/pibmc"
+    },
+    {
       "name": "Launch file",
       "type": "go",
       "request": "launch",

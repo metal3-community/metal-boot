@@ -1,5 +1,270 @@
 package varstore
 
+import (
+	"bytes"
+	"encoding/binary"
+	"fmt"
+	"io"
+	"log"
+	"os"
+	"sort"
+
+	"github.com/bmcpi/pibmc/internal/firmware/efi"
+)
+
+type Edk2VarStore struct {
+	filename string
+	filedata []byte
+	start    int
+	end      int
+}
+
+func NewEdk2VarStore(filename string) *Edk2VarStore {
+	vs := &Edk2VarStore{filename: filename}
+	vs.readFile()
+	vs.parseVolume()
+	return vs
+}
+
+func (vs *Edk2VarStore) findNvData(data []byte) int {
+	offset := 0
+	for offset+64 < len(data) {
+		guid := efi.ParseBinGUID(data, offset+16)
+		if guid.String() == efi.NvData {
+			return offset
+		}
+		if guid.String() == efi.Ffs {
+			tlen := binary.LittleEndian.Uint64(data[offset+32 : offset+40])
+			offset += int(tlen)
+			continue
+		}
+		offset += 1024
+	}
+	return -1
+}
+
+func (vs *Edk2VarStore) readFile() {
+	log.Printf("reading raw edk2 varstore from %s", vs.filename)
+	data, err := os.ReadFile(vs.filename)
+	if err != nil {
+		log.Fatalf("failed to read file: %v", err)
+	}
+	vs.filedata = data
+}
+
+func (e *Edk2VarStore) parseVolume() error {
+	offset := e.findNvData(e.filedata)
+	if offset < 1 {
+		return fmt.Errorf("%s: varstore not found", e.filename)
+	}
+
+	guid := efi.ParseBinGUID(e.filedata, offset+16)
+
+	// Equivalent to struct.unpack_from("=QLLHHHxBLL", self.filedata, offset + 32)
+	r := bytes.NewReader(e.filedata[offset+32:])
+
+	var vlen uint64
+	var sig, attr uint32
+	var hlen, csum, xoff uint16
+	var rev uint8
+	var blocks, blksize uint32
+
+	// Read in same order as Python struct unpacking
+	if err := binary.Read(r, binary.LittleEndian, &vlen); err != nil {
+		return fmt.Errorf("failed to read vlen: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &sig); err != nil {
+		return fmt.Errorf("failed to read sig: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &attr); err != nil {
+		return fmt.Errorf("failed to read attr: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &hlen); err != nil {
+		return fmt.Errorf("failed to read hlen: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &csum); err != nil {
+		return fmt.Errorf("failed to read csum: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &xoff); err != nil {
+		return fmt.Errorf("failed to read xoff: %w", err)
+	}
+
+	// Skip the pad byte (equivalent to 'x' in struct format)
+	if _, err := r.Seek(1, io.SeekCurrent); err != nil {
+		return fmt.Errorf("failed to skip pad byte: %w", err)
+	}
+
+	if err := binary.Read(r, binary.LittleEndian, &rev); err != nil {
+		return fmt.Errorf("failed to read rev: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &blocks); err != nil {
+		return fmt.Errorf("failed to read blocks: %w", err)
+	}
+	if err := binary.Read(r, binary.LittleEndian, &blksize); err != nil {
+		return fmt.Errorf("failed to read blksize: %w", err)
+	}
+
+	log.Printf("vol=%s vlen=0x%x rev=%d blocks=%d*%d (0x%x)",
+		efi.GuidName(guid), vlen, rev, blocks, blksize, blocks*blksize)
+
+	if sig != 0x4856465f {
+		return fmt.Errorf("%s: not a firmware volume", e.filename)
+	}
+
+	if guid.String() != efi.NvData {
+		return fmt.Errorf("%s: not a variable store", e.filename)
+	}
+
+	return e.parseVarstore(offset + int(hlen))
+}
+
+func (vs *Edk2VarStore) ParseVolume() {
+	offset := vs.findNvData(vs.filedata)
+	if offset == -1 {
+		log.Fatalf("%s: varstore not found", vs.filename)
+	}
+	guid := efi.ParseBinGUID(vs.filedata, offset+16)
+	vlen := binary.LittleEndian.Uint64(vs.filedata[offset+32 : offset+40])
+	sig := binary.LittleEndian.Uint64(vs.filedata[offset+40 : offset+48])
+	_ = binary.LittleEndian.Uint32(vs.filedata[offset+48 : offset+52])
+	hlen := binary.LittleEndian.Uint16(vs.filedata[offset+52 : offset+54])
+	_ = binary.LittleEndian.Uint16(vs.filedata[offset+54 : offset+56])
+	_ = binary.LittleEndian.Uint32(vs.filedata[offset+56 : offset+60])
+	rev := binary.LittleEndian.Uint32(vs.filedata[offset+60 : offset+64])
+	blocks := binary.LittleEndian.Uint32(vs.filedata[offset+64 : offset+68])
+	blksize := binary.LittleEndian.Uint32(vs.filedata[offset+68 : offset+72])
+
+	log.Printf("vol=%s vlen=0x%x rev=%d blocks=%d*%d (0x%x)",
+		efi.GuidName(guid), vlen, rev, blocks, blksize, blocks*blksize)
+
+	// Remove 4feff
+	//      0x4856465f
+	// 0x4feff4856465f
+	if sig != 0x4856465f {
+		log.Fatalf("%s: not a firmware volume", vs.filename)
+	}
+	if guid.String() != efi.NvData {
+		log.Fatalf("%s: not a variable store", vs.filename)
+	}
+	vs.parseVarstore(offset + int(hlen))
+}
+
+func (vs *Edk2VarStore) parseVarstore(start int) error {
+	guid := efi.ParseBinGUID(vs.filedata, start)
+	size := binary.LittleEndian.Uint32(vs.filedata[start+16 : start+20])
+	storefmt := vs.filedata[start+20]
+	state := vs.filedata[start+21]
+
+	log.Printf("varstore=%s size=0x%x format=0x%x state=0x%x",
+		efi.GuidName(guid), size, storefmt, state)
+
+	if guid.String() != efi.AuthVars {
+		return fmt.Errorf("%s: unknown varstore guid", vs.filename)
+	}
+	if storefmt != 0x5a {
+		return fmt.Errorf("%s: unknown varstore format", vs.filename)
+	}
+	if state != 0xfe {
+		return fmt.Errorf("%s: unknown varstore state", vs.filename)
+	}
+
+	vs.start = start + 16 + 12
+	vs.end = start + int(size)
+	log.Printf("var store range: 0x%x -> 0x%x", vs.start, vs.end)
+	return nil
+}
+
+func (vs *Edk2VarStore) GetVarList() efi.EfiVarList {
+	pos := vs.start
+	varlist := efi.EfiVarList{}
+	for pos < vs.end {
+		magic := binary.LittleEndian.Uint16(vs.filedata[pos:])
+		if magic != 0x55aa {
+			break
+		}
+		state := vs.filedata[pos+2]
+		attr := binary.LittleEndian.Uint32(vs.filedata[pos+4:])
+		count := binary.LittleEndian.Uint64(vs.filedata[pos+8:])
+
+		pk := binary.LittleEndian.Uint32(vs.filedata[pos+32:])
+		nsize := binary.LittleEndian.Uint32(vs.filedata[pos+36:])
+		dsize := binary.LittleEndian.Uint32(vs.filedata[pos+40:])
+
+		if state == 0x3f {
+			varName := efi.FromUCS16(vs.filedata[pos+44+16:])
+			varData := vs.filedata[uint32(pos)+44+16+nsize : uint32(pos)+44+16+nsize+dsize]
+			varItem := efi.EfiVar{
+				Name:  varName,
+				Guid:  efi.ParseBinGUID(vs.filedata, pos+44),
+				Attr:  attr,
+				Data:  varData,
+				Count: int(count),
+				PkIdx: int(pk),
+			}
+			varItem.ParseTime(vs.filedata, pos+16)
+			varlist[varItem.Name.String()] = &varItem
+		}
+
+		pos += 44 + 16 + int(nsize) + int(dsize)
+		pos = (pos + 3) & ^3 // align
+	}
+	return varlist
+}
+
+func (vs *Edk2VarStore) bytesVar(varItem efi.EfiVar) []byte {
+	blob := make([]byte, 0)
+	blob = append(blob, make([]byte, 0, 44)...)
+	binary.LittleEndian.PutUint16(blob[0:], 0x55aa)
+	blob[2] = 0x3f
+	binary.LittleEndian.PutUint32(blob[4:], varItem.Attr)
+	binary.LittleEndian.PutUint64(blob[8:], uint64(varItem.Count))
+	blob = append(blob, varItem.BytesTime()...)
+	binary.LittleEndian.PutUint32(blob[16:], uint32(varItem.PkIdx))
+	binary.LittleEndian.PutUint32(blob[20:], uint32(len(varItem.Name.String())))
+	binary.LittleEndian.PutUint32(blob[24:], uint32(len(varItem.Data)))
+	blob = append(blob, varItem.Guid.BytesLE()...)
+	blob = append(blob, varItem.Name.Bytes()...)
+	blob = append(blob, varItem.Data...)
+	for len(blob)%4 != 0 {
+		blob = append(blob, 0xff)
+	}
+	return blob
+}
+
+func (vs *Edk2VarStore) bytesVarList(varlist efi.EfiVarList) []byte {
+	blob := []byte{}
+	keys := make([]string, 0, len(varlist))
+	for k := range varlist {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys)
+	for _, key := range keys {
+		blob = append(blob, vs.bytesVar(*varlist[key])...)
+	}
+	if len(blob) > vs.end-vs.start {
+		log.Fatalf("varstore is too small")
+	}
+	return blob
+}
+
+func (vs *Edk2VarStore) bytesVarStore(varlist efi.EfiVarList) []byte {
+	blob := append([]byte{}, vs.filedata[:vs.start]...)
+	blob = append(blob, vs.bytesVarList(varlist)...)
+	for len(blob) < vs.end {
+		blob = append(blob, 0xff)
+	}
+	blob = append(blob, vs.filedata[vs.end:]...)
+	return blob
+}
+
+func (vs *Edk2VarStore) WriteVarStore(filename string, varlist efi.EfiVarList) {
+	log.Printf("writing raw edk2 varstore to %s", filename)
+	blob := vs.bytesVarStore(varlist)
+	if err := os.WriteFile(filename, blob, 0644); err != nil {
+		log.Fatalf("failed to write file: %v", err)
+	}
+}
+
 // import (
 // 	"bytes"
 // 	"encoding/binary"
