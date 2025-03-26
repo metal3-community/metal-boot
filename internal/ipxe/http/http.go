@@ -32,12 +32,19 @@ type Config struct {
 // HandlerMapping is a map of routes to http.HandlerFuncs.
 type HandlerMapping map[string]http.HandlerFunc
 
+type RegistrationFunc = func(router *http.ServeMux)
+
 // ServeHTTP sets up all the HTTP routes using a stdlib mux and starts the http
 // server, which will block. App functionality is instrumented in Prometheus and OpenTelemetry.
-func (s *Config) ServeHTTP(ctx context.Context, addr string, handlers HandlerMapping) error {
+func (s *Config) ServeHTTP(ctx context.Context, addr string, handlers HandlerMapping, registrations ...RegistrationFunc) error {
 	mux := http.NewServeMux()
+
 	for pattern, handler := range handlers {
 		mux.Handle(otelFuncWrapper(pattern, handler))
+	}
+
+	for _, reg := range registrations {
+		reg(mux)
 	}
 
 	mux.Handle("/metrics", promhttp.Handler())

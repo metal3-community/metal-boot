@@ -56,7 +56,7 @@ type RedfishSystem struct {
 	SiteID           string `yaml:"site"`
 	DeviceMac        string `yaml:"device_mac"`
 	PoeMode          string `yaml:"poe_mode"`
-	EfiVariableStore *varstore.EfiVariableStore
+	EfiVariableStore *varstore.Edk2VarStore
 }
 
 func (r *RedfishSystem) GetPowerState() *PowerState {
