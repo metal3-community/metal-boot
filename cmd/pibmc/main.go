@@ -170,6 +170,7 @@ func encodeDWord(value uint32) string {
 func main() {
 
 	readFile()
+	readFile()
 
 	return
 
@@ -223,7 +224,8 @@ func main() {
 }
 
 func readFile() {
-	vs := varstore.NewEdk2VarStore("/Users/atkini01/src/go/pibmc/cmd/pibmc/RPI_EFI.fd")
+	filename := "/Users/atkini01/src/go/pibmc/cmd/pibmc/RPI_EFI.fd"
+	vs := varstore.NewEdk2VarStore(filename)
 
 	efiVarList := vs.GetVarList()
 
@@ -232,6 +234,8 @@ func readFile() {
 		panic(fmt.Errorf("error listing boot entries: %v", err))
 	}
 
+	bootEntries[5].Title = *efi.NewUCS16String("Test Boot Entry")
+
 	for index, entry := range bootEntries {
 		fmt.Printf("Boot%04X: %s\n", index, entry)
 	}
@@ -239,4 +243,6 @@ func readFile() {
 	for k, v := range efiVarList {
 		fmt.Printf("%s: %s\n", k, v)
 	}
+
+	vs.WriteVarStore(filename, efiVarList)
 }
