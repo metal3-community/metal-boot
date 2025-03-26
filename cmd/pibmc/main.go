@@ -227,7 +227,10 @@ func readFile() {
 	filename := "/Users/atkini01/src/go/pibmc/cmd/pibmc/RPI_EFI.fd"
 	vs := varstore.NewEdk2VarStore(filename)
 
-	efiVarList := vs.GetVarList()
+	efiVarList, err := vs.GetVarList()
+	if err != nil {
+		panic(fmt.Errorf("error reading varstore: %v", err))
+	}
 
 	bootEntries, err := efiVarList.ListBootEntries()
 	if err != nil {
@@ -244,5 +247,15 @@ func readFile() {
 		fmt.Printf("%s: %s\n", k, v)
 	}
 
-	vs.WriteVarStore(filename, efiVarList)
+	efiVarListJson, err := efiVarList.MarshalJSON()
+	if err != nil {
+		panic(fmt.Errorf("error encoding EFI JSON: %v", err))
+	}
+
+	fmt.Println(string(efiVarListJson))
+
+	err = vs.WriteVarStore(filename, efiVarList)
+	if err != nil {
+		panic(fmt.Errorf("error writing varstore: %v", err))
+	}
 }
