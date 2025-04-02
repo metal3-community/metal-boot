@@ -44,7 +44,7 @@ var (
 
 //go:generate go run github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen -package redfish -o api/redfish/server.gen.go -generate std-http-server,models https://opendev.org/airship/go-redfish/raw/branch/master/spec/openapi.yaml
 //go:generate go run github.com/rwtodd/Go.Sed/cmd/sed-go -i "s/systemId/ComputerSystemId/g" api/redfish/server.gen.go
-
+//go:generate openapi-generator
 func main() {
 	cfg, err := config.NewConfig()
 	if err != nil {

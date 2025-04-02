@@ -81,6 +81,14 @@ func redfishError(err error) *RedfishError {
 	}
 }
 
+func decodeBody[T any](r *http.Request) (*T, error) {
+	v := new(T)
+	if err := json.NewDecoder(r.Body).Decode(v); err != nil {
+		return nil, err
+	}
+	return v, nil
+}
+
 type RedfishServer struct {
 	Config *config.Config
 
@@ -115,12 +123,12 @@ func (s *RedfishServer) refreshSystems(ctx context.Context) (err error) {
 // CreateVirtualDisk implements ServerInterface.
 func (s *RedfishServer) CreateVirtualDisk(w http.ResponseWriter, r *http.Request, systemId string, storageControllerId string) {
 
-	req := CreateVirtualDiskRequestBody{}
-
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		w.WriteHeader(http.StatusNotFound)
+	if req, err := decodeBody[CreateVirtualDiskRequestBody](r); err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error decoding request")
 		return
+	} else {
+		s.Log.Info("creating virtual disk", "system", systemId, "storageController", storageControllerId, "request", req)
 	}
 
 	panic("unimplemented")

@@ -1,0 +1,42 @@
+FROM alpine AS build
+WORKDIR /
+RUN apk add --no-cache curl \
+                       tar \
+                       git \
+                       binutils \
+                       python3 \
+                       py3-pip \
+                       dosfstools \
+                       efibootmgr \
+                       hdparm \
+                       ipmitool \
+                       iproute2 \
+                       lshw \
+                       mdadm \
+                       py3-installer \
+                       python3-dev \
+                       gcc \
+                       util-linux-misc \
+                       musl-dev \
+                       eudev \
+                       eudev-dev \
+                       linux-headers \
+                       mdadm-udev \
+                       upx \
+                       efivar && \
+  rm -rf /var/lib/apt/lists/* && \
+  git clone https://github.com/openstack/ironic-python-agent.git && \
+  cd ironic-python-agent && \
+  python3 -m venv venv && \
+  . venv/bin/activate && \
+  pip install -r requirements.txt && \
+  pip install pyinstaller && \
+  pip install . && \
+  pyinstaller --nowindow --collect-all eventlet --collect-all oslo_service.backend.eventlet --collect-all dns --collect-all zeroconf --collect-all ironic_python_agent --onefile venv/bin/ironic-python-agent
+# ENTRYPOINT ["/ironic-python-agent/dist/ironic-python-agent"]
+
+FROM scratch AS final
+COPY --from=build /ironic-python-agent/dist/ironic-python-agent /rootfs/usr/local/lib/containers/ironic-python-agent/ironic-python-agent
+COPY ironic_python_agent.conf /rootfs/usr/local/lib/containers/ironic-python-agent/ironic_python_agent.conf
+COPY ironic-python-agent.yaml /rootfs/usr/local/etc/containers/ironic-python-agent.yaml
+COPY manifest.yaml /manifest.yaml
