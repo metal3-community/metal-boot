@@ -7,6 +7,13 @@ unifi:
   site: "default"
   device: "aa:bb:dd:cc:ee:ff"
 tftp:
-  root_directory: /tftpboot
+  root_directory: tftpboot
   port: 69
   address: "0.0.0.0"
+ipxe_http_script:
+  enabled: false
+  static_ipxe_enabled: false
+  extra_kernel_args: []
+images:
+  root_directory: images
+  image_urls: []

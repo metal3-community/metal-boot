@@ -211,23 +211,47 @@ func (s *RedfishServer) FirmwareInventoryDownloadImage(w http.ResponseWriter, r 
 		return
 	}
 
-	// Read the firmware file
-	firmwareData, err := os.ReadFile(s.firmwarePath)
+	err := r.ParseMultipartForm(32 << 20) // 32MB limit
 	if err != nil {
-		s.Log.Error(err, "failed to read firmware file")
-		w.WriteHeader(http.StatusInternalServerError)
-		json.NewEncoder(w).Encode(redfishError(err))
-		return
+		s.Log.Error(err, "error parsing multipart form")
+		w.WriteHeader(http.StatusBadRequest)
 	}
 
-	// Set headers for file download
-	firmwareName := filepath.Base(s.firmwarePath)
-	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", firmwareName))
-	w.Header().Set("Content-Type", "application/octet-stream")
-	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(firmwareData)))
+	if fi, ok := r.MultipartForm.File["softwareImage"]; ok && len(fi) > 0 {
+		file, err := fi[0].Open()
+		if err != nil {
+			s.Log.Error(err, "error opening firmware file")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+		defer file.Close()
 
-	// Send the firmware data
-	w.Write(firmwareData)
+		_, err = os.Stat(s.firmwarePath) // Check if firmware file exists
+		if err != nil && !os.IsNotExist(err) {
+			s.Log.Error(err, "error checking firmware file", "path", s.firmwarePath)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		targetFile, err := os.Create(s.firmwarePath) // Create or overwrite the firmware file
+		if err != nil {
+			s.Log.Error(err, "error creating firmware file", "path", s.firmwarePath)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		defer targetFile.Close()
+		if _, err := io.Copy(targetFile, file); err != nil {
+			s.Log.Error(err, "error copying firmware file", "path", s.firmwarePath)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+		// Create a temporary file to store the firmware image
+	}
 }
 
 // GetManager implements ServerInterface.
@@ -989,6 +1013,51 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error getting system by mac")
 		return
+	}
+
+	if req.Boot.BootSourceOverrideTarget != nil {
+		s.Log.Info("setting boot source override", "system", systemId, "bootSourceOverrideTarget", *req.Boot.BootSourceOverrideTarget)
+
+		var nextBootIndex uint16
+
+		switch *req.Boot.BootSourceOverrideTarget {
+		case Pxe:
+			s.Log.Info("setting boot source override to PXE", "system", systemId)
+			nextBootIndex = 1
+		case Hdd:
+			s.Log.Info("setting boot source override to HDD", "system", systemId)
+			nextBootIndex = 2
+		case None:
+			s.Log.Info("clearing boot source override", "system", systemId)
+		default:
+			err := fmt.Errorf("invalid boot source override target: %s", *req.Boot.BootSourceOverrideTarget)
+			s.Log.Error(err, "invalid boot source override target", "system", systemId)
+			w.WriteHeader(http.StatusBadRequest)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+		if err != nil {
+			s.Log.Error(err, "failed to create firmware manager")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		if err = firmwareMgr.SetBootNext(nextBootIndex); err != nil {
+			s.Log.Error(err, "failed to set boot next", "system", systemId)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		if err = firmwareMgr.SaveChanges(); err != nil {
+			s.Log.Error(err, "failed to save boot settings", "system", systemId)
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
 	}
 
 	powerState := On

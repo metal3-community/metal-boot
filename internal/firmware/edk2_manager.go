@@ -62,6 +62,10 @@ func (m *EDK2Manager) GetBootOrder() ([]string, error) {
 	return result, nil
 }
 
+func (m *EDK2Manager) SetBootNext(index uint16) error {
+	return m.varList.SetBootNext(index)
+}
+
 // SetBootOrder sets the boot order from a list of entry IDs
 func (m *EDK2Manager) SetBootOrder(order []string) error {
 	bootSequence := make([]uint16, len(order))
