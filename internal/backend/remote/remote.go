@@ -360,12 +360,11 @@ func (w *Remote) getActiveClientsForDevice(ctx context.Context) (unifi.ClientLis
 	}
 	if device.PortTable != nil {
 		for _, portTable := range device.PortTable {
-			if portTable.PortIdx > 10 {
-				continue
-			}
 			if portTable.LastConnection.Mac != "" {
-				if _, err := net.ParseMAC(portTable.LastConnection.Mac); err == nil {
-					lastSeenMacLookup[portTable.LastConnection.Mac] = portTable.PortIdx
+				if hw, err := net.ParseMAC(portTable.LastConnection.Mac); err == nil {
+					if util.IsRaspberryPI(hw) {
+						lastSeenMacLookup[portTable.LastConnection.Mac] = portTable.PortIdx
+					}
 				}
 			}
 		}
