@@ -78,9 +78,8 @@ func main() {
 
 	g, ctx := errgroup.WithContext(ctx)
 
-	redfishServer := redfish.NewRedfishServer(cfg, backend)
-
-	handlers := redfishServer.GetHandlers()
+	handlers := make(http.HandlerMapping)
+	registrations := make([]http.RegistrationFunc, 0)
 
 	// create the http server before our merged handlers
 	tp := parseTrustedProxies(cfg.TrustedProxies)
@@ -148,12 +147,15 @@ func main() {
 		handlers["/iso/"] = isoHandler
 	}
 
+	redfishServer := redfish.NewRedfishServer(cfg, backend)
+	registrations = append(registrations, redfishServer.Register)
+
 	if len(handlers) > 0 {
 		// start the http server for ipxe binaries and scripts
 		bindAddr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
 		log.Info("serving http", "addr", bindAddr, "trusted_proxies", tp)
 		g.Go(func() error {
-			return httpServer.ServeHTTP(ctx, bindAddr, handlers)
+			return httpServer.ServeHTTP(ctx, bindAddr, handlers, registrations...)
 		})
 	}
 
