@@ -8,6 +8,7 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/insomniacslk/dhcp/dhcpv4"
@@ -326,7 +327,7 @@ func TestIsRaspberryPI(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := isRaspberryPI(tt.mac)
+			got := util.IsRaspberryPI(tt.mac)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatal(diff)
 			}

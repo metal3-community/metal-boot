@@ -215,6 +215,13 @@ func (v *EfiVar) SetUint32(value uint32) {
 	v.updateTime(nil)
 }
 
+func (v *EfiVar) GetUint32() (uint32, error) {
+	if len(v.Data) < 4 {
+		return 0, errors.New("data too short for uint32")
+	}
+	return binary.LittleEndian.Uint32(v.Data), nil
+}
+
 func (v *EfiVar) GetBootEntry() (*BootEntry, error) {
 	return NewBootEntry(v.Data, v.Attr, nil, nil, nil), nil
 }

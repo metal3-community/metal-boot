@@ -157,6 +157,14 @@ func GUIDFromString(s string) (GUID, error) {
 	return ParseGUID(s)
 }
 
+func StringToGUID(s string) GUID {
+	guid, err := ParseGUID(s)
+	if err != nil {
+		return GUID{}
+	}
+	return guid
+}
+
 // FromBytes parses a GUID from its binary representation
 func GUIDFromBytes(data []byte) (GUID, error) {
 	if len(data) < 16 {

@@ -31,6 +31,7 @@ type UnifiConfig struct {
 }
 
 type TftpConfig struct {
+	Enabled       bool   `yaml:"enabled" mapstructure:"enabled"`
 	Address       string `yaml:"address" mapstructure:"address"`
 	Port          int    `yaml:"port" mapstructure:"port"`
 	RootDirectory string `yaml:"root_directory" mapstructure:"root_directory"`
@@ -70,6 +71,7 @@ func (u IpxeUrl) GetUrl(paths ...string) *url.URL {
 }
 
 type DhcpConfig struct {
+	Enabled           bool    `yaml:"enabled" mapstructure:"enabled"`
 	Interface         string  `yaml:"interface" mapstructure:"interface"`
 	Address           string  `yaml:"address" mapstructure:"address"`
 	Port              int     `yaml:"port" mapstructure:"port"`
@@ -92,6 +94,7 @@ type IpxeHttpScript struct {
 	TinkServerUseTLS      bool     `yaml:"tink_server_use_tls" mapstructure:"tink_server_use_tls"`
 	ExtraKernelArgs       []string `yaml:"extra_kernel_args" mapstructure:"extra_kernel_args"`
 	StaticIPXEEnabled     bool     `yaml:"static_ipxe_enabled" mapstructure:"static_ipxe_enabled"`
+	StaticFilesEnabled    bool     `yaml:"static_files_enabled" mapstructure:"static_files_enabled"`
 }
 
 type IsoConfig struct {
@@ -131,6 +134,7 @@ type Config struct {
 	Otel            OtelConfig     `yaml:"otel" mapstructure:"otel"`
 	Images          ImagesConfig   `yaml:"images" mapstructure:"images"`
 	ResetDelaySec   int            `yaml:"reset_delay_sec" mapstructure:"reset_delay_sec"`
+	FirmwarePath    string         `yaml:"firmware_path" mapstructure:"firmware_path"`
 }
 
 func (c *Config) GetIpxeHttpUrl() (*url.URL, error) {
@@ -215,11 +219,13 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("unifi.device", "")
 	viper.SetDefault("unifi.insecure", true)
 
+	viper.SetDefault("tftp.enabled", false)
 	viper.SetDefault("tftp.address", netInfo.BindIP)
 	viper.SetDefault("tftp.port", 69)
 	viper.SetDefault("tftp.root_directory", "/tftpboot")
 	viper.SetDefault("tftp.ipxe_patch", ipxePatchDefault)
 
+	viper.SetDefault("dhcp.enabled", false)
 	viper.SetDefault("dhcp.interface", netInfo.Iface)
 	viper.SetDefault("dhcp.address", netInfo.BindIP)
 	viper.SetDefault("dhcp.port", 67)
@@ -249,6 +255,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ipxe_http_script.tink_server_use_tls", false)
 	viper.SetDefault("ipxe_http_script.extra_kernel_args", []string{})
 	viper.SetDefault("ipxe_http_script.static_ipxe_enabled", false)
+	viper.SetDefault("ipxe_http_script.static_files_enabled", false)
 
 	viper.SetDefault("otel.endpoint", "")
 	viper.SetDefault("otel.insecure", true)

@@ -13,6 +13,7 @@ import (
 	"os"
 	"testing"
 
+	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/go-logr/stdr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/tinkerbell/ipxedust/binary"
@@ -129,14 +130,15 @@ func TestHandle(t *testing.T) {
 			req := httptest.NewRequest(tt.req.method, tt.req.url, tt.req.body)
 			var resp *http.Response
 			if tt.failWrite {
+				conf, _ := config.NewConfig()
 				w := newFakeResponse()
-				h := Handler{Log: logger, Patch: tt.patch}
-				h.HandlerFunc()(w, req)
+				HandlerFunc(conf)(w, req)
 				resp = w.Result()
 			} else {
+				conf, _ := config.NewConfig()
+				conf.Log = logger
 				w := httptest.NewRecorder()
-				h := Handler{Log: logger, Patch: tt.patch}
-				h.HandlerFunc()(w, req)
+				HandlerFunc(conf)(w, req)
 				resp = w.Result()
 			}
 

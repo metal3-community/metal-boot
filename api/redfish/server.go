@@ -5,13 +5,18 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
+	"os"
+	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
+	"github.com/bmcpi/pibmc/internal/firmware"
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
@@ -47,6 +52,7 @@ type RedfishServerConfig struct {
 	UnifiDevice   string
 	Logger        logr.Logger
 	TftpRoot      string
+	FirmwarePath  string
 }
 
 type RedfishSystem struct {
@@ -57,6 +63,7 @@ type RedfishSystem struct {
 	DeviceMac        string `yaml:"device_mac"`
 	PoeMode          string `yaml:"poe_mode"`
 	EfiVariableStore *varstore.Edk2VarStore
+	FirmwareManager  firmware.FirmwareManager
 }
 
 func (r *RedfishSystem) GetPowerState() *PowerState {
@@ -95,16 +102,22 @@ type RedfishServer struct {
 	Log logr.Logger
 
 	backend handler.BackendStore
+
+	firmwarePath string
 }
 
 func NewRedfishServer(cfg *config.Config, backend handler.BackendStore) *RedfishServer {
 	server := &RedfishServer{
-		Config:  cfg,
-		Log:     cfg.Log.WithName("redfish-server"),
-		backend: backend,
+		Config:       cfg,
+		Log:          cfg.Log.WithName("redfish-server"),
+		backend:      backend,
+		firmwarePath: cfg.FirmwarePath,
 	}
 
-	server.Log.Info("starting redfish server", "address", cfg.Address, "port", cfg.Port)
+	server.Log.Info("starting redfish server",
+		"address", cfg.Address,
+		"port", cfg.Port,
+		"firmware", cfg.FirmwarePath)
 
 	server.refreshSystems(context.Background())
 
@@ -146,17 +159,85 @@ func (s *RedfishServer) EjectVirtualMedia(w http.ResponseWriter, r *http.Request
 
 // FirmwareInventory implements ServerInterface.
 func (s *RedfishServer) FirmwareInventory(w http.ResponseWriter, r *http.Request) {
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.FirmwareInventory")
+	defer span.End()
 
-	panic("unimplemented")
+	s.Log.Info("getting firmware inventory")
+
+	// Check if firmware file exists
+	if s.firmwarePath == "" {
+		err := errors.New("firmware path not configured")
+		s.Log.Error(err, "firmware path not set")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Create firmware inventory response
+	firmwareName := filepath.Base(s.firmwarePath)
+	inventory := Collection{
+		OdataId:   "/redfish/v1/UpdateService/FirmwareInventory",
+		OdataType: "#FirmwareInventory.SoftwareInventoryCollection",
+		Name:      util.Ptr("Firmware Inventory Collection"),
+		Members: &[]IdRef{
+			{
+				OdataId: util.Ptr(fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", firmwareName)),
+			},
+		},
+		MembersOdataCount: util.Ptr(1),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(inventory)
 }
 
 // FirmwareInventoryDownloadImage implements ServerInterface.
 func (s *RedfishServer) FirmwareInventoryDownloadImage(w http.ResponseWriter, r *http.Request) {
-	panic("unimplemented")
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.FirmwareInventoryDownloadImage")
+	defer span.End()
+
+	s.Log.Info("downloading firmware image")
+
+	// Check if firmware file exists
+	if s.firmwarePath == "" {
+		err := errors.New("firmware path not configured")
+		s.Log.Error(err, "firmware path not set")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Read the firmware file
+	firmwareData, err := os.ReadFile(s.firmwarePath)
+	if err != nil {
+		s.Log.Error(err, "failed to read firmware file")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Set headers for file download
+	firmwareName := filepath.Base(s.firmwarePath)
+	w.Header().Set("Content-Disposition", fmt.Sprintf("attachment; filename=%s", firmwareName))
+	w.Header().Set("Content-Type", "application/octet-stream")
+	w.Header().Set("Content-Length", fmt.Sprintf("%d", len(firmwareData)))
+
+	// Send the firmware data
+	w.Write(firmwareData)
 }
 
 // GetManager implements ServerInterface.
 func (s *RedfishServer) GetManager(w http.ResponseWriter, r *http.Request, managerId string) {
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetManager")
+	defer span.End()
+
+	s.Log.Info("getting manager", "manager", managerId)
 
 	manager := Manager{
 		Id:        &managerId,
@@ -166,11 +247,25 @@ func (s *RedfishServer) GetManager(w http.ResponseWriter, r *http.Request, manag
 		Status: &Status{
 			State: util.Ptr(StateEnabled),
 		},
+		ManagerType:     util.Ptr(ManagerTypeBMC),
+		Model:           util.Ptr("Raspberry Pi BMC"),
+		FirmwareVersion: util.Ptr("1.0.0"),
+		// Add virtual media reference
+		VirtualMedia: &IdRef{
+			OdataId: util.Ptr(fmt.Sprintf("/redfish/v1/Managers/%s/VirtualMedia", managerId)),
+		},
+		// Add links to firmware inventory
+		Links: &ManagerLinks{
+			ManagerForServers: &[]IdRef{
+				{
+					OdataId: util.Ptr("/redfish/v1/Systems"),
+				},
+			},
+		},
 	}
-	if err := json.NewEncoder(w).Encode(manager); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		s.Log.Error(err, "error encoding response")
-	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(manager)
 }
 
 // GetManagerVirtualMedia implements ServerInterface.
@@ -190,6 +285,12 @@ func (s *RedfishServer) GetRoot(w http.ResponseWriter, r *http.Request) {
 		Systems: &IdRef{
 			OdataId: util.Ptr("/redfish/v1/Systems"),
 		},
+		Managers: &IdRef{
+			OdataId: util.Ptr("/redfish/v1/Managers"),
+		},
+		UpdateService: &IdRef{
+			OdataId: util.Ptr("/redfish/v1/UpdateService"),
+		},
 	}
 
 	err := json.NewEncoder(w).Encode(root)
@@ -203,7 +304,80 @@ func (s *RedfishServer) GetRoot(w http.ResponseWriter, r *http.Request) {
 
 // GetSoftwareInventory implements ServerInterface.
 func (s *RedfishServer) GetSoftwareInventory(w http.ResponseWriter, r *http.Request, softwareId string) {
-	panic("unimplemented")
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetSoftwareInventory")
+	defer span.End()
+
+	s.Log.Info("getting software inventory", "id", softwareId)
+
+	// Check if firmware file exists
+	if s.firmwarePath == "" {
+		err := errors.New("firmware path not configured")
+		s.Log.Error(err, "firmware path not set")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Create firmware manager for the system
+	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+	if err != nil {
+		s.Log.Error(err, "failed to create firmware manager")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Get firmware version and system info
+	version, err := firmwareMgr.GetFirmwareVersion()
+	if err != nil {
+		s.Log.Error(err, "failed to get firmware version")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	sysInfo, err := firmwareMgr.GetSystemInfo()
+	if err != nil {
+		s.Log.Info("failed to get system info", "error", err)
+		// Continue anyway
+	}
+
+	// Create software inventory response
+	firmwareName := filepath.Base(s.firmwarePath)
+
+	// If the requested ID doesn't match our firmware name, return 404
+	if softwareId != firmwareName {
+		err := fmt.Errorf("software inventory %s not found", softwareId)
+		s.Log.Error(err, "software inventory not found")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Create description from system info
+	description := fmt.Sprintf("UEFI Firmware %s", version)
+	for k, v := range sysInfo {
+		description += fmt.Sprintf(" - %s: %s", k, v)
+	}
+
+	inventory := SoftwareInventory{
+		OdataId:     util.Ptr(fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", softwareId)),
+		OdataType:   util.Ptr("#SoftwareInventory.v1_5_0.SoftwareInventory"),
+		Id:          &softwareId,
+		Name:        util.Ptr("UEFI Firmware"),
+		Description: util.Ptr(description),
+		Version:     util.Ptr(version),
+		Status: &Status{
+			State:  util.Ptr(StateEnabled),
+			Health: util.Ptr(HealthOK),
+		},
+		Updateable: util.Ptr(true),
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(inventory)
 }
 
 // GetSystem implements ServerInterface.
@@ -288,6 +462,9 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 			State: util.Ptr(StateEnabled),
 		},
 		UUID: util.Ptr(systemIdAddr.String()),
+		Bios: &IdRef{
+			OdataId: util.Ptr(fmt.Sprintf("/redfish/v1/Systems/%s/BIOS", systemId)),
+		},
 	}
 
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
@@ -295,6 +472,265 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 		s.Log.Error(err, "error marshalling response", "system", systemId)
 		return
 	}
+}
+
+// Add a new handler for BIOS settings
+// func (s *RedfishServer) GetBIOS(w http.ResponseWriter, r *http.Request, systemId string) {
+// 	ctx := r.Context()
+// 	tracer := otel.Tracer(tracerName)
+// 	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetBIOS")
+// 	defer span.End()
+
+// 	s.Log.Info("getting BIOS settings", "system", systemId)
+
+// 	// Check if firmware file exists
+// 	if s.firmwarePath == "" {
+// 		err := errors.New("firmware path not configured")
+// 		s.Log.Error(err, "firmware path not set")
+// 		w.WriteHeader(http.StatusNotFound)
+// 		json.NewEncoder(w).Encode(redfishError(err))
+// 		return
+// 	}
+
+// 	// Create firmware manager for the system
+// 	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+// 	if err != nil {
+// 		s.Log.Error(err, "failed to create firmware manager")
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(redfishError(err))
+// 		return
+// 	}
+
+// 	// Get system info
+// 	sysInfo, err := firmwareMgr.GetSystemInfo()
+// 	if err != nil {
+// 		s.Log.Error(err, "failed to get system info")
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(redfishError(err))
+// 		return
+// 	}
+
+// 	// Get network settings
+// 	netSettings, err := firmwareMgr.GetNetworkSettings()
+// 	if err != nil {
+// 		s.Log.Error(err, "failed to get network settings")
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(redfishError(err))
+// 		return
+// 	}
+
+// 	// Get boot entries
+// 	bootEntries, err := firmwareMgr.GetBootEntries()
+// 	if err != nil {
+// 		s.Log.Error(err, "failed to get boot entries")
+// 		w.WriteHeader(http.StatusInternalServerError)
+// 		json.NewEncoder(w).Encode(redfishError(err))
+// 		return
+// 	}
+
+// 	// Create BIOS response
+// 	biosSettings := Bios{
+// 		OdataId:   util.Ptr(fmt.Sprintf("/redfish/v1/Systems/%s/BIOS", systemId)),
+// 		OdataType: util.Ptr("#Bios.v1_2_0.Bios"),
+// 		Id:        util.Ptr("BIOS"),
+// 		Name:      util.Ptr("UEFI BIOS Settings"),
+// 		Attributes: map[string]interface{}{
+// 			"SystemInfo":      sysInfo,
+// 			"NetworkSettings": netSettings,
+// 			"BootEntries":     bootEntries,
+// 		},
+// 		Actions: &BiosActions{
+// 			HashBiosReset: &BiosReset{
+// 				Title:  util.Ptr("Reset BIOS Settings"),
+// 				Target: util.Ptr(fmt.Sprintf("/redfish/v1/Systems/%s/BIOS/Actions/Bios.Reset", systemId)),
+// 			},
+// 		},
+// 		Links: &BiosLinks{
+// 			ActiveSoftwareImage: &IdRef{
+// 				OdataId: util.Ptr(fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", filepath.Base(s.firmwarePath))),
+// 			},
+// 		},
+// 	}
+
+// 	w.Header().Set("Content-Type", "application/json")
+// 	json.NewEncoder(w).Encode(biosSettings)
+// }
+
+// Handler for BIOS settings reset
+func (s *RedfishServer) ResetBIOS(w http.ResponseWriter, r *http.Request, systemId string) {
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.ResetBIOS")
+	defer span.End()
+
+	s.Log.Info("resetting BIOS settings", "system", systemId)
+
+	// Check if firmware file exists
+	if s.firmwarePath == "" {
+		err := errors.New("firmware path not configured")
+		s.Log.Error(err, "firmware path not set")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Create firmware manager for the system
+	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+	if err != nil {
+		s.Log.Error(err, "failed to create firmware manager")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Reset to defaults
+	err = firmwareMgr.ResetToDefaults()
+	if err != nil {
+		s.Log.Error(err, "failed to reset BIOS settings")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Save changes
+	err = firmwareMgr.SaveChanges()
+	if err != nil {
+		s.Log.Error(err, "failed to save BIOS settings")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Return success
+	w.WriteHeader(http.StatusNoContent)
+}
+
+// Handler for updating BIOS settings
+func (s *RedfishServer) UpdateBIOS(w http.ResponseWriter, r *http.Request, systemId string) {
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.UpdateBIOS")
+	defer span.End()
+
+	s.Log.Info("updating BIOS settings", "system", systemId)
+
+	// Check if firmware file exists
+	if s.firmwarePath == "" {
+		err := errors.New("firmware path not configured")
+		s.Log.Error(err, "firmware path not set")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.Log.Error(err, "failed to read request body")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Parse request body
+	var request BiosUpdateRequest
+	err = json.Unmarshal(body, &request)
+	if err != nil {
+		s.Log.Error(err, "failed to parse request body")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Create firmware manager for the system
+	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+	if err != nil {
+		s.Log.Error(err, "failed to create firmware manager")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Apply settings
+	if attrs := request.Attributes; attrs != nil {
+		// Update network settings if provided
+		if netSettings, ok := attrs["NetworkSettings"].(map[string]interface{}); ok {
+			ns := firmware.NetworkSettings{}
+
+			if mac, ok := netSettings["MacAddress"].(string); ok {
+				ns.MacAddress = mac
+			}
+
+			if dhcp, ok := netSettings["EnableDHCP"].(bool); ok {
+				ns.EnableDHCP = dhcp
+			}
+
+			if ipv6, ok := netSettings["EnableIPv6"].(bool); ok {
+				ns.EnableIPv6 = ipv6
+			}
+
+			if vlan, ok := netSettings["VLANEnabled"].(bool); ok {
+				ns.VLANEnabled = vlan
+			}
+
+			if vlanid, ok := netSettings["VLANID"].(string); ok {
+				ns.VLANID = vlanid
+			}
+
+			err = firmwareMgr.SetNetworkSettings(ns)
+			if err != nil {
+				s.Log.Error(err, "failed to update network settings")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(redfishError(err))
+				return
+			}
+		}
+
+		// Update boot timeout if provided
+		if timeout, ok := attrs["BootTimeout"].(float64); ok {
+			err = firmwareMgr.SetFirmwareTimeoutSeconds(int(timeout))
+			if err != nil {
+				s.Log.Error(err, "failed to update boot timeout")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(redfishError(err))
+				return
+			}
+		}
+
+		// Update PXE boot if provided
+		if pxeBoot, ok := attrs["EnablePXEBoot"].(bool); ok {
+			err = firmwareMgr.EnablePXEBoot(pxeBoot)
+			if err != nil {
+				s.Log.Error(err, "failed to update PXE boot")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(redfishError(err))
+				return
+			}
+		}
+
+		// Update HTTP boot if provided
+		if httpBoot, ok := attrs["EnableHTTPBoot"].(bool); ok {
+			err = firmwareMgr.EnableHTTPBoot(httpBoot)
+			if err != nil {
+				s.Log.Error(err, "failed to update HTTP boot")
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(redfishError(err))
+				return
+			}
+		}
+	}
+
+	// Save changes
+	err = firmwareMgr.SaveChanges()
+	if err != nil {
+		s.Log.Error(err, "failed to save BIOS settings")
+		w.WriteHeader(http.StatusInternalServerError)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Return success
+	w.WriteHeader(http.StatusNoContent)
 }
 
 // GetTask implements ServerInterface.
@@ -380,11 +816,8 @@ func (s *RedfishServer) ListManagers(w http.ResponseWriter, r *http.Request) {
 		MembersOdataCount: util.Ptr(len(ids)),
 	}
 
-	w.WriteHeader(http.StatusOK)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		w.Write(fmt.Appendf(nil, "error encoding response: %s", err))
-	}
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // ListSystems implements ServerInterface.
@@ -588,10 +1021,159 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 
 // UpdateService implements ServerInterface.
 func (s *RedfishServer) UpdateService(w http.ResponseWriter, r *http.Request) {
-	panic("unimplemented")
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.UpdateService")
+	defer span.End()
+
+	s.Log.Info("getting update service")
+
+	// Create response for update service
+	response := UpdateService{
+		OdataId:        util.Ptr("/redfish/v1/UpdateService"),
+		OdataType:      util.Ptr("#UpdateService.v1_9_0.UpdateService"),
+		Id:             util.Ptr("UpdateService"),
+		Name:           util.Ptr("Update Service"),
+		Description:    util.Ptr("Service enables updating firmware"),
+		ServiceEnabled: util.Ptr(true),
+		HttpPushUri:    util.Ptr("/redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate"),
+		FirmwareInventory: &IdRef{
+			OdataId: util.Ptr("/redfish/v1/UpdateService/FirmwareInventory"),
+		},
+		Actions: &UpdateServiceActions{
+			HashUpdateServiceSimpleUpdate: &VirtualMediaActionsVirtualMediaEjectMedia{
+				Target: util.Ptr("/redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate"),
+			},
+		},
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	json.NewEncoder(w).Encode(response)
 }
 
 // UpdateServiceSimpleUpdate implements ServerInterface.
 func (s *RedfishServer) UpdateServiceSimpleUpdate(w http.ResponseWriter, r *http.Request) {
-	panic("unimplemented")
+	ctx := r.Context()
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.UpdateServiceSimpleUpdate")
+	defer span.End()
+
+	s.Log.Info("processing firmware update")
+
+	// Check if firmware file exists
+	if s.firmwarePath == "" {
+		err := errors.New("firmware path not configured")
+		s.Log.Error(err, "firmware path not set")
+		w.WriteHeader(http.StatusNotFound)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Read request body
+	body, err := io.ReadAll(r.Body)
+	if err != nil {
+		s.Log.Error(err, "failed to read request body")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Parse request body
+	var request SimpleUpdateRequest
+	err = json.Unmarshal(body, &request)
+	if err != nil {
+		s.Log.Error(err, "failed to parse request body")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Validate request
+	if request.ImageURI == nil || *request.ImageURI == "" {
+		err := errors.New("image URI is required")
+		s.Log.Error(err, "missing image URI")
+		w.WriteHeader(http.StatusBadRequest)
+		json.NewEncoder(w).Encode(redfishError(err))
+		return
+	}
+
+	// Handle local file update
+	if strings.HasPrefix(*request.ImageURI, "file://") {
+		localPath := strings.TrimPrefix(*request.ImageURI, "file://")
+
+		// Read the file
+		firmwareData, err := os.ReadFile(localPath)
+		if err != nil {
+			s.Log.Error(err, "failed to read firmware file")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		// Create firmware manager
+		firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+		if err != nil {
+			s.Log.Error(err, "failed to create firmware manager")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		// Update firmware
+		err = firmwareMgr.UpdateFirmware(firmwareData)
+		if err != nil {
+			s.Log.Error(err, "failed to update firmware")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		s.Log.Info("firmware updated successfully")
+		w.WriteHeader(http.StatusAccepted)
+		return
+	}
+
+	// For remote URIs (HTTP, HTTPS), return a task that client can monitor
+	taskId := fmt.Sprintf("firmware-update-%d", time.Now().Unix())
+	response := Task{
+		OdataId:     util.Ptr(fmt.Sprintf("/redfish/v1/TaskService/Tasks/%s", taskId)),
+		OdataType:   util.Ptr("#Task.v1_6_0.Task"),
+		Id:          &taskId,
+		Name:        util.Ptr("Firmware Update Task"),
+		TaskState:   util.Ptr(TaskStateNew),
+		StartTime:   util.Ptr(time.Now()),
+		TaskMonitor: util.Ptr(fmt.Sprintf("/redfish/v1/TaskMonitor/%s", taskId)),
+	}
+
+	// Return task information
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(http.StatusAccepted)
+	json.NewEncoder(w).Encode(response)
+
+	// Start background task to download and update firmware
+	go s.processFirmwareUpdate(ctx, *request.ImageURI, taskId)
+}
+
+// processFirmwareUpdate handles the firmware update process in the background
+func (s *RedfishServer) processFirmwareUpdate(ctx context.Context, imageURI string, taskId string) {
+	s.Log.Info("starting firmware update task", "uri", imageURI, "taskId", taskId)
+
+	// Placeholder for task update mechanism
+	// In a real implementation, you would:
+	// 1. Download the firmware from imageURI
+	// 2. Validate the firmware image
+	// 3. Update the task status as it progresses
+	// 4. Apply the firmware update using the firmware manager
+	// 5. Complete the task
+}
+
+// Additional response types needed for firmware management
+type BiosUpdateRequest struct {
+	Attributes map[string]interface{} `json:"Attributes,omitempty"`
+}
+
+type SimpleUpdateRequest struct {
+	ImageURI         *string  `json:"ImageURI,omitempty"`
+	TransferProtocol *string  `json:"TransferProtocol,omitempty"`
+	Targets          []string `json:"Targets,omitempty"`
 }

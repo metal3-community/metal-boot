@@ -447,6 +447,7 @@ type Root struct {
 
 	// Systems A reference to a resource.
 	Systems *IdRef  `json:"Systems,omitempty"`
+	UpdateService *IdRef  `json:"UpdateService,omitempty"`
 	UUID    *string `json:"UUID,omitempty"`
 }
 
@@ -564,7 +565,7 @@ type UpdateService struct {
 
 	// Description description
 	Description       *string            `json:"Description"`
-	FirmwareInventory *FirmwareInventory `json:"FirmwareInventory,omitempty"`
+	FirmwareInventory *IdRef `json:"FirmwareInventory,omitempty"`
 	HttpPushUri       *string            `json:"HttpPushUri,omitempty"`
 
 	// Id The name of the resource.

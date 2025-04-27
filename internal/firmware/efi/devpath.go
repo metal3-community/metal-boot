@@ -10,14 +10,11 @@ import (
 	"unicode/utf16"
 )
 
-//!/usr/bin/python
-//
-// SPDX-License-Identifier: GPL-2.0-only
-// (c) 2023 Gerd Hoffmann
-//
-// efi device path decoder
-//
-// EFI_DEVICE_PATH_PROTOCOL (Protocol/DevicePath.h)
+const (
+	DevTypeMessage = 0x03
+	DevTypeMedia   = 0x04
+	DevTypeFile    = 0x05
+)
 
 //
 // The following helper code emulates the functionality of the Python modules:
@@ -97,7 +94,7 @@ func ucs16FromUcs16(data []byte, offset int) string {
 	}
 	n := (len(data) - offset) / 2
 	codepoints := make([]uint16, n)
-	for i := 0; i < n; i++ {
+	for i := range n {
 		codepoints[i] = binary.LittleEndian.Uint16(data[offset+2*i : offset+2*i+2])
 		if codepoints[i] == 0 {
 			codepoints = codepoints[:i]
@@ -123,7 +120,7 @@ func NewDevicePathElem(data []byte) *DevicePathElem {
 		Subtype: 0xff,
 		Data:    []byte{},
 	}
-	if data != nil && len(data) >= 4 {
+	if len(data) >= 4 {
 		dpe.Devtype = data[0]
 		dpe.Subtype = data[1]
 		size := binary.LittleEndian.Uint16(data[2:4])
@@ -135,26 +132,26 @@ func NewDevicePathElem(data []byte) *DevicePathElem {
 }
 
 func (dpe *DevicePathElem) set_ipv4() {
-	dpe.Devtype = 0x03          // msg
-	dpe.Subtype = 0x0c          // ipv4
-	dpe.Data = make([]byte, 23) // use dhcp
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x0c           // ipv4
+	dpe.Data = make([]byte, 23)  // use dhcp
 }
 
 func (dpe *DevicePathElem) set_uri(uri string) {
-	dpe.Devtype = 0x03 // msg
-	dpe.Subtype = 0x18 // uri
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x18           // uri
 	dpe.Data = []byte(uri)
 }
 
 func (dpe *DevicePathElem) set_filepath(filepath string) {
-	dpe.Devtype = 0x04 // media
-	dpe.Subtype = 0x04 // filepath
+	dpe.Devtype = DevTypeMedia // media
+	dpe.Subtype = 0x04         // filepath
 	dpe.Data = ucs16FromString(filepath)
 }
 
 func (dpe *DevicePathElem) set_gpt(pnr uint32, poff uint64, plen uint64, guid string) {
-	dpe.Devtype = 0x04 // media
-	dpe.Subtype = 0x01 // hard drive
+	dpe.Devtype = DevTypeMedia // media
+	dpe.Subtype = 0x01         // hard drive
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, pnr)
 	binary.Write(&buf, binary.LittleEndian, poff)

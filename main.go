@@ -63,7 +63,7 @@ func main() {
 	defer done()
 
 	oCfg := otel.Config{
-		Servicename: "smee",
+		Servicename: "pibmc",
 		Endpoint:    cfg.Otel.Endpoint,
 		Insecure:    cfg.Otel.Insecure,
 		Logger:      log,
@@ -89,20 +89,21 @@ func main() {
 		StartTime:      startTime,
 		Logger:         log,
 		TrustedProxies: tp,
-
-		ScriptHandler: nil,
-		IHttpHandler:  ihttp.HandlerFunc(cfg),
-		StaticHandler: static.HandlerFunc(cfg),
 	}
 
-	if len(cfg.Images.ImageURLs) > 0 {
-		g.Go(func() error {
-			return static.DownloadImages(cfg)
-		})
+	if cfg.IpxeHttpScript.StaticFilesEnabled {
+		httpServer.IHttpHandler = ihttp.HandlerFunc(cfg)
+		httpServer.StaticHandler = static.HandlerFunc(cfg)
 	}
 
 	// http ipxe script
 	if cfg.IpxeHttpScript.Enabled {
+		if len(cfg.Images.ImageURLs) > 0 {
+			g.Go(func() error {
+				return static.DownloadImages(cfg)
+			})
+		}
+
 		osieUrl, err := cfg.GetOsieUrl()
 		if err != nil {
 			log.Error(err, "failed to get osie url")
@@ -122,9 +123,9 @@ func main() {
 		}
 
 		httpServer.ScriptHandler = jh.HandlerFunc()
-	}
 
-	handlers["/"] = httpServer.HandlerFunc()
+		handlers["/"] = httpServer.HandlerFunc()
+	}
 
 	if cfg.Iso.Enabled {
 		ih := iso.Handler{
@@ -156,48 +157,52 @@ func main() {
 		})
 	}
 
-	ts := &itftp.Server{
-		Logger:        log.WithName("tftp"),
-		RootDirectory: cfg.Tftp.RootDirectory,
-		Patch:         cfg.Tftp.IpxePatch,
+	if cfg.Tftp.Enabled {
+		ts := &itftp.Server{
+			Logger:        log.WithName("tftp"),
+			RootDirectory: cfg.Tftp.RootDirectory,
+			Patch:         cfg.Tftp.IpxePatch,
+		}
+
+		g.Go(func() error {
+			return ts.ListenAndServe(ctx, netip.AddrPortFrom(netip.MustParseAddr(cfg.Address), 69), backend)
+		})
 	}
 
-	g.Go(func() error {
-		return ts.ListenAndServe(ctx, netip.AddrPortFrom(netip.MustParseAddr(cfg.Address), 69), backend)
-	})
+	if cfg.Dhcp.Enabled {
+		dh, err := dhcpHandler(cfg, ctx, log, backend)
+		if err != nil {
+			log.Error(err, "failed to create dhcp listener")
+			panic(fmt.Errorf("failed to create dhcp listener: %w", err))
+		}
+		log.Info("starting dhcp server", "bind_addr", cfg.Dhcp.Address)
+		g.Go(func() error {
 
-	dh, err := dhcpHandler(cfg, ctx, log, backend)
-	if err != nil {
-		log.Error(err, "failed to create dhcp listener")
-		panic(fmt.Errorf("failed to create dhcp listener: %w", err))
+			dhcpIp, err := netip.ParseAddrPort(fmt.Sprintf("%s:%d", cfg.Dhcp.Address, cfg.Dhcp.Port))
+			if err != nil {
+				return fmt.Errorf("invalid bind address: %w", err)
+			}
+
+			bindAddr, err := netip.ParseAddrPort(dhcpIp.String())
+			if err != nil {
+				panic(fmt.Errorf("invalid tftp address for DHCP server: %w", err))
+			}
+			conn, err := server4.NewIPv4UDPConn(cfg.Dhcp.Interface, net.UDPAddrFromAddrPort(bindAddr))
+			if err != nil {
+				panic(err)
+			}
+			defer conn.Close()
+			ds := &dhcpServer.DHCP{Logger: log, Conn: conn, Handlers: []dhcpServer.Handler{dh}}
+
+			go func() {
+				<-ctx.Done()
+				conn.Close()
+				ds.Conn.Close()
+				ds.Close()
+			}()
+			return ds.Serve(ctx)
+		})
 	}
-	log.Info("starting dhcp server", "bind_addr", cfg.Dhcp.Address)
-	g.Go(func() error {
-
-		dhcpIp, err := netip.ParseAddrPort(fmt.Sprintf("%s:%d", cfg.Dhcp.Address, cfg.Dhcp.Port))
-		if err != nil {
-			return fmt.Errorf("invalid bind address: %w", err)
-		}
-
-		bindAddr, err := netip.ParseAddrPort(dhcpIp.String())
-		if err != nil {
-			panic(fmt.Errorf("invalid tftp address for DHCP server: %w", err))
-		}
-		conn, err := server4.NewIPv4UDPConn(cfg.Dhcp.Interface, net.UDPAddrFromAddrPort(bindAddr))
-		if err != nil {
-			panic(err)
-		}
-		defer conn.Close()
-		ds := &dhcpServer.DHCP{Logger: log, Conn: conn, Handlers: []dhcpServer.Handler{dh}}
-
-		go func() {
-			<-ctx.Done()
-			conn.Close()
-			ds.Conn.Close()
-			ds.Close()
-		}()
-		return ds.Serve(ctx)
-	})
 
 	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		log.Error(err, "failed running all services")
