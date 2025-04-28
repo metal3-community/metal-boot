@@ -177,18 +177,23 @@ menuentry 'LinuxKit ISO Image' {
 
 type mockBackend struct{}
 
-func (m *mockBackend) GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, error) {
+func (m *mockBackend) GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	d := &data.DHCP{}
 	n := &data.Netboot{
 		Facility: "test",
 	}
-	return d, n, nil
+	return d, n, nil, nil
 }
 
-func (m *mockBackend) GetByIP(context.Context, net.IP) (*data.DHCP, *data.Netboot, error) {
+func (m *mockBackend) GetByIP(context.Context, net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	d := &data.DHCP{}
 	n := &data.Netboot{
 		Facility: "test",
 	}
-	return d, n, nil
+	return d, n, nil, nil
+}
+
+// GetKeys implements the handler.BackendReader interface.
+func (m *mockBackend) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
+	return []net.HardwareAddr{}, nil
 }

@@ -206,9 +206,7 @@ func (m *EDK2Manager) AddBootEntry(entry BootEntry) error {
 	bootEntryVar := &efi.EfiVar{
 		Name: efi.NewUCS16String(bootEntryName),
 		Guid: efi.StringToGUID(efi.EFI_GLOBAL_VARIABLE),
-		Attr: efi.EFI_VARIABLE_NON_VOLATILE |
-			efi.EFI_VARIABLE_BOOTSERVICE_ACCESS |
-			efi.EFI_VARIABLE_RUNTIME_ACCESS,
+		Attr: efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS | efi.EFI_VARIABLE_RUNTIME_ACCESS,
 	}
 
 	// Set attributes based on enabled status

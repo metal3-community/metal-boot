@@ -185,6 +185,32 @@ func (dpe *DevicePathElem) set_filepath(filepath string) {
 	dpe.Data = ucs16FromString(filepath)
 }
 
+func (dpe *DevicePathElem) set_fvname(guid string) {
+	dpe.Devtype = DevTypeMedia // media
+	dpe.Subtype = 0x07         // fv name
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
+	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
+	guidObj, err := guidsParseStr(guid)
+	if err == nil {
+		buf.Write(guidObj.BytesLe)
+	}
+	dpe.Data = buf.Bytes()
+}
+
+func (dpe *DevicePathElem) set_fvfilename(guid string) {
+	dpe.Devtype = DevTypeMedia // media
+	dpe.Subtype = 0x06         // fv filename
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
+	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
+	guidObj, err := guidsParseStr(guid)
+	if err == nil {
+		buf.Write(guidObj.BytesLe)
+	}
+	dpe.Data = buf.Bytes()
+}
+
 func (dpe *DevicePathElem) set_gpt(pnr uint32, poff uint64, plen uint64, guid string) {
 	dpe.Devtype = DevTypeMedia // media
 	dpe.Subtype = 0x01         // hard drive
@@ -379,6 +405,55 @@ func (dp *DevicePath) IPv4() *DevicePath {
 	return dp
 }
 
+func (dp *DevicePath) IPv6() *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_ipv6()
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) ISCSI(target string) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_iscsi(target)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) SATA(port uint16) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_sata(port)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) USB(port uint8) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_usb(port)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) FvName(guid string) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_fvname(guid)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) FVFileName(guid string) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_fvfilename(guid)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) FilePath(filepath string) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_filepath(filepath)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
 func (dp *DevicePath) GptPartition(pnr uint32, poff uint64, plen uint64, guid string) *DevicePath {
 	elem := NewDevicePathElem(nil)
 	elem.set_gpt(pnr, poff, plen, guid)
@@ -387,6 +462,9 @@ func (dp *DevicePath) GptPartition(pnr uint32, poff uint64, plen uint64, guid st
 }
 
 func (dp *DevicePath) Append(elem *DevicePathElem) *DevicePath {
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
 
 // NewDevicePath creates a new DevicePath from data.
 // It parses each DevicePathElem until a terminating element is found.
