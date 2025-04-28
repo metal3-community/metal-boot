@@ -20,3 +20,6 @@ tools/*.json
 _out/
 tools/*/
 *.fd
+fw-vars.json
+openapi.yaml
+.vscode/settings.json
