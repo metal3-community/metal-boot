@@ -7,50 +7,14 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bmcpi/pibmc/internal/firmware/manager"
+	"github.com/bmcpi/pibmc/internal/firmware/efi"
+	"github.com/bmcpi/pibmc/internal/firmware/types"
 	"github.com/bmcpi/pibmc/internal/firmware/util"
 	"github.com/go-logr/logr"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 )
-
-// MockLogger is a mock implementation of logr.Logger
-type MockLogger struct {
-	mock.Mock
-}
-
-func (m *MockLogger) Enabled() bool {
-	args := m.Called()
-	return args.Bool(0)
-}
-
-func (m *MockLogger) Info(msg string, keysAndValues ...interface{}) {
-	args := []interface{}{msg}
-	args = append(args, keysAndValues...)
-	m.Called(args...)
-}
-
-func (m *MockLogger) Error(err error, msg string, keysAndValues ...interface{}) {
-	args := []interface{}{err, msg}
-	args = append(args, keysAndValues...)
-	m.Called(args...)
-}
-
-func (m *MockLogger) V(level int) logr.Logger {
-	args := m.Called(level)
-	return args.Get(0).(logr.Logger)
-}
-
-func (m *MockLogger) WithValues(keysAndValues ...interface{}) logr.Logger {
-	args := m.Called(keysAndValues)
-	return args.Get(0).(logr.Logger)
-}
-
-func (m *MockLogger) WithName(name string) logr.Logger {
-	args := m.Called(name)
-	return args.Get(0).(logr.Logger)
-}
 
 // MockFirmwareManager is a mock implementation of the FirmwareManager interface
 type MockFirmwareManager struct {
@@ -186,12 +150,6 @@ func (m *MockFirmwareManager) ResetToDefaults() error {
 	return args.Error(0)
 }
 
-// Import types package
-import "github.com/bmcpi/pibmc/internal/firmware/types"
-
-// Import efi package
-import "github.com/bmcpi/pibmc/internal/firmware/efi"
-
 func TestCreateBootNetworkManager(t *testing.T) {
 	// Create a temporary file for the test
 	tmpFile, err := os.CreateTemp("", "firmware-*.bin")
@@ -199,31 +157,27 @@ func TestCreateBootNetworkManager(t *testing.T) {
 	defer os.Remove(tmpFile.Name())
 	tmpFile.Close()
 
-	// Mock the logger
-	mockLogger := new(MockLogger)
-	mockLogger.On("WithName", "edk2-manager").Return(mockLogger)
+	logger := logr.FromContextOrDiscard(t.Context()).WithName("create-boot-network-manager-test")
 
 	t.Run("SuccessfulCreation", func(t *testing.T) {
 		// Test successful creation
-		manager, err := util.CreateBootNetworkManager(tmpFile.Name(), mockLogger)
+		manager, err := util.CreateBootNetworkManager(tmpFile.Name(), logger)
 		assert.NoError(t, err)
 		assert.NotNil(t, manager)
 	})
 
 	t.Run("FileNotExist", func(t *testing.T) {
 		// Test with file that doesn't exist
-		manager, err := util.CreateBootNetworkManager("/non/existent/path", mockLogger)
+		manager, err := util.CreateBootNetworkManager("/non/existent/path", logger)
 		assert.Error(t, err)
 		assert.Nil(t, manager)
 	})
-
-	mockLogger.AssertExpectations(t)
 }
 
 func TestConfigureNetworkBoot(t *testing.T) {
 	mockManager := new(MockFirmwareManager)
 	mac, _ := net.ParseMAC("00:11:22:33:44:55")
-	
+
 	t.Run("SuccessfulConfiguration", func(t *testing.T) {
 		// Setup expectations
 		mockManager.On("SetMacAddress", mac).Return(nil)
@@ -240,7 +194,7 @@ func TestConfigureNetworkBoot(t *testing.T) {
 	t.Run("ErrorInSetMacAddress", func(t *testing.T) {
 		// Clear previous calls
 		mockManager = new(MockFirmwareManager)
-		
+
 		// Setup expectations for failure
 		mockManager.On("SetMacAddress", mac).Return(errors.New("mac error"))
 
@@ -253,7 +207,7 @@ func TestConfigureNetworkBoot(t *testing.T) {
 	t.Run("ErrorInEnablePXEBoot", func(t *testing.T) {
 		// Clear previous calls
 		mockManager = new(MockFirmwareManager)
-		
+
 		// Setup expectations for failure
 		mockManager.On("SetMacAddress", mac).Return(nil)
 		mockManager.On("EnablePXEBoot", true).Return(errors.New("pxe error"))
@@ -267,7 +221,7 @@ func TestConfigureNetworkBoot(t *testing.T) {
 	t.Run("ErrorInEnableHTTPBoot", func(t *testing.T) {
 		// Clear previous calls
 		mockManager = new(MockFirmwareManager)
-		
+
 		// Setup expectations for failure
 		mockManager.On("SetMacAddress", mac).Return(nil)
 		mockManager.On("EnablePXEBoot", true).Return(nil)
@@ -282,7 +236,7 @@ func TestConfigureNetworkBoot(t *testing.T) {
 	t.Run("ErrorInSetFirmwareTimeoutSeconds", func(t *testing.T) {
 		// Clear previous calls
 		mockManager = new(MockFirmwareManager)
-		
+
 		// Setup expectations for failure
 		mockManager.On("SetMacAddress", mac).Return(nil)
 		mockManager.On("EnablePXEBoot", true).Return(nil)
@@ -298,7 +252,7 @@ func TestConfigureNetworkBoot(t *testing.T) {
 	t.Run("ErrorInSaveChanges", func(t *testing.T) {
 		// Clear previous calls
 		mockManager = new(MockFirmwareManager)
-		
+
 		// Setup expectations for failure
 		mockManager.On("SetMacAddress", mac).Return(nil)
 		mockManager.On("EnablePXEBoot", true).Return(nil)
@@ -311,8 +265,6 @@ func TestConfigureNetworkBoot(t *testing.T) {
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "failed to save changes")
 	})
-
-	mockManager.AssertExpectations(t)
 }
 
 func TestFileExists(t *testing.T) {

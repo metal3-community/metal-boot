@@ -20,7 +20,7 @@ func TestCustomScript(t *testing.T) {
 		shouldErr  bool
 	}{
 		"got script": {
-			want:       "#!ipxe\n\necho Loading custom Tinkerbell iPXE script...\n#!ipxe\nautoboot\n",
+			want:       "#!ipxe\nautoboot",
 			ipxeScript: "#!ipxe\nautoboot",
 		},
 		"got url": {

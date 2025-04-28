@@ -99,3 +99,16 @@ func FromUCS16(data []byte, offset ...int) *UCS16String {
 func FromString(str string) *UCS16String {
 	return NewUCS16String(str)
 }
+
+// ToUCS16 is a convenience function that converts a string to UCS16String
+func ToUCS16(str string) *UCS16String {
+	return FromString(str)
+}
+
+// Ucs16ToString converts a UCS-16 string to a regular Go string
+func Ucs16ToString(s *UCS16String) string {
+	if s == nil {
+		return ""
+	}
+	return s.String()
+}

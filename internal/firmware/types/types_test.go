@@ -1,7 +1,6 @@
 package types_test
 
 import (
-	"path/filepath"
 	"testing"
 
 	"github.com/bmcpi/pibmc/internal/firmware/types"
@@ -109,17 +108,17 @@ func TestIsArchiveExt(t *testing.T) {
 func TestSystemInfo(t *testing.T) {
 	// Test basic map operations
 	info := types.SystemInfo{}
-	
+
 	// Test setting and getting values
 	info["FirmwareVersion"] = "1.0.0"
 	info["PlatformName"] = "RaspberryPi"
-	
+
 	assert.Equal(t, "1.0.0", info["FirmwareVersion"])
 	assert.Equal(t, "RaspberryPi", info["PlatformName"])
-	
+
 	// Test map length
 	assert.Len(t, info, 2)
-	
+
 	// Test deleting an entry
 	delete(info, "FirmwareVersion")
 	assert.Len(t, info, 1)
@@ -138,7 +137,7 @@ func TestNetworkSettings(t *testing.T) {
 		VLANEnabled: true,
 		VLANID:      "100",
 	}
-	
+
 	assert.Equal(t, "01:02:03:04:05:06", settings.MacAddress)
 	assert.Equal(t, "192.168.1.100", settings.IPAddress)
 	assert.Equal(t, "255.255.255.0", settings.SubnetMask)
@@ -159,7 +158,7 @@ func TestBootEntry(t *testing.T) {
 		OptData:  "0102030405",
 		Position: 0,
 	}
-	
+
 	assert.Equal(t, "0001", entry.ID)
 	assert.Equal(t, "UEFI Network Boot", entry.Name)
 	assert.Equal(t, "PciRoot(0)/Pci(2,0)/MAC()/IPv4()/Pxe()", entry.DevPath)

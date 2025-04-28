@@ -142,6 +142,16 @@ func ParseGUID(s string) (GUID, error) {
 	return guid, nil
 }
 
+// ParseGuid parses a GUID string into a Guid struct
+func ParseGuid(s string) Guid {
+	guid, err := ParseGUID(s)
+	if err != nil {
+		// Return a default GUID in case of error
+		return Guid{BytesLe: make([]byte, 16)}
+	}
+	return Guid{BytesLe: guid.BytesLE()}
+}
+
 // NewGUID creates a new GUID from its components
 func NewGUID(data1 uint32, data2, data3 uint16, data4 [8]byte) GUID {
 	return GUID{

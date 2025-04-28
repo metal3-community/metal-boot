@@ -19,7 +19,7 @@ func TestEfiVarListBasic(t *testing.T) {
 	// Test adding a variable
 	testVar := &efi.EfiVar{
 		Name:     "TestVar",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte{0x01, 0x02, 0x03, 0x04},
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 4,
@@ -57,10 +57,10 @@ func TestEfiVarListLoadFromBytes(t *testing.T) {
 	// Write variable 1
 	nameBytes := append([]byte("BootOrder"), make([]byte, 32-len("BootOrder"))...)
 	buf.Write(nameBytes)
-	binary.Write(&buf, binary.LittleEndian, uint32(4)) // DataSize
+	binary.Write(&buf, binary.LittleEndian, uint32(4))                                                                 // DataSize
 	binary.Write(&buf, binary.LittleEndian, uint32(efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS)) // Attrs
 	guidBytes := make([]byte, 16)
-	copy(guidBytes, []byte(efi.EfiGlobalVariableGUID))
+	copy(guidBytes, []byte(efi.EfiGlobalVariable))
 	buf.Write(guidBytes)
 	binary.Write(&buf, binary.LittleEndian, uint16(1)) // BootOrder data
 	binary.Write(&buf, binary.LittleEndian, uint16(2)) // BootOrder data
@@ -68,7 +68,7 @@ func TestEfiVarListLoadFromBytes(t *testing.T) {
 	// Write variable 2
 	nameBytes = append([]byte("Boot0001"), make([]byte, 32-len("Boot0001"))...)
 	buf.Write(nameBytes)
-	binary.Write(&buf, binary.LittleEndian, uint32(8)) // DataSize
+	binary.Write(&buf, binary.LittleEndian, uint32(8))                                                                 // DataSize
 	binary.Write(&buf, binary.LittleEndian, uint32(efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS)) // Attrs
 	buf.Write(guidBytes)
 	buf.Write([]byte("UEFI OS\x00")) // Boot0001 data
@@ -82,7 +82,7 @@ func TestEfiVarListLoadFromBytes(t *testing.T) {
 	bootOrder, err := varList.Get("BootOrder")
 	assert.NoError(t, err)
 	assert.Equal(t, "BootOrder", bootOrder.Name)
-	assert.Equal(t, efi.EfiGlobalVariableGUID, bootOrder.GuidStr)
+	assert.Equal(t, efi.EfiGlobalVariable, bootOrder.GuidStr)
 	assert.Equal(t, uint32(4), bootOrder.DataSize)
 	assert.Equal(t, efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS, bootOrder.Attrs)
 	assert.Equal(t, []byte{1, 0, 2, 0}, bootOrder.Data)
@@ -90,7 +90,7 @@ func TestEfiVarListLoadFromBytes(t *testing.T) {
 	boot0001, err := varList.Get("Boot0001")
 	assert.NoError(t, err)
 	assert.Equal(t, "Boot0001", boot0001.Name)
-	assert.Equal(t, efi.EfiGlobalVariableGUID, boot0001.GuidStr)
+	assert.Equal(t, efi.EfiGlobalVariable, boot0001.GuidStr)
 	assert.Equal(t, uint32(8), boot0001.DataSize)
 	assert.Equal(t, efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS, boot0001.Attrs)
 	assert.Equal(t, []byte("UEFI OS\x00"), boot0001.Data)
@@ -102,7 +102,7 @@ func TestEfiVarListSaveToBytes(t *testing.T) {
 
 	bootOrderVar := &efi.EfiVar{
 		Name:     "BootOrder",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte{1, 0, 2, 0},
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 4,
@@ -110,7 +110,7 @@ func TestEfiVarListSaveToBytes(t *testing.T) {
 
 	boot0001Var := &efi.EfiVar{
 		Name:     "Boot0001",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte("UEFI OS\x00"),
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 8,
@@ -152,7 +152,7 @@ func TestEfiVarListErrors(t *testing.T) {
 	// Test adding a variable with an empty name
 	emptyNameVar := &efi.EfiVar{
 		Name:     "",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte{0x01},
 		DataSize: 1,
 	}
@@ -174,7 +174,7 @@ func TestEfiVarListErrors(t *testing.T) {
 	// Test adding a variable with nil data
 	nilDataVar := &efi.EfiVar{
 		Name:     "TestVar",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     nil,
 		DataSize: 0,
 	}
@@ -198,7 +198,7 @@ func TestEfiVarListUpdate(t *testing.T) {
 	// Add a test variable
 	testVar := &efi.EfiVar{
 		Name:     "TestVar",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte{0x01, 0x02},
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE,
 		DataSize: 2,
@@ -209,7 +209,7 @@ func TestEfiVarListUpdate(t *testing.T) {
 	// Update the variable
 	updatedVar := &efi.EfiVar{
 		Name:     "TestVar",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte{0x03, 0x04, 0x05},
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 3,
@@ -238,7 +238,7 @@ func TestEfiVarListFind(t *testing.T) {
 	// Add test variables
 	bootOrderVar := &efi.EfiVar{
 		Name:     "BootOrder",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte{1, 0, 2, 0},
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 4,
@@ -246,7 +246,7 @@ func TestEfiVarListFind(t *testing.T) {
 
 	boot0001Var := &efi.EfiVar{
 		Name:     "Boot0001",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte("UEFI OS\x00"),
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 8,
@@ -254,7 +254,7 @@ func TestEfiVarListFind(t *testing.T) {
 
 	boot0002Var := &efi.EfiVar{
 		Name:     "Boot0002",
-		GuidStr:  efi.EfiGlobalVariableGUID,
+		GuidStr:  efi.EfiGlobalVariable,
 		Data:     []byte("PXE Boot\x00"),
 		Attrs:    efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS,
 		DataSize: 9,
@@ -276,26 +276,26 @@ func TestEfiVarListFind(t *testing.T) {
 	// Test FindByPrefix
 	bootVars := varList.FindByPrefix("Boot")
 	assert.Len(t, bootVars, 3) // BootOrder, Boot0001, Boot0002
-	
+
 	// Test FindByGUID
-	globalVars := varList.FindByGUID(efi.EfiGlobalVariableGUID)
+	globalVars := varList.FindByGUID(efi.EfiGlobalVariable)
 	assert.Len(t, globalVars, 3) // All Boot* variables use the global GUID
-	
+
 	customGuidVars := varList.FindByGUID("12345678-1234-1234-1234-123456789012")
 	assert.Len(t, customGuidVars, 1) // Only CustomVar uses this GUID
-	
+
 	// Test FindByNameAndGUID
-	bootOrderByNameAndGuid := varList.FindByNameAndGUID("BootOrder", efi.EfiGlobalVariableGUID)
+	bootOrderByNameAndGuid := varList.FindByNameAndGUID("BootOrder", efi.EfiGlobalVariable)
 	assert.Len(t, bootOrderByNameAndGuid, 1)
 	assert.Equal(t, "BootOrder", bootOrderByNameAndGuid[0].Name)
-	
+
 	// Test with non-existent values
 	nonExistentByPrefix := varList.FindByPrefix("NonExistent")
 	assert.Empty(t, nonExistentByPrefix)
-	
+
 	nonExistentByGuid := varList.FindByGUID("00000000-0000-0000-0000-000000000000")
 	assert.Empty(t, nonExistentByGuid)
-	
-	nonExistentByNameAndGuid := varList.FindByNameAndGUID("NonExistent", efi.EfiGlobalVariableGUID)
+
+	nonExistentByNameAndGuid := varList.FindByNameAndGUID("NonExistent", efi.EfiGlobalVariable)
 	assert.Empty(t, nonExistentByNameAndGuid)
 }

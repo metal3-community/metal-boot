@@ -183,61 +183,7 @@ func encodeDWord(value uint32) string {
 func main() {
 	readFile()
 	readFile()
-
-	return
-
-	// Encoded UEFI PXE data
-	encodedHex := "0100000044005500450046004900200050005800450076003400200028004d00410043003a0044003800330041004400440035004100340034003000430029000000030b2500d83add5a440c000000000000000000000000000000000000000000000000000001030c1b0000000000000000000000000000000000000000000000007fff04004eac0881119f594d850ee21a522c59b2"
-
-	data, err := hex.DecodeString(encodedHex)
-	if err != nil {
-		panic(fmt.Errorf("error decoding hex: %v", err))
-	}
-
-	efiVarList := efi.EfiVarList{}
-
-	efiVarList.UnmarshalJSON([]byte(efiConfig))
-
-	err = efiVarList.UnmarshalJSON([]byte(efiConfig))
-	if err != nil {
-		panic(fmt.Errorf("error decoding EFI JSON: %v", err))
-	}
-
-	bootEntries, err := efiVarList.ListBootEntries()
-	if err != nil {
-		panic(fmt.Errorf("error listing boot entries: %v", err))
-	}
-
-	for index, entry := range bootEntries {
-		fmt.Printf("Boot%04X: %s\n", index, entry)
-	}
-
-	for k, v := range efiVarList {
-		fmt.Printf("%s: %s\n", k, v)
-	}
-
-	bootent := efi.NewBootEntry(data, 0, nil, nil, nil)
-
-	fmt.Println("Decoding UEFI PXE data...")
-
-	fmt.Printf(
-		"title=\"%s\" devpath=%s optdata=%s\n",
-		bootent.Title,
-		bootent.DevicePath.String(),
-		bootent.OptData,
-	)
-
-	fmt.Println(bootent)
-
-	return
-
-	// // Decode the input and print the output
-	// decodedOutput, err := parseEncodedData(encodedHex)
-	// if err != nil {
-	// 	fmt.Println("Error decoding:", err)
-	// 	return
-	// }
-	// fmt.Println(decodedOutput)
+	// The rest of the function is disabled to avoid unreachable code
 }
 
 func readFile() {

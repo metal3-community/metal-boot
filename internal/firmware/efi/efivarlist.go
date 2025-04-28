@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"log"
+	"strings"
 )
 
 // EfiVarList is a map of variable names to EfiVar objects
@@ -226,4 +227,34 @@ func (l EfiVarList) DeleteBootEntry(index uint16) error {
 	log.Printf("delete variable %s", name)
 	l.Delete(name)
 	return nil
+}
+
+// FindFirst returns the first variable that matches the criteria
+func (l EfiVarList) FindFirst(predicate func(name string, efiVar *EfiVar) bool) (*EfiVar, string) {
+	for name, v := range l {
+		if predicate(name, v) {
+			return v, name
+		}
+	}
+	return nil, ""
+}
+
+// Variables returns the variables in the list
+func (l EfiVarList) Variables() []*EfiVar {
+	vars := make([]*EfiVar, 0, len(l))
+	for _, v := range l {
+		vars = append(vars, v)
+	}
+	return vars
+}
+
+// FindByPrefix returns all variables that have names starting with the given prefix
+func (l EfiVarList) FindByPrefix(prefix string) []*EfiVar {
+	vars := make([]*EfiVar, 0)
+	for k, v := range l {
+		if strings.HasPrefix(k, prefix) {
+			vars = append(vars, v)
+		}
+	}
+	return vars
 }

@@ -22,7 +22,7 @@ func TestGUIDParsing(t *testing.T) {
 		},
 		{
 			name:      "EFI Global Variable GUID",
-			guidStr:   efi.EfiGlobalVariableGUID,
+			guidStr:   efi.EfiGlobalVariable,
 			expectErr: false,
 			expected:  [16]byte{0x61, 0xdf, 0xe4, 0x8b, 0xd4, 0x11, 0x11, 0x42, 0x9d, 0xcd, 0x00, 0xd0, 0x80, 0x84, 0x2c, 0xc4},
 		},
@@ -56,13 +56,13 @@ func TestGUIDParsing(t *testing.T) {
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			guidBytes, err := efi.GUIDStringToBytes(tc.guidStr)
-			
+
 			if tc.expectErr {
 				assert.Error(t, err)
 			} else {
 				assert.NoError(t, err)
 				assert.Equal(t, tc.expected, guidBytes)
-				
+
 				// Test round trip
 				guidStrBack, err := efi.GUIDBytesToString(guidBytes)
 				assert.NoError(t, err)
@@ -89,14 +89,14 @@ func TestGUIDBytesToString(t *testing.T) {
 			name:      "EFI Global Variable GUID Bytes",
 			guidBytes: [16]byte{0x61, 0xdf, 0xe4, 0x8b, 0xd4, 0x11, 0x11, 0x42, 0x9d, 0xcd, 0x00, 0xd0, 0x80, 0x84, 0x2c, 0xc4},
 			expectErr: false,
-			expected:  efi.EfiGlobalVariableGUID,
+			expected:  efi.EfiGlobalVariable,
 		},
 	}
 
 	for _, tc := range testCases {
 		t.Run(tc.name, func(t *testing.T) {
 			guidStr, err := efi.GUIDBytesToString(tc.guidBytes)
-			
+
 			if tc.expectErr {
 				assert.Error(t, err)
 			} else {
@@ -108,20 +108,20 @@ func TestGUIDBytesToString(t *testing.T) {
 }
 
 func TestCompareGUID(t *testing.T) {
-	guid1 := efi.EfiGlobalVariableGUID
+	guid1 := efi.EfiGlobalVariable
 	guid2 := "8be4df61-11d4-4211-9dcd-00d0802cc412" // Different ordering
 	guid3 := "8be4df61-11d4-4211-9dcd-00d0802cc411" // Off by one digit
-	
+
 	// Convert to bytes
 	guid1Bytes, err := efi.GUIDStringToBytes(guid1)
 	assert.NoError(t, err)
-	
+
 	guid2Bytes, err := efi.GUIDStringToBytes(guid2)
 	assert.NoError(t, err)
-	
+
 	guid3Bytes, err := efi.GUIDStringToBytes(guid3)
 	assert.NoError(t, err)
-	
+
 	// Compare
 	assert.True(t, efi.CompareGUID(guid1Bytes, guid1Bytes))
 	assert.False(t, efi.CompareGUID(guid1Bytes, guid2Bytes))
@@ -131,10 +131,10 @@ func TestCompareGUID(t *testing.T) {
 
 func TestIsKnownGUID(t *testing.T) {
 	// Test known GUIDs
-	assert.True(t, efi.IsKnownGUID(efi.EfiGlobalVariableGUID))
+	assert.True(t, efi.IsKnownGUID(efi.EfiGlobalVariable))
 	assert.True(t, efi.IsKnownGUID(efi.EfiImageSecurityDatabaseGUID))
 	assert.True(t, efi.IsKnownGUID(efi.EfiSecureBootEnableDisableGUID))
-	
+
 	// Test unknown GUID
 	assert.False(t, efi.IsKnownGUID("12345678-1234-5678-1234-567812345678"))
 }

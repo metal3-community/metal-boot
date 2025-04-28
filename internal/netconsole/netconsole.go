@@ -34,7 +34,8 @@ func ListenAndServe(network, addr string, handle func(addr net.Addr, l Log)) *Se
 	var serveWG sync.WaitGroup
 	serveWG.Add(1)
 
-	ctx, _ := context.WithCancel(context.Background())
+	ctx, cancel := context.WithCancel(context.Background())
+	defer cancel() // Ensure cancel is called to prevent context leak
 
 	go func() {
 		defer serveWG.Done()

@@ -16,8 +16,9 @@ import (
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
-	"github.com/bmcpi/pibmc/internal/firmware"
 	"github.com/bmcpi/pibmc/internal/firmware/edk2"
+	"github.com/bmcpi/pibmc/internal/firmware/manager"
+	"github.com/bmcpi/pibmc/internal/firmware/types"
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
@@ -64,7 +65,7 @@ type RedfishSystem struct {
 	DeviceMac        string `yaml:"device_mac"`
 	PoeMode          string `yaml:"poe_mode"`
 	EfiVariableStore *varstore.Edk2VarStore
-	FirmwareManager  firmware.FirmwareManager
+	FirmwareManager  manager.FirmwareManager
 }
 
 func (r *RedfishSystem) GetPowerState() *PowerState {
@@ -109,7 +110,7 @@ type RedfishServer struct {
 
 func (f *RedfishServer) GetEdk2FirmwareManager(
 	macAddress net.HardwareAddr,
-) (firmware.FirmwareManager, error) {
+) (manager.FirmwareManager, error) {
 	if f.firmwarePath == "" {
 		f.firmwarePath = filepath.Join(f.Config.Tftp.RootDirectory, edk2.FirmwareFileName)
 	}
@@ -120,7 +121,7 @@ func (f *RedfishServer) GetEdk2FirmwareManager(
 		edk2.FirmwareFileName,
 	)
 
-	firmwareMgr, err := firmware.NewEDK2Manager(firmwarePath, f.Log)
+	firmwareMgr, err := manager.NewEDK2Manager(firmwarePath, f.Log)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create firmware manager: %w", err)
 	}
@@ -394,7 +395,7 @@ func (s *RedfishServer) GetSoftwareInventory(
 	}
 
 	// Create firmware manager for the system
-	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+	firmwareMgr, err := manager.NewEDK2Manager(s.firmwarePath, s.Log)
 	if err != nil {
 		s.Log.Error(err, "failed to create firmware manager")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -569,7 +570,7 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 // 	}
 
 // 	// Create firmware manager for the system
-// 	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+// 	firmwareMgr, err := manager.NewEDK2Manager(s.firmwarePath, s.Log)
 // 	if err != nil {
 // 		s.Log.Error(err, "failed to create firmware manager")
 // 		w.WriteHeader(http.StatusInternalServerError)
@@ -651,7 +652,7 @@ func (s *RedfishServer) ResetBIOS(w http.ResponseWriter, r *http.Request, system
 	}
 
 	// Create firmware manager for the system
-	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+	firmwareMgr, err := manager.NewEDK2Manager(s.firmwarePath, s.Log)
 	if err != nil {
 		s.Log.Error(err, "failed to create firmware manager")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -719,7 +720,7 @@ func (s *RedfishServer) UpdateBIOS(w http.ResponseWriter, r *http.Request, syste
 	}
 
 	// Create firmware manager for the system
-	firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+	firmwareMgr, err := manager.NewEDK2Manager(s.firmwarePath, s.Log)
 	if err != nil {
 		s.Log.Error(err, "failed to create firmware manager")
 		w.WriteHeader(http.StatusInternalServerError)
@@ -731,7 +732,7 @@ func (s *RedfishServer) UpdateBIOS(w http.ResponseWriter, r *http.Request, syste
 	if attrs := request.Attributes; attrs != nil {
 		// Update network settings if provided
 		if netSettings, ok := attrs["NetworkSettings"].(map[string]any); ok {
-			ns := firmware.NetworkSettings{}
+			ns := types.NetworkSettings{}
 
 			if mac, ok := netSettings["MacAddress"].(string); ok {
 				ns.MacAddress = mac
@@ -1262,7 +1263,7 @@ func (s *RedfishServer) UpdateServiceSimpleUpdate(w http.ResponseWriter, r *http
 		}
 
 		// Create firmware manager
-		firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+		firmwareMgr, err := manager.NewEDK2Manager(s.firmwarePath, s.Log)
 		if err != nil {
 			s.Log.Error(err, "failed to create firmware manager")
 			w.WriteHeader(http.StatusInternalServerError)

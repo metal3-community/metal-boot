@@ -53,7 +53,10 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 
 // GetBootOrder retrieves the current boot order.
 func (m *EDK2Manager) GetBootOrder() ([]string, error) {
-	bootOrderVar := m.varList.FindFirst("BootOrder")
+	bootOrderVar, _ := m.varList.FindFirst(func(name string, efiVar *efi.EfiVar) bool {
+		return name == "BootOrder"
+	})
+
 	if bootOrderVar == nil {
 		return nil, fmt.Errorf("BootOrder variable not found")
 	}
@@ -92,16 +95,20 @@ func (m *EDK2Manager) SetBootOrder(bootOrder []string) error {
 		binary.LittleEndian.PutUint16(data[i*2:], uint16(val))
 	}
 
-	bootOrderVar := m.varList.FindFirst("BootOrder")
-	if bootOrderVar == nil {
-		// Create new BootOrder variable if it doesn't exist
+	// Create new BootOrder variable if it doesn't exist
+	// Create new BootOrder variable if it doesn't exist
+	bootOrderVar, ok := m.varList["BootOrder"]
+	if !ok || bootOrderVar == nil {
+		// Create a new UCS16String for "BootOrder"
+		bootOrderName := efi.ToUCS16("BootOrder")
+
 		bootOrderVar = &efi.EfiVar{
-			Name:       "BootOrder",
-			Guid:       efi.EfiGlobalVariableGuid,
-			Attributes: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
-			Data:       data,
+			Name: bootOrderName,
+			Guid: efi.ParseGuid(efi.EfiGlobalVariable),
+			Attr: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
+			Data: data,
 		}
-		m.varList = append(m.varList, bootOrderVar)
+		m.varList["BootOrder"] = bootOrderVar
 	} else {
 		bootOrderVar.Data = data
 	}
@@ -260,7 +267,7 @@ func (m *EDK2Manager) AddBootEntry(entry types.BootEntry) error {
 	// Create the EFI variable
 	efiVar := &efi.EfiVar{
 		Name:       bootName,
-		Guid:       efi.EfiGlobalVariableGuid,
+		Guid:       efi.EfiGlobalVariable,
 		Attributes: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
 		Data:       data,
 	}
@@ -500,7 +507,7 @@ func (m *EDK2Manager) SetBootNext(index uint16) error {
 		// Create new BootNext variable if it doesn't exist
 		bootNextVar = &efi.EfiVar{
 			Name:       "BootNext",
-			Guid:       efi.EfiGlobalVariableGuid,
+			Guid:       efi.EfiGlobalVariable,
 			Attributes: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
 			Data:       data,
 		}
@@ -746,12 +753,12 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	}
 
 	// Standard variable name for MAC address
-	if err := m.setOrCreateVariable("MacAddress", efi.EfiGlobalVariableGuid, mac); err != nil {
+	if err := m.setOrCreateVariable("MacAddress", efi.EfiGlobalVariable, mac); err != nil {
 		return fmt.Errorf("failed to set MAC address: %w", err)
 	}
 
 	// Also set the permanent MAC address variable which some firmware may use
-	if err := m.setOrCreateVariable("PermanentMacAddress", efi.EfiGlobalVariableGuid, mac); err != nil {
+	if err := m.setOrCreateVariable("PermanentMacAddress", efi.EfiGlobalVariable, mac); err != nil {
 		return fmt.Errorf("failed to set permanent MAC address: %w", err)
 	}
 
@@ -958,7 +965,7 @@ func (m *EDK2Manager) SetFirmwareTimeoutSeconds(seconds int) error {
 	data := make([]byte, 8)
 	binary.LittleEndian.PutUint64(data, ticks)
 
-	return m.setOrCreateVariable("Timeout", efi.EfiGlobalVariableGuid, data)
+	return m.setOrCreateVariable("Timeout", efi.EfiGlobalVariable, data)
 }
 
 // SetConsoleConfig sets the console device and baud rate.
@@ -974,7 +981,7 @@ func (m *EDK2Manager) SetConsoleConfig(consoleName string, baudRate int) error {
 	// Convert console name to UCS-16
 	consoleData := efi.StringToUcs16(consoleName)
 
-	if err := m.setOrCreateVariable("ConsoleName", efi.EfiGlobalVariableGuid, consoleData); err != nil {
+	if err := m.setOrCreateVariable("ConsoleName", efi.EfiGlobalVariable, consoleData); err != nil {
 		return fmt.Errorf("failed to set console name: %w", err)
 	}
 
@@ -982,7 +989,7 @@ func (m *EDK2Manager) SetConsoleConfig(consoleName string, baudRate int) error {
 	baudData := make([]byte, 4)
 	binary.LittleEndian.PutUint32(baudData, uint32(baudRate))
 
-	if err := m.setOrCreateVariable("ConsoleBaudRate", efi.EfiGlobalVariableGuid, baudData); err != nil {
+	if err := m.setOrCreateVariable("ConsoleBaudRate", efi.EfiGlobalVariable, baudData); err != nil {
 		return fmt.Errorf("failed to set console baud rate: %w", err)
 	}
 

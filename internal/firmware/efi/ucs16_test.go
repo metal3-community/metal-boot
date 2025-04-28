@@ -85,14 +85,14 @@ func TestUCS16StringWithLength(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			// Get the UCS-16 bytes
 			ucs16Bytes := efi.UTF8ToUCS16(tc.utf8Str)
-			
+
 			// Check the length
 			assert.Equal(t, tc.expectedSize, len(ucs16Bytes))
-			
+
 			// Ensure the string is null terminated
 			assert.Equal(t, byte(0), ucs16Bytes[len(ucs16Bytes)-2])
 			assert.Equal(t, byte(0), ucs16Bytes[len(ucs16Bytes)-1])
-			
+
 			// Ensure round trip conversion works
 			utf8Back := efi.UCS16ToUTF8(ucs16Bytes)
 			assert.Equal(t, tc.utf8Str, utf8Back)
@@ -104,11 +104,11 @@ func TestUCS16StringWithNullTermination(t *testing.T) {
 	// Test with embedded nulls
 	utf8WithNull := "Hello\x00World"
 	ucs16WithNull := efi.UTF8ToUCS16(utf8WithNull)
-	
+
 	// The conversion should handle embedded nulls correctly
 	// The string should be terminated at the first null in UTF-8
 	assert.Equal(t, "Hello", efi.UCS16ToUTF8(ucs16WithNull))
-	
+
 	// Test with manually constructed UCS-16 with embedded nulls
 	manualUcs16 := []byte{
 		0x48, 0x00, // H
@@ -123,7 +123,7 @@ func TestUCS16StringWithNullTermination(t *testing.T) {
 		0x6C, 0x00, // l (should be ignored)
 		0x64, 0x00, // d (should be ignored)
 	}
-	
+
 	assert.Equal(t, "Hello", efi.UCS16ToUTF8(manualUcs16))
 }
 
@@ -133,19 +133,19 @@ func TestUCS16StringEdgeCases(t *testing.T) {
 	for i := range longString {
 		longString = longString[:i] + "A" + longString[i+1:]
 	}
-	
+
 	ucs16Long := efi.UTF8ToUCS16(longString)
 	assert.Equal(t, 2002, len(ucs16Long)) // 1000 chars * 2 bytes + 2 bytes null terminator
 	assert.Equal(t, longString, efi.UCS16ToUTF8(ucs16Long))
-	
+
 	// Test with odd length UCS-16 (invalid, but should be handled gracefully)
 	oddUcs16 := []byte{0x48, 0x00, 0x65, 0x00, 0x6C, 0x00, 0x6C, 0x00, 0x6F, 0x00, 0x00} // Missing last byte of null terminator
-	assert.Equal(t, "Hello", efi.UCS16ToUTF8(oddUcs16)) // Should handle it gracefully
-	
+	assert.Equal(t, "Hello", efi.UCS16ToUTF8(oddUcs16))                                  // Should handle it gracefully
+
 	// Test with nil or empty byte array
 	assert.Equal(t, "", efi.UCS16ToUTF8(nil))
 	assert.Equal(t, "", efi.UCS16ToUTF8([]byte{}))
-	
+
 	// Test conversion of empty string
 	assert.Equal(t, []byte{0x00, 0x00}, efi.UTF8ToUCS16(""))
 }

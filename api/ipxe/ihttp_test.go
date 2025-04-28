@@ -93,7 +93,7 @@ func TestListenAndServeHTTP(t *testing.T) {
 			tt.args.h.Shutdown(tt.args.ctx)
 			err := ListenAndServe(tt.args.ctx, tt.args.addr, tt.args.h)
 			if diff := cmp.Diff(err.Error(), tt.wantErr.Error()); diff != "" {
-				t.Fatalf(diff)
+				t.Fatal(diff)
 			}
 		})
 	}
@@ -205,7 +205,7 @@ func TestHandle(t *testing.T) {
 
 			defer resp.Body.Close()
 			if diff := cmp.Diff(resp.StatusCode, tt.want.StatusCode); diff != "" {
-				t.Fatalf(diff)
+				t.Fatal(diff)
 			}
 			if tt.want.Body != nil {
 				got, err := ioutil.ReadAll(resp.Body)
@@ -218,7 +218,7 @@ func TestHandle(t *testing.T) {
 				}
 
 				if diff := cmp.Diff(got, want); diff != "" {
-					t.Fatalf(diff)
+					t.Fatal(diff)
 				}
 			}
 		})
@@ -277,7 +277,7 @@ func TestExtractTraceparentFromFilename(t *testing.T) {
 			ctx, outfile, err := extractTraceparentFromFilename(ctx, tc.fileIn)
 			if !errors.Is(err, tc.err) {
 				if diff := cmp.Diff(fmt.Sprint(err), fmt.Sprint(tc.err)); diff != "" {
-					t.Errorf(diff)
+					t.Error(diff)
 					t.Errorf(
 						"filename %q should have resulted in error %q but got %q",
 						tc.fileIn,

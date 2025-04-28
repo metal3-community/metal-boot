@@ -93,6 +93,13 @@ func (entry *BootEntry) Parse(data []byte) error {
 	return nil
 }
 
+// ParseBootEntry parses a boot entry from binary data
+func ParseBootEntry(data []byte) (*BootEntry, error) {
+	entry := &BootEntry{}
+	err := entry.Parse(data)
+	return entry, err
+}
+
 // Bytes returns the binary representation of the BootEntry
 func (entry *BootEntry) Bytes() []byte {
 	var buf bytes.Buffer
@@ -118,6 +125,11 @@ func (entry *BootEntry) Bytes() []byte {
 	return buf.Bytes()
 }
 
+// ToBytes is an alias for Bytes to maintain compatibility with tests
+func (entry *BootEntry) ToBytes() ([]byte, error) {
+	return entry.Bytes(), nil
+}
+
 // String returns a string representation of the BootEntry
 func (entry *BootEntry) String() string {
 	result := fmt.Sprintf(
@@ -129,6 +141,11 @@ func (entry *BootEntry) String() string {
 		result += fmt.Sprintf(" optdata=%s", hex.EncodeToString(entry.OptData))
 	}
 	return result
+}
+
+// GetDevicePathString is an alias for DevicePath.String() to maintain compatibility with tests
+func (entry *BootEntry) GetDevicePathString() (string, error) {
+	return entry.DevicePath.String(), nil
 }
 
 // GetActiveStatus returns whether the boot entry is active
@@ -159,15 +176,15 @@ func (entry *BootEntry) SetHiddenStatus(hidden bool) {
 	}
 }
 
-// GetCategory returns the category of the boot entry
+// GetCategory returns the category bits from the attributes
 func (entry *BootEntry) GetCategory() uint32 {
-	return entry.Attr & LOAD_OPTION_CATEGORY
+	return entry.Attr & LOAD_OPTION_CATEGORY_MASK
 }
 
-// SetCategory sets the category of the boot entry
+// SetCategory sets the category bits in the attributes
 func (entry *BootEntry) SetCategory(category uint32) {
-	// Clear existing category bits
-	entry.Attr &= ^uint32(LOAD_OPTION_CATEGORY)
-	// Set new category bits
-	entry.Attr |= (category & LOAD_OPTION_CATEGORY)
+	// Clear category bits first
+	entry.Attr &= ^uint32(LOAD_OPTION_CATEGORY_MASK)
+	// Set new category
+	entry.Attr |= category
 }
