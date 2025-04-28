@@ -43,7 +43,6 @@ func ListenAndServe(network, addr string, handle func(addr net.Addr, l Log)) *Se
 		if err != nil {
 			panic(fmt.Sprintf("failed to serve: %v", err))
 		}
-
 	}()
 
 	if handle == nil {

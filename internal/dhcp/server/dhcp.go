@@ -83,7 +83,15 @@ func (s *DHCP) Serve(ctx context.Context) error {
 		}
 
 		for _, handler := range s.Handlers {
-			go handler.Handle(ctx, nConn, data.Packet{Peer: upeer, Pkt: m, Md: &data.Metadata{IfName: ifName, IfIndex: cm.IfIndex}})
+			go handler.Handle(
+				ctx,
+				nConn,
+				data.Packet{
+					Peer: upeer,
+					Pkt:  m,
+					Md:   &data.Metadata{IfName: ifName, IfIndex: cm.IfIndex},
+				},
+			)
 		}
 	}
 }

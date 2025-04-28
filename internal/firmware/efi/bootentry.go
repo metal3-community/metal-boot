@@ -25,7 +25,13 @@ func (b *BootEntry) GetMacAddr() string {
 }
 
 // NewBootEntry creates a new BootEntry
-func NewBootEntry(data []byte, attr uint32, title *UCS16String, devicePath *DevicePath, optData *[]byte) *BootEntry {
+func NewBootEntry(
+	data []byte,
+	attr uint32,
+	title *UCS16String,
+	devicePath *DevicePath,
+	optData *[]byte,
+) *BootEntry {
 	entry := &BootEntry{
 		Attr:       0,
 		Title:      UCS16String{},
@@ -114,7 +120,11 @@ func (entry *BootEntry) Bytes() []byte {
 
 // String returns a string representation of the BootEntry
 func (entry *BootEntry) String() string {
-	result := fmt.Sprintf("title=\"%s\" devpath=%s", entry.Title.String(), entry.DevicePath.String())
+	result := fmt.Sprintf(
+		"title=\"%s\" devpath=%s",
+		entry.Title.String(),
+		entry.DevicePath.String(),
+	)
 	if entry.OptData != nil {
 		result += fmt.Sprintf(" optdata=%s", hex.EncodeToString(entry.OptData))
 	}

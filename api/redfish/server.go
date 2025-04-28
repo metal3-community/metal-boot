@@ -107,13 +107,18 @@ type RedfishServer struct {
 	firmwarePath string
 }
 
-func (f *RedfishServer) GetEdk2FirmwareManager(macAddress net.HardwareAddr) (firmware.FirmwareManager, error) {
-
+func (f *RedfishServer) GetEdk2FirmwareManager(
+	macAddress net.HardwareAddr,
+) (firmware.FirmwareManager, error) {
 	if f.firmwarePath == "" {
 		f.firmwarePath = filepath.Join(f.Config.Tftp.RootDirectory, edk2.FirmwareFileName)
 	}
 
-	firmwarePath := filepath.Join(f.Config.Tftp.RootDirectory, macAddress.String(), edk2.FirmwareFileName)
+	firmwarePath := filepath.Join(
+		f.Config.Tftp.RootDirectory,
+		macAddress.String(),
+		edk2.FirmwareFileName,
+	)
 
 	firmwareMgr, err := firmware.NewEDK2Manager(firmwarePath, f.Log)
 	if err != nil {
@@ -146,7 +151,6 @@ func NewRedfishServer(cfg *config.Config, backend handler.BackendStore) *Redfish
 }
 
 func (s *RedfishServer) refreshSystems(ctx context.Context) (err error) {
-
 	s.Log.Info("refreshing systems", "backend", s.backend)
 
 	s.backend.Sync(ctx)
@@ -155,8 +159,12 @@ func (s *RedfishServer) refreshSystems(ctx context.Context) (err error) {
 }
 
 // CreateVirtualDisk implements ServerInterface.
-func (s *RedfishServer) CreateVirtualDisk(w http.ResponseWriter, r *http.Request, systemId string, storageControllerId string) {
-
+func (s *RedfishServer) CreateVirtualDisk(
+	w http.ResponseWriter,
+	r *http.Request,
+	systemId string,
+	storageControllerId string,
+) {
 	if req, err := decodeBody[CreateVirtualDiskRequestBody](r); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error decoding request")
@@ -169,12 +177,22 @@ func (s *RedfishServer) CreateVirtualDisk(w http.ResponseWriter, r *http.Request
 }
 
 // DeleteVirtualdisk implements ServerInterface.
-func (s *RedfishServer) DeleteVirtualdisk(w http.ResponseWriter, r *http.Request, systemId string, storageId string) {
+func (s *RedfishServer) DeleteVirtualdisk(
+	w http.ResponseWriter,
+	r *http.Request,
+	systemId string,
+	storageId string,
+) {
 	panic("unimplemented")
 }
 
 // EjectVirtualMedia implements ServerInterface.
-func (s *RedfishServer) EjectVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string, virtualMediaId string) {
+func (s *RedfishServer) EjectVirtualMedia(
+	w http.ResponseWriter,
+	r *http.Request,
+	managerId string,
+	virtualMediaId string,
+) {
 	panic("unimplemented")
 }
 
@@ -204,7 +222,9 @@ func (s *RedfishServer) FirmwareInventory(w http.ResponseWriter, r *http.Request
 		Name:      util.Ptr("Firmware Inventory Collection"),
 		Members: &[]IdRef{
 			{
-				OdataId: util.Ptr(fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", firmwareName)),
+				OdataId: util.Ptr(
+					fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", firmwareName),
+				),
 			},
 		},
 		MembersOdataCount: util.Ptr(1),
@@ -314,13 +334,17 @@ func (s *RedfishServer) GetManager(w http.ResponseWriter, r *http.Request, manag
 }
 
 // GetManagerVirtualMedia implements ServerInterface.
-func (s *RedfishServer) GetManagerVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string, virtualMediaId string) {
+func (s *RedfishServer) GetManagerVirtualMedia(
+	w http.ResponseWriter,
+	r *http.Request,
+	managerId string,
+	virtualMediaId string,
+) {
 	panic("unimplemented")
 }
 
 // GetRoot implements ServerInterface.
 func (s *RedfishServer) GetRoot(w http.ResponseWriter, r *http.Request) {
-
 	root := Root{
 		OdataId:        util.Ptr("/redfish/v1"),
 		OdataType:      util.Ptr("#ServiceRoot.v1_11_0.ServiceRoot"),
@@ -348,7 +372,11 @@ func (s *RedfishServer) GetRoot(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetSoftwareInventory implements ServerInterface.
-func (s *RedfishServer) GetSoftwareInventory(w http.ResponseWriter, r *http.Request, softwareId string) {
+func (s *RedfishServer) GetSoftwareInventory(
+	w http.ResponseWriter,
+	r *http.Request,
+	softwareId string,
+) {
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetSoftwareInventory")
@@ -408,7 +436,9 @@ func (s *RedfishServer) GetSoftwareInventory(w http.ResponseWriter, r *http.Requ
 	}
 
 	inventory := SoftwareInventory{
-		OdataId:     util.Ptr(fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", softwareId)),
+		OdataId: util.Ptr(
+			fmt.Sprintf("/redfish/v1/UpdateService/FirmwareInventory/%s", softwareId),
+		),
 		OdataType:   util.Ptr("#SoftwareInventory.v1_5_0.SoftwareInventory"),
 		Id:          &softwareId,
 		Name:        util.Ptr("UEFI Firmware"),
@@ -427,7 +457,6 @@ func (s *RedfishServer) GetSoftwareInventory(w http.ResponseWriter, r *http.Requ
 
 // GetSystem implements ServerInterface.
 func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
-
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetSystem")
@@ -497,7 +526,9 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 					ResetTypeForceOff,
 					ResetTypePowerCycle,
 				},
-				Target: util.Ptr(fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", systemId)),
+				Target: util.Ptr(
+					fmt.Sprintf("/redfish/v1/Systems/%s/Actions/ComputerSystem.Reset", systemId),
+				),
 			},
 		},
 		OdataId:   util.Ptr(fmt.Sprintf("/redfish/v1/Systems/%s", systemId)),
@@ -699,7 +730,7 @@ func (s *RedfishServer) UpdateBIOS(w http.ResponseWriter, r *http.Request, syste
 	// Apply settings
 	if attrs := request.Attributes; attrs != nil {
 		// Update network settings if provided
-		if netSettings, ok := attrs["NetworkSettings"].(map[string]interface{}); ok {
+		if netSettings, ok := attrs["NetworkSettings"].(map[string]any); ok {
 			ns := firmware.NetworkSettings{}
 
 			if mac, ok := netSettings["MacAddress"].(string); ok {
@@ -789,18 +820,34 @@ func (s *RedfishServer) GetTaskList(w http.ResponseWriter, r *http.Request) {
 }
 
 // GetVolumes implements ServerInterface.
-func (s *RedfishServer) GetVolumes(w http.ResponseWriter, r *http.Request, systemId string, storageControllerId string) {
+func (s *RedfishServer) GetVolumes(
+	w http.ResponseWriter,
+	r *http.Request,
+	systemId string,
+	storageControllerId string,
+) {
 	panic("unimplemented")
 }
 
 // InsertVirtualMedia implements ServerInterface.
-func (s *RedfishServer) InsertVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string, virtualMediaId string) {
-
+func (s *RedfishServer) InsertVirtualMedia(
+	w http.ResponseWriter,
+	r *http.Request,
+	managerId string,
+	virtualMediaId string,
+) {
 	req := InsertMediaRequestBody{}
 
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
-		s.Log.Error(err, "error decoding request", "manager", managerId, "virtualMedia", virtualMediaId)
+		s.Log.Error(
+			err,
+			"error decoding request",
+			"manager",
+			managerId,
+			"virtualMedia",
+			virtualMediaId,
+		)
 		return
 	} else {
 		w.WriteHeader(http.StatusNoContent)
@@ -808,7 +855,11 @@ func (s *RedfishServer) InsertVirtualMedia(w http.ResponseWriter, r *http.Reques
 }
 
 // ListManagerVirtualMedia implements ServerInterface.
-func (s *RedfishServer) ListManagerVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string) {
+func (s *RedfishServer) ListManagerVirtualMedia(
+	w http.ResponseWriter,
+	r *http.Request,
+	managerId string,
+) {
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListManagerVirtualMedia")
@@ -822,8 +873,10 @@ func (s *RedfishServer) ListManagerVirtualMedia(w http.ResponseWriter, r *http.R
 	})
 
 	response := Collection{
-		Members:           &ids,
-		OdataContext:      util.Ptr("/redfish/v1/$metadata#VirtualMediaCollection.VirtualMediaCollection"),
+		Members: &ids,
+		OdataContext: util.Ptr(
+			"/redfish/v1/$metadata#VirtualMediaCollection.VirtualMediaCollection",
+		),
 		OdataType:         "#VirtualMediaCollection.VirtualMediaCollection",
 		Name:              util.Ptr("Virtual Media Collection"),
 		OdataId:           "/redfish/v1/Managers/1/VirtualMedia",
@@ -867,7 +920,6 @@ func (s *RedfishServer) ListManagers(w http.ResponseWriter, r *http.Request) {
 
 // ListSystems implements ServerInterface.
 func (s *RedfishServer) ListSystems(w http.ResponseWriter, r *http.Request) {
-
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListSystems")
@@ -892,8 +944,10 @@ func (s *RedfishServer) ListSystems(w http.ResponseWriter, r *http.Request) {
 	}
 
 	response := Collection{
-		Members:           &ids,
-		OdataContext:      util.Ptr("/redfish/v1/$metadata#ComputerSystemCollection.ComputerSystemCollection"),
+		Members: &ids,
+		OdataContext: util.Ptr(
+			"/redfish/v1/$metadata#ComputerSystemCollection.ComputerSystemCollection",
+		),
 		OdataType:         "#ComputerSystemCollection.ComputerSystemCollection",
 		Name:              util.Ptr("Computer System Collection"),
 		OdataId:           "/redfish/v1/Systems",
@@ -913,7 +967,6 @@ func (s *RedfishServer) ResetIdrac(w http.ResponseWriter, r *http.Request) {
 
 // ResetSystem implements ServerInterface.
 func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
-
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListManagerVirtualMedia")
@@ -1007,7 +1060,6 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 
 // SetSystem implements ServerInterface.
 func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
-
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.SetSystem")
@@ -1037,7 +1089,13 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 	}
 
 	if req.Boot.BootSourceOverrideTarget != nil {
-		s.Log.Info("setting boot source override", "system", systemId, "bootSourceOverrideTarget", *req.Boot.BootSourceOverrideTarget)
+		s.Log.Info(
+			"setting boot source override",
+			"system",
+			systemId,
+			"bootSourceOverrideTarget",
+			*req.Boot.BootSourceOverrideTarget,
+		)
 
 		var nextBootIndex uint16
 
@@ -1051,7 +1109,10 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		case None:
 			s.Log.Info("clearing boot source override", "system", systemId)
 		default:
-			err := fmt.Errorf("invalid boot source override target: %s", *req.Boot.BootSourceOverrideTarget)
+			err := fmt.Errorf(
+				"invalid boot source override target: %s",
+				*req.Boot.BootSourceOverrideTarget,
+			)
 			s.Log.Error(err, "invalid boot source override target", "system", systemId)
 			w.WriteHeader(http.StatusBadRequest)
 			json.NewEncoder(w).Encode(redfishError(err))
@@ -1259,7 +1320,7 @@ func (s *RedfishServer) processFirmwareUpdate(ctx context.Context, imageURI stri
 
 // Additional response types needed for firmware management
 type BiosUpdateRequest struct {
-	Attributes map[string]interface{} `json:"Attributes,omitempty"`
+	Attributes map[string]any `json:"Attributes,omitempty"`
 }
 
 type SimpleUpdateRequest struct {

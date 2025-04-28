@@ -19,8 +19,14 @@ func TestCustomScript(t *testing.T) {
 		want       string
 		shouldErr  bool
 	}{
-		"got script":         {want: "#!ipxe\n\necho Loading custom Tinkerbell iPXE script...\n#!ipxe\nautoboot\n", ipxeScript: "#!ipxe\nautoboot"},
-		"got url":            {want: "#!ipxe\n\necho Loading custom Tinkerbell iPXE script...\nchain --autofree https://boot.netboot.xyz\n", ipxeURL: "https://boot.netboot.xyz"},
+		"got script": {
+			want:       "#!ipxe\n\necho Loading custom Tinkerbell iPXE script...\n#!ipxe\nautoboot\n",
+			ipxeScript: "#!ipxe\nautoboot",
+		},
+		"got url": {
+			want:    "#!ipxe\n\necho Loading custom Tinkerbell iPXE script...\nchain --autofree https://boot.netboot.xyz\n",
+			ipxeURL: "https://boot.netboot.xyz",
+		},
 		"invalid URL prefix": {want: "", ipxeURL: "invalid", shouldErr: true},
 		"invalid URL":        {want: "", ipxeURL: "http://invalid.:123.com", shouldErr: true},
 		"no script or url":   {want: "", shouldErr: true},
@@ -33,7 +39,11 @@ func TestCustomScript(t *testing.T) {
 				t.Fatal(err)
 			}
 
-			d := data{MACAddress: net.HardwareAddr{0x00, 0x01, 0x02, 0x03, 0x04, 0x05}, IPXEScript: tt.ipxeScript, IPXEScriptURL: u}
+			d := data{
+				MACAddress:    net.HardwareAddr{0x00, 0x01, 0x02, 0x03, 0x04, 0x05},
+				IPXEScript:    tt.ipxeScript,
+				IPXEScriptURL: u,
+			}
 			got, err := h.customScript(d)
 			if err != nil && !tt.shouldErr {
 				t.Fatal(err)
@@ -100,7 +110,12 @@ exit
 				IPXEScriptRetries:    10,
 				IPXEScriptRetryDelay: 3,
 			}
-			d := data{MACAddress: net.HardwareAddr{0x00, 0x01, 0x02, 0x03, 0x04, 0x05}, VLANID: "1234", Facility: "onprem", Arch: "x86_64"}
+			d := data{
+				MACAddress: net.HardwareAddr{0x00, 0x01, 0x02, 0x03, 0x04, 0x05},
+				VLANID:     "1234",
+				Facility:   "onprem",
+				Arch:       "x86_64",
+			}
 			sp := trace.SpanFromContext(context.Background())
 			got, err := h.defaultScript(sp, d)
 			if err != nil {

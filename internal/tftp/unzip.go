@@ -12,7 +12,6 @@ import (
 )
 
 func (root *Root) unzip(specUrl string) error {
-
 	if root.Exists("RPI_EFI.fd") {
 		return nil
 	}

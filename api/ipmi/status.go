@@ -10,11 +10,9 @@ import (
 )
 
 func Status(c *gin.Context) {
-
 	hostname := c.Param("host")
 	hostIP := os.Getenv(hostname)
 	data, err := c.GetRawData()
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

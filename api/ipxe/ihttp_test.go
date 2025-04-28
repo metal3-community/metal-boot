@@ -123,7 +123,10 @@ func TestHandle(t *testing.T) {
 		},
 		{
 			name: "success",
-			req:  req{method: "GET", url: "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01"},
+			req: req{
+				method: "GET",
+				url:    "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
+			},
 			want: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       ioutil.NopCloser(bytes.NewBuffer(binary.Files["snp.efi"])),
@@ -131,7 +134,10 @@ func TestHandle(t *testing.T) {
 		},
 		{
 			name: "success - head request",
-			req:  req{method: "HEAD", url: "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01"},
+			req: req{
+				method: "HEAD",
+				url:    "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
+			},
 			want: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       nil,
@@ -139,7 +145,10 @@ func TestHandle(t *testing.T) {
 		},
 		{
 			name: "fail with bad traceparent",
-			req:  req{method: "GET", url: "/30:23:03:73:a5:a7/snp.efi-00-00000000000000000000000000000000-d887dc3912240434-01"},
+			req: req{
+				method: "GET",
+				url:    "/30:23:03:73:a5:a7/snp.efi-00-00000000000000000000000000000000-d887dc3912240434-01",
+			},
 			want: &http.Response{
 				StatusCode: http.StatusNotFound,
 				Body:       nil,
@@ -154,7 +163,10 @@ func TestHandle(t *testing.T) {
 		},
 		{
 			name: "patch",
-			req:  req{method: "GET", url: "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01"},
+			req: req{
+				method: "GET",
+				url:    "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
+			},
 			want: &http.Response{
 				StatusCode: http.StatusOK,
 				Body:       ioutil.NopCloser(bytes.NewBuffer(patched)),
@@ -163,7 +175,10 @@ func TestHandle(t *testing.T) {
 		},
 		{
 			name: "bad patch",
-			req:  req{method: "GET", url: "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01"},
+			req: req{
+				method: "GET",
+				url:    "/30:23:03:73:a5:a7/snp.efi-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
+			},
 			want: &http.Response{
 				StatusCode: http.StatusInternalServerError,
 			},
@@ -232,12 +247,20 @@ func TestExtractTraceparentFromFilename(t *testing.T) {
 		"ignore corrupt TraceID": {
 			fileIn:  "undionly.ipxe-00-00000000000000000000000000000000-0000000000000000-01",
 			fileOut: "undionly.ipxe-00-00000000000000000000000000000000-0000000000000000-01",
-			err:     fmt.Errorf("parsing OpenTelemetry trace id %q failed: %w", "00000000000000000000000000000000", fmt.Errorf("trace-id can't be all zero")),
+			err: fmt.Errorf(
+				"parsing OpenTelemetry trace id %q failed: %w",
+				"00000000000000000000000000000000",
+				fmt.Errorf("trace-id can't be all zero"),
+			),
 		},
 		"ignore corrupt SpanID": {
 			fileIn:  "undionly.ipxe-00-11111111111111111111111111111111-0000000000000000-01",
 			fileOut: "undionly.ipxe-00-11111111111111111111111111111111-0000000000000000-01",
-			err:     fmt.Errorf("parsing OpenTelemetry span id %q failed: %w", "0000000000000000", fmt.Errorf("span-id can't be all zero")),
+			err: fmt.Errorf(
+				"parsing OpenTelemetry span id %q failed: %w",
+				"0000000000000000",
+				fmt.Errorf("span-id can't be all zero"),
+			),
 		},
 		"extract tp": {
 			fileIn:  "undionly.ipxe-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
@@ -255,18 +278,32 @@ func TestExtractTraceparentFromFilename(t *testing.T) {
 			if !errors.Is(err, tc.err) {
 				if diff := cmp.Diff(fmt.Sprint(err), fmt.Sprint(tc.err)); diff != "" {
 					t.Errorf(diff)
-					t.Errorf("filename %q should have resulted in error %q but got %q", tc.fileIn, tc.err, err)
+					t.Errorf(
+						"filename %q should have resulted in error %q but got %q",
+						tc.fileIn,
+						tc.err,
+						err,
+					)
 				}
 			}
 			if outfile != tc.fileOut {
-				t.Errorf("filename %q should have resulted in %q but got %q", tc.fileIn, tc.fileOut, outfile)
+				t.Errorf(
+					"filename %q should have resulted in %q but got %q",
+					tc.fileIn,
+					tc.fileOut,
+					outfile,
+				)
 			}
 
 			if tc.spanID != "" {
 				sc := trace.SpanContextFromContext(ctx)
 				got := sc.SpanID().String()
 				if tc.spanID != got {
-					t.Errorf("got incorrect span id from context, expected %q but got %q", tc.spanID, got)
+					t.Errorf(
+						"got incorrect span id from context, expected %q but got %q",
+						tc.spanID,
+						got,
+					)
 				}
 			}
 
@@ -274,7 +311,11 @@ func TestExtractTraceparentFromFilename(t *testing.T) {
 				sc := trace.SpanContextFromContext(ctx)
 				got := sc.TraceID().String()
 				if tc.traceID != got {
-					t.Errorf("got incorrect trace id from context, expected %q but got %q", tc.traceID, got)
+					t.Errorf(
+						"got incorrect trace id from context, expected %q but got %q",
+						tc.traceID,
+						got,
+					)
 				}
 			}
 		})

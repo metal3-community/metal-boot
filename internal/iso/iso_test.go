@@ -29,8 +29,14 @@ func TestReqPathInvalid(t *testing.T) {
 		statusCode int
 	}{
 		"invalid URL prefix": {isoURL: "invalid", statusCode: http.StatusNotFound},
-		"invalid URL":        {isoURL: "http://invalid.:123/hook.iso", statusCode: http.StatusBadRequest},
-		"no script or url":   {isoURL: "http://10.10.10.10:8080/aa:aa:aa:aa:aa:aa/invalid.iso", statusCode: http.StatusInternalServerError},
+		"invalid URL": {
+			isoURL:     "http://invalid.:123/hook.iso",
+			statusCode: http.StatusBadRequest,
+		},
+		"no script or url": {
+			isoURL:     "http://10.10.10.10:8080/aa:aa:aa:aa:aa:aa/invalid.iso",
+			statusCode: http.StatusInternalServerError,
+		},
 	}
 	for name, tt := range tests {
 		u, _ := url.Parse(tt.isoURL)
@@ -49,7 +55,11 @@ func TestReqPathInvalid(t *testing.T) {
 				t.Fatal(err)
 			}
 			if got.StatusCode != tt.statusCode {
-				t.Fatalf("got response status code: %d, want status code: %d", got.StatusCode, tt.statusCode)
+				t.Fatalf(
+					"got response status code: %d, want status code: %d",
+					got.StatusCode,
+					tt.statusCode,
+				)
 			}
 		})
 	}
@@ -177,7 +187,10 @@ menuentry 'LinuxKit ISO Image' {
 
 type mockBackend struct{}
 
-func (m *mockBackend) GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (m *mockBackend) GetByMac(
+	context.Context,
+	net.HardwareAddr,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	d := &data.DHCP{}
 	n := &data.Netboot{
 		Facility: "test",
@@ -185,7 +198,10 @@ func (m *mockBackend) GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *
 	return d, n, nil, nil
 }
 
-func (m *mockBackend) GetByIP(context.Context, net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (m *mockBackend) GetByIP(
+	context.Context,
+	net.IP,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	d := &data.DHCP{}
 	n := &data.Netboot{
 		Facility: "test",

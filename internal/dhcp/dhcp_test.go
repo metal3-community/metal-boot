@@ -34,8 +34,32 @@ func TestNewInfo(t *testing.T) {
 					dhcpv4.OptClientArch(iana.EFI_X86_64_HTTP),
 					dhcpv4.OptUserClass(Tinkerbell.String()),
 					dhcpv4.OptClassIdentifier(exampleHTTPClient),
-					dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
-					dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, []byte{0x00, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x05, 0x06, 0x07}),
+					dhcpv4.OptGeneric(
+						dhcpv4.OptionClientNetworkInterfaceIdentifier,
+						[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
+					),
+					dhcpv4.OptGeneric(
+						dhcpv4.OptionClientMachineIdentifier,
+						[]byte{
+							0x00,
+							0x02,
+							0x03,
+							0x04,
+							0x05,
+							0x06,
+							0x07,
+							0x01,
+							0x02,
+							0x03,
+							0x04,
+							0x05,
+							0x06,
+							0x07,
+							0x05,
+							0x06,
+							0x07,
+						},
+					),
 				),
 			},
 			want: Info{
@@ -55,8 +79,32 @@ func TestNewInfo(t *testing.T) {
 					dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 					dhcpv4.OptClientArch(iana.Arch(255)),
 					dhcpv4.OptClassIdentifier(examplePXEClient),
-					dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
-					dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, []byte{0x00, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x05, 0x06, 0x07}),
+					dhcpv4.OptGeneric(
+						dhcpv4.OptionClientNetworkInterfaceIdentifier,
+						[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
+					),
+					dhcpv4.OptGeneric(
+						dhcpv4.OptionClientMachineIdentifier,
+						[]byte{
+							0x00,
+							0x02,
+							0x03,
+							0x04,
+							0x05,
+							0x06,
+							0x07,
+							0x01,
+							0x02,
+							0x03,
+							0x04,
+							0x05,
+							0x06,
+							0x07,
+							0x05,
+							0x06,
+							0x07,
+						},
+					),
 				),
 			},
 			want: Info{
@@ -82,15 +130,21 @@ func TestArch(t *testing.T) {
 		want iana.Arch
 	}{
 		"found": {
-			pkt:  &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(dhcpv4.OptClientArch(iana.INTEL_X86PC))},
+			pkt: &dhcpv4.DHCPv4{
+				Options: dhcpv4.OptionsFromList(dhcpv4.OptClientArch(iana.INTEL_X86PC)),
+			},
 			want: iana.INTEL_X86PC,
 		},
 		"raspberry pi": {
-			pkt:  &dhcpv4.DHCPv4{ClientHWAddr: net.HardwareAddr{0xb8, 0x27, 0xeb, 0x00, 0x00, 0x00}},
+			pkt: &dhcpv4.DHCPv4{
+				ClientHWAddr: net.HardwareAddr{0xb8, 0x27, 0xeb, 0x00, 0x00, 0x00},
+			},
 			want: iana.Arch(41),
 		},
 		"unknown": {
-			pkt:  &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(dhcpv4.OptClientArch(iana.Arch(255)))},
+			pkt: &dhcpv4.DHCPv4{
+				Options: dhcpv4.OptionsFromList(dhcpv4.OptClientArch(iana.Arch(255))),
+			},
 			want: iana.Arch(255),
 		},
 		"unknown: opt 93 len 0": {
@@ -113,8 +167,18 @@ func TestIsNetbootClient(t *testing.T) {
 		input *dhcpv4.DHCPv4
 		want  error
 	}{
-		"fail invalid message type": {input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(dhcpv4.OptMessageType(dhcpv4.MessageTypeInform))}, want: errors.New("")},
-		"fail no opt60":             {input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover))}, want: errors.New("")},
+		"fail invalid message type": {
+			input: &dhcpv4.DHCPv4{
+				Options: dhcpv4.OptionsFromList(dhcpv4.OptMessageType(dhcpv4.MessageTypeInform)),
+			},
+			want: errors.New(""),
+		},
+		"fail no opt60": {
+			input: &dhcpv4.DHCPv4{
+				Options: dhcpv4.OptionsFromList(dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover)),
+			},
+			want: errors.New(""),
+		},
 		"fail bad opt60": {input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(
 			dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 			dhcpv4.OptClassIdentifier("BadClient"),
@@ -132,21 +196,51 @@ func TestIsNetbootClient(t *testing.T) {
 			dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 			dhcpv4.OptClassIdentifier("HTTPClient:Arch:xxxxx:UNDI:yyyzzz"),
 			dhcpv4.OptClientArch(iana.EFI_ARM64_HTTP),
-			dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
-			dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x00, 0x02, 0x03, 0x04, 0x05, 0x06, 0x00, 0x02, 0x03, 0x04, 0x05}),
+			dhcpv4.OptGeneric(
+				dhcpv4.OptionClientNetworkInterfaceIdentifier,
+				[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
+			),
+			dhcpv4.OptGeneric(
+				dhcpv4.OptionClientMachineIdentifier,
+				[]byte{
+					0x01,
+					0x02,
+					0x03,
+					0x04,
+					0x05,
+					0x06,
+					0x00,
+					0x02,
+					0x03,
+					0x04,
+					0x05,
+					0x06,
+					0x00,
+					0x02,
+					0x03,
+					0x04,
+					0x05,
+				},
+			),
 		)}, want: errors.New("")},
 		"fail invalid len(opt97)": {input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(
 			dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 			dhcpv4.OptClassIdentifier("HTTPClient:Arch:xxxxx:UNDI:yyyzzz"),
 			dhcpv4.OptClientArch(iana.EFI_ARM64_HTTP),
-			dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
+			dhcpv4.OptGeneric(
+				dhcpv4.OptionClientNetworkInterfaceIdentifier,
+				[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
+			),
 			dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, []byte{0x01, 0x02}),
 		)}, want: errors.New("")},
 		"success len(opt97) == 0": {input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(
 			dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 			dhcpv4.OptClassIdentifier("HTTPClient:Arch:xxxxx:UNDI:yyyzzz"),
 			dhcpv4.OptClientArch(iana.EFI_ARM64_HTTP),
-			dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06}),
+			dhcpv4.OptGeneric(
+				dhcpv4.OptionClientNetworkInterfaceIdentifier,
+				[]byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
+			),
 			dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, []byte{}),
 		)}, want: nil},
 	}
@@ -212,7 +306,12 @@ func TestBootfile(t *testing.T) {
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
-			got := tt.info.Bootfile(tt.args.customUC, tt.args.ipxeScript, tt.args.ipxeHTTPBinServer, tt.args.ipxeTFTPBinServer)
+			got := tt.info.Bootfile(
+				tt.args.customUC,
+				tt.args.ipxeScript,
+				tt.args.ipxeHTTPBinServer,
+				tt.args.ipxeTFTPBinServer,
+			)
 			if diff := cmp.Diff(tt.want, got); diff != "" {
 				t.Fatal(diff)
 			}

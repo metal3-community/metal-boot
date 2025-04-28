@@ -23,11 +23,24 @@ func TestEncode(t *testing.T) {
 		want        []attribute.KeyValue
 	}{
 		"no encoders": {pkt: &dhcpv4.DHCPv4{}, want: nil},
-		"all encoders": {allEncoders: true, pkt: &dhcpv4.DHCPv4{BootFileName: "ipxe.efi", Flags: 0}, want: []attribute.KeyValue{
-			{Key: attribute.Key("DHCP.test.Header.flags"), Value: attribute.StringValue("Unicast")},
-			{Key: attribute.Key("DHCP.test.Header.transactionID"), Value: attribute.StringValue("0x00000000")},
-			{Key: attribute.Key("DHCP.test.Header.file"), Value: attribute.StringValue("ipxe.efi")},
-		}},
+		"all encoders": {
+			allEncoders: true,
+			pkt:         &dhcpv4.DHCPv4{BootFileName: "ipxe.efi", Flags: 0},
+			want: []attribute.KeyValue{
+				{
+					Key:   attribute.Key("DHCP.test.Header.flags"),
+					Value: attribute.StringValue("Unicast"),
+				},
+				{
+					Key:   attribute.Key("DHCP.test.Header.transactionID"),
+					Value: attribute.StringValue("0x00000000"),
+				},
+				{
+					Key:   attribute.Key("DHCP.test.Header.file"),
+					Value: attribute.StringValue("ipxe.efi"),
+				},
+			},
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -49,7 +62,10 @@ func TestEncodeError(t *testing.T) {
 		input *notFoundError
 		want  string
 	}{
-		"success":           {input: &notFoundError{optName: "opt1"}, want: "\"opt1\" not found in DHCP packet"},
+		"success": {
+			input: &notFoundError{optName: "opt1"},
+			want:  "\"opt1\" not found in DHCP packet",
+		},
 		"success nil error": {input: &notFoundError{}, want: "\"\" not found in DHCP packet"},
 	}
 	for name, tt := range tests {
@@ -80,7 +96,11 @@ func TestSetOpt1(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt1(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt1() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt1() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -107,7 +127,11 @@ func TestSetOpt3(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt3(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt13() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt13() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -134,7 +158,11 @@ func TestSetOpt6(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt6(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt6() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt6() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -161,7 +189,11 @@ func TestSetOpt12(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt12(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt12() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt12() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -188,7 +220,11 @@ func TestSetOpt15(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt15(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt15() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt15() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -215,7 +251,11 @@ func TestSetOpt28(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt28(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt28() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt28() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -242,7 +282,11 @@ func TestSetOpt42(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt42(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt42() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt42() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -269,7 +313,11 @@ func TestSetOpt51(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt51(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt51() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt51() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -296,7 +344,11 @@ func TestSetOpt53(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt53(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt53() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt53() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -323,7 +375,11 @@ func TestSetOpt54(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt54(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt54() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt54() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -350,7 +406,11 @@ func TestSetOpt60(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt60(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt60() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt60() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -369,7 +429,10 @@ func TestSetOpt93(t *testing.T) {
 			input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(
 				dhcpv4.OptClientArch(iana.INTEL_X86PC),
 			)},
-			want: attribute.StringSlice("DHCP.testing.Opt93.ClientIdentifier", []string{"Intel x86PC"}),
+			want: attribute.StringSlice(
+				"DHCP.testing.Opt93.ClientIdentifier",
+				[]string{"Intel x86PC"},
+			),
 		},
 		"error": {wantErr: &notFoundError{}},
 	}
@@ -377,7 +440,11 @@ func TestSetOpt93(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt93(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt93() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt93() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Log(tt.input.ClientArch())
@@ -395,7 +462,10 @@ func TestSetOpt94(t *testing.T) {
 	}{
 		"success": {
 			input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(
-				dhcpv4.OptGeneric(dhcpv4.OptionClientNetworkInterfaceIdentifier, []byte{0x01, 0x02, 0x01}),
+				dhcpv4.OptGeneric(
+					dhcpv4.OptionClientNetworkInterfaceIdentifier,
+					[]byte{0x01, 0x02, 0x01},
+				),
 			)},
 			want: attribute.String("DHCP.testing.Opt94.ClientNetworkInterfaceIdentifier", "1.2.1"),
 		},
@@ -405,7 +475,11 @@ func TestSetOpt94(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt94(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt94() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt94() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Log(tt.input.ClientArch())
@@ -423,9 +497,33 @@ func TestSetOpt97(t *testing.T) {
 	}{
 		"success": {
 			input: &dhcpv4.DHCPv4{Options: dhcpv4.OptionsFromList(
-				dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, []byte{0x00, 0x01, 0x02, 0x03, 0x04, 0x05, 0x06, 0x07, 0x08, 0x09, 0x0a, 0x0b, 0x0c, 0x0d, 0x0e, 0x0f, 0x10}),
+				dhcpv4.OptGeneric(
+					dhcpv4.OptionClientMachineIdentifier,
+					[]byte{
+						0x00,
+						0x01,
+						0x02,
+						0x03,
+						0x04,
+						0x05,
+						0x06,
+						0x07,
+						0x08,
+						0x09,
+						0x0a,
+						0x0b,
+						0x0c,
+						0x0d,
+						0x0e,
+						0x0f,
+						0x10,
+					},
+				),
 			)},
-			want: attribute.String("DHCP.testing.Opt97.ClientMachineIdentifier", "0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.16"),
+			want: attribute.String(
+				"DHCP.testing.Opt97.ClientMachineIdentifier",
+				"0.1.2.3.4.5.6.7.8.9.10.11.12.13.14.15.16",
+			),
 		},
 		"error": {wantErr: &notFoundError{}},
 	}
@@ -433,7 +531,11 @@ func TestSetOpt97(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt97(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt97() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt97() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Log(tt.input.GetOneOption(dhcpv4.OptionClientMachineIdentifier))
@@ -461,7 +563,11 @@ func TestSetOpt119(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeOpt119(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setOpt119() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setOpt119() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -486,7 +592,11 @@ func TestSetHeaderFlags(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeFlags(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setHeaderFlags() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setHeaderFlags() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -511,7 +621,11 @@ func TestSetHeaderTransactionID(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeTransactionID(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("EncodeTransactionID() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"EncodeTransactionID() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -536,7 +650,11 @@ func TestSetHeaderYIADDR(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeYIADDR(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setHeaderYIADDR() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setHeaderYIADDR() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -561,7 +679,11 @@ func TestSetHeaderSIADDR(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeSIADDR(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setHeaderSIADDR() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setHeaderSIADDR() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -586,7 +708,11 @@ func TestSetHeaderCHADDR(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeCHADDR(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setHeaderCHADDR() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setHeaderCHADDR() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)
@@ -611,7 +737,11 @@ func TestSetHeaderFILE(t *testing.T) {
 		t.Run(name, func(t *testing.T) {
 			got, err := EncodeFILE(tt.input, "testing")
 			if tt.wantErr != nil && !OptNotFound(err) {
-				t.Fatalf("setHeaderFILE() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v", err, tt.wantErr)
+				t.Fatalf(
+					"setHeaderFILE() error (type: %T) = %[1]v, wantErr (type: %T) %[2]v",
+					err,
+					tt.wantErr,
+				)
 			}
 			if diff := cmp.Diff(got, tt.want, cmpopts.IgnoreUnexported(attribute.Value{})); diff != "" {
 				t.Fatal(diff)

@@ -165,7 +165,6 @@ func (o *OSIE) EncodeToAttributes() []attribute.KeyValue {
 
 // EncodeToAttributes returns a slice of opentelemetry attributes that can be used to set span.SetAttributes.
 func (p *Power) EncodeToAttributes() []attribute.KeyValue {
-
 	if p == nil {
 		return []attribute.KeyValue{}
 	}

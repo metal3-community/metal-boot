@@ -17,6 +17,9 @@ import (
 	"github.com/bmcpi/pibmc/api/redfish"
 	"github.com/bmcpi/pibmc/internal/backend/remote"
 	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/bmcpi/pibmc/internal/dhcp/handler"
+	"github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
+	dhcpServer "github.com/bmcpi/pibmc/internal/dhcp/server"
 	"github.com/bmcpi/pibmc/internal/ipxe/http"
 	"github.com/bmcpi/pibmc/internal/ipxe/ihttp"
 	"github.com/bmcpi/pibmc/internal/ipxe/script"
@@ -29,10 +32,6 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
 	"golang.org/x/sync/errgroup"
-
-	"github.com/bmcpi/pibmc/internal/dhcp/handler"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
-	dhcpServer "github.com/bmcpi/pibmc/internal/dhcp/server"
 )
 
 var (
@@ -59,7 +58,12 @@ func main() {
 		panic(fmt.Errorf("failed to create backend: %w", err))
 	}
 
-	ctx, done := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGHUP, syscall.SIGTERM)
+	ctx, done := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGHUP,
+		syscall.SIGTERM,
+	)
 	defer done()
 
 	oCfg := otel.Config{
@@ -167,7 +171,11 @@ func main() {
 		}
 
 		g.Go(func() error {
-			return ts.ListenAndServe(ctx, netip.AddrPortFrom(netip.MustParseAddr(cfg.Address), 69), backend)
+			return ts.ListenAndServe(
+				ctx,
+				netip.AddrPortFrom(netip.MustParseAddr(cfg.Address), 69),
+				backend,
+			)
 		})
 	}
 
@@ -179,8 +187,9 @@ func main() {
 		}
 		log.Info("starting dhcp server", "bind_addr", cfg.Dhcp.Address)
 		g.Go(func() error {
-
-			dhcpIp, err := netip.ParseAddrPort(fmt.Sprintf("%s:%d", cfg.Dhcp.Address, cfg.Dhcp.Port))
+			dhcpIp, err := netip.ParseAddrPort(
+				fmt.Sprintf("%s:%d", cfg.Dhcp.Address, cfg.Dhcp.Port),
+			)
 			if err != nil {
 				return fmt.Errorf("invalid bind address: %w", err)
 			}
@@ -189,7 +198,10 @@ func main() {
 			if err != nil {
 				panic(fmt.Errorf("invalid tftp address for DHCP server: %w", err))
 			}
-			conn, err := server4.NewIPv4UDPConn(cfg.Dhcp.Interface, net.UDPAddrFromAddrPort(bindAddr))
+			conn, err := server4.NewIPv4UDPConn(
+				cfg.Dhcp.Interface,
+				net.UDPAddrFromAddrPort(bindAddr),
+			)
 			if err != nil {
 				panic(err)
 			}
@@ -213,7 +225,11 @@ func main() {
 	log.Info("shutting down")
 }
 
-func defaultBackend(ctx context.Context, log logr.Logger, config *config.Config) (handler.BackendStore, error) {
+func defaultBackend(
+	ctx context.Context,
+	log logr.Logger,
+	config *config.Config,
+) (handler.BackendStore, error) {
 	f, err := remote.NewRemote(log, config)
 	// f, err := persist.NewPersist(log, config)
 	if err != nil {
@@ -251,7 +267,12 @@ func parseTrustedProxies(trustedProxies string) (result []string) {
 	return result
 }
 
-func dhcpHandler(c *config.Config, ctx context.Context, log logr.Logger, backend handler.BackendReader) (dhcpServer.Handler, error) {
+func dhcpHandler(
+	c *config.Config,
+	ctx context.Context,
+	log logr.Logger,
+	backend handler.BackendReader,
+) (dhcpServer.Handler, error) {
 	// 1. create the handler
 	// 2. create the backend
 	// 3. add the backend to the handler

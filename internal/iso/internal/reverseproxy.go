@@ -324,7 +324,11 @@ func (p *ReverseProxy) getErrorHandler() func(http.ResponseWriter, *http.Request
 
 // modifyResponse conditionally runs the optional ModifyResponse hook
 // and reports whether the request should proceed.
-func (p *ReverseProxy) modifyResponse(rw http.ResponseWriter, res *http.Response, req *http.Request) bool {
+func (p *ReverseProxy) modifyResponse(
+	rw http.ResponseWriter,
+	res *http.Response,
+	req *http.Request,
+) bool {
 	if p.ModifyResponse == nil {
 		return true
 	}
@@ -386,7 +390,11 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 	}
 
 	if (p.Director != nil) == (p.Rewrite != nil) {
-		p.getErrorHandler()(rw, req, errors.New("ReverseProxy must have exactly one of Director or Rewrite set"))
+		p.getErrorHandler()(
+			rw,
+			req,
+			errors.New("ReverseProxy must have exactly one of Director or Rewrite set"),
+		)
 		return
 	}
 
@@ -400,7 +408,11 @@ func (p *ReverseProxy) ServeHTTP(rw http.ResponseWriter, req *http.Request) {
 
 	reqUpType := upgradeType(outreq.Header)
 	if !IsPrint(reqUpType) {
-		p.getErrorHandler()(rw, req, fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType))
+		p.getErrorHandler()(
+			rw,
+			req,
+			fmt.Errorf("client tried to switch to invalid protocol %q", reqUpType),
+		)
 		return
 	}
 	removeHopByHopHeaders(outreq.Header)
@@ -621,7 +633,12 @@ func (p *ReverseProxy) flushInterval(res *http.Response) time.Duration {
 	return p.FlushInterval
 }
 
-func (p *ReverseProxy) copyResponse(ctx context.Context, dst http.ResponseWriter, src io.Reader, flushInterval time.Duration) error {
+func (p *ReverseProxy) copyResponse(
+	ctx context.Context,
+	dst http.ResponseWriter,
+	src io.Reader,
+	flushInterval time.Duration,
+) error {
 	var w io.Writer = dst
 
 	if flushInterval != 0 {
@@ -752,27 +769,51 @@ func upgradeType(h http.Header) string {
 	return h.Get("Upgrade")
 }
 
-func (p *ReverseProxy) handleUpgradeResponse(rw http.ResponseWriter, req *http.Request, res *http.Response) {
+func (p *ReverseProxy) handleUpgradeResponse(
+	rw http.ResponseWriter,
+	req *http.Request,
+	res *http.Response,
+) {
 	reqUpType := upgradeType(req.Header)
 	resUpType := upgradeType(res.Header)
 	if !IsPrint(resUpType) { // We know reqUpType is ASCII, it's checked by the caller.
-		p.getErrorHandler()(rw, req, fmt.Errorf("backend tried to switch to invalid protocol %q", resUpType))
+		p.getErrorHandler()(
+			rw,
+			req,
+			fmt.Errorf("backend tried to switch to invalid protocol %q", resUpType),
+		)
 	}
 	if !EqualFold(reqUpType, resUpType) {
-		p.getErrorHandler()(rw, req, fmt.Errorf("backend tried to switch protocol %q when %q was requested", resUpType, reqUpType))
+		p.getErrorHandler()(
+			rw,
+			req,
+			fmt.Errorf(
+				"backend tried to switch protocol %q when %q was requested",
+				resUpType,
+				reqUpType,
+			),
+		)
 		return
 	}
 
 	backConn, ok := res.Body.(io.ReadWriteCloser)
 	if !ok {
-		p.getErrorHandler()(rw, req, fmt.Errorf("internal error: 101 switching protocols response with non-writable body"))
+		p.getErrorHandler()(
+			rw,
+			req,
+			fmt.Errorf("internal error: 101 switching protocols response with non-writable body"),
+		)
 		return
 	}
 
 	rc := http.NewResponseController(rw)
 	conn, brw, hijackErr := rc.Hijack()
 	if errors.Is(hijackErr, http.ErrNotSupported) {
-		p.getErrorHandler()(rw, req, fmt.Errorf("can't switch protocols using non-Hijacker ResponseWriter type %T", rw))
+		p.getErrorHandler()(
+			rw,
+			req,
+			fmt.Errorf("can't switch protocols using non-Hijacker ResponseWriter type %T", rw),
+		)
 		return
 	}
 

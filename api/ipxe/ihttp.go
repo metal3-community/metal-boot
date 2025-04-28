@@ -127,19 +127,32 @@ func (s Handler) Handle(w http.ResponseWriter, req *http.Request) {
 // and a new SpanContext is constructed and added to the context.Context that is returned.
 // The filename is shortened to just the original filename so the rest of boots HTTP can
 // carry on as usual.
-func extractTraceparentFromFilename(ctx context.Context, filename string) (context.Context, string, error) {
+func extractTraceparentFromFilename(
+	ctx context.Context,
+	filename string,
+) (context.Context, string, error) {
 	// traceparentRe captures 4 items, the original filename, the trace id, span id, and trace flags
-	traceparentRe := regexp.MustCompile("^(.*)-[[:xdigit:]]{2}-([[:xdigit:]]{32})-([[:xdigit:]]{16})-([[:xdigit:]]{2})")
+	traceparentRe := regexp.MustCompile(
+		"^(.*)-[[:xdigit:]]{2}-([[:xdigit:]]{32})-([[:xdigit:]]{16})-([[:xdigit:]]{2})",
+	)
 	parts := traceparentRe.FindStringSubmatch(filename)
 	if len(parts) == 5 {
 		traceID, err := trace.TraceIDFromHex(parts[2])
 		if err != nil {
-			return ctx, filename, fmt.Errorf("parsing OpenTelemetry trace id %q failed: %w", parts[2], err)
+			return ctx, filename, fmt.Errorf(
+				"parsing OpenTelemetry trace id %q failed: %w",
+				parts[2],
+				err,
+			)
 		}
 
 		spanID, err := trace.SpanIDFromHex(parts[3])
 		if err != nil {
-			return ctx, filename, fmt.Errorf("parsing OpenTelemetry span id %q failed: %w", parts[3], err)
+			return ctx, filename, fmt.Errorf(
+				"parsing OpenTelemetry span id %q failed: %w",
+				parts[3],
+				err,
+			)
 		}
 
 		// create a span context with the parent trace id & span id

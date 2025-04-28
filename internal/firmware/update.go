@@ -97,7 +97,7 @@ func (f *FirmwareUpdater) UpdateFirmware() error {
 // downloadAndExtract downloads a file from url and extracts it if it's an archive
 func (f *FirmwareUpdater) downloadAndExtract(url, destPath string) error {
 	// Create the destination directory if it doesn't exist
-	if err := os.MkdirAll(destPath, 0755); err != nil {
+	if err := os.MkdirAll(destPath, 0o755); err != nil {
 		return fmt.Errorf("failed to create directory %s: %w", destPath, err)
 	}
 
@@ -213,7 +213,8 @@ func extractArchive(reader io.Reader, contentType, extension, destPath string) e
 		extension == ".tar" || extension == ".tgz" || extension == ".tar.gz" || extension == ".gz" {
 
 		var tarReader *tar.Reader
-		if strings.Contains(contentType, "gzip") || extension == ".tgz" || extension == ".tar.gz" || extension == ".gz" {
+		if strings.Contains(contentType, "gzip") || extension == ".tgz" || extension == ".tar.gz" ||
+			extension == ".gz" {
 			gzReader, err := gzip.NewReader(reader)
 			if err != nil {
 				return fmt.Errorf("failed to create gzip reader: %w", err)
@@ -245,7 +246,7 @@ func extractZipFile(file *zip.File, destPath string) error {
 	filePath := filepath.Join(destPath, file.Name)
 
 	// Ensure directory exists
-	if err := os.MkdirAll(filepath.Dir(filePath), 0755); err != nil {
+	if err := os.MkdirAll(filepath.Dir(filePath), 0o755); err != nil {
 		return fmt.Errorf("failed to create directory for %s: %w", filePath, err)
 	}
 
@@ -286,17 +287,21 @@ func extractTarArchive(tarReader *tar.Reader, destPath string) error {
 
 		switch header.Typeflag {
 		case tar.TypeDir:
-			if err := os.MkdirAll(path, 0755); err != nil {
+			if err := os.MkdirAll(path, 0o755); err != nil {
 				return fmt.Errorf("failed to create directory %s: %w", path, err)
 			}
 		case tar.TypeReg:
 			// Ensure directory exists
-			if err := os.MkdirAll(filepath.Dir(path), 0755); err != nil {
+			if err := os.MkdirAll(filepath.Dir(path), 0o755); err != nil {
 				return fmt.Errorf("failed to create directory for %s: %w", path, err)
 			}
 
 			// Create the file
-			file, err := os.OpenFile(path, os.O_CREATE|os.O_WRONLY|os.O_TRUNC, os.FileMode(header.Mode))
+			file, err := os.OpenFile(
+				path,
+				os.O_CREATE|os.O_WRONLY|os.O_TRUNC,
+				os.FileMode(header.Mode),
+			)
 			if err != nil {
 				return fmt.Errorf("failed to create file %s: %w", path, err)
 			}

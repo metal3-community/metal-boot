@@ -34,7 +34,7 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 
 		firmwareRoot := filepath.Dir(firmwarePath)
 
-		if err := os.MkdirAll(firmwareRoot, 0755); err != nil {
+		if err := os.MkdirAll(firmwareRoot, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create firmware directory: %w", err)
 		}
 
@@ -43,12 +43,12 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 			kfr := filepath.Dir(kf)
 
 			if kfr != firmwareRoot {
-				if err := os.MkdirAll(kfr, 0755); err != nil {
+				if err := os.MkdirAll(kfr, 0o755); err != nil {
 					return nil, fmt.Errorf("failed to create firmware directory: %w", err)
 				}
 			}
 
-			if err := os.WriteFile(kf, f, 0644); err != nil {
+			if err := os.WriteFile(kf, f, 0o644); err != nil {
 				return nil, fmt.Errorf("failed to create firmware file: %w", err)
 			}
 		}
@@ -555,7 +555,12 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
 	ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
 	uniqueID := macStr[len(macStr)/2:]
-	ndl.SetString(fmt.Sprintf("030b2500d83add%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(uniqueID)))
+	ndl.SetString(
+		fmt.Sprintf(
+			"030b2500d83add%s0000000000000000000000000000000000000000000000000000017fff0400",
+			strings.ToLower(uniqueID),
+		),
+	)
 
 	// Set the dedicated MAC address variable
 	_ = m.getOrCreateVar(macStr, efi.EfiIp6ConfigProtocol)
@@ -960,7 +965,7 @@ func copyFile(src, dst string) error {
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", src, err)
 	}
-	return os.WriteFile(dst, data, 0644)
+	return os.WriteFile(dst, data, 0o644)
 }
 
 func readFile(path string) ([]byte, error) {
@@ -968,7 +973,7 @@ func readFile(path string) ([]byte, error) {
 }
 
 func writeFile(path string, data []byte) error {
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 func removeFile(path string) error {

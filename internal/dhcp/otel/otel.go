@@ -43,7 +43,11 @@ func OptNotFound(err error) bool {
 }
 
 // Encode runs a slice of encoders against a DHCPv4 packet turning the values into opentelemetry attribute key/value pairs.
-func (e *Encoder) Encode(pkt *dhcpv4.DHCPv4, namespace string, encoders ...func(d *dhcpv4.DHCPv4, namespace string) (attribute.KeyValue, error)) []attribute.KeyValue {
+func (e *Encoder) Encode(
+	pkt *dhcpv4.DHCPv4,
+	namespace string,
+	encoders ...func(d *dhcpv4.DHCPv4, namespace string) (attribute.KeyValue, error),
+) []attribute.KeyValue {
 	if e.Log.GetSink() == nil {
 		e.Log = logr.Discard()
 	}

@@ -201,7 +201,8 @@ func (i Info) ClientTypeFrom() ClientType {
 func IsNetbootClient(pkt *dhcpv4.DHCPv4) error {
 	var err error
 	// only response to DISCOVER and REQUEST packets
-	if pkt.MessageType() != dhcpv4.MessageTypeDiscover && pkt.MessageType() != dhcpv4.MessageTypeRequest {
+	if pkt.MessageType() != dhcpv4.MessageTypeDiscover &&
+		pkt.MessageType() != dhcpv4.MessageTypeRequest {
 		err = wrapNonNil(err, "message type must be either Discover or Request")
 	}
 	// option 60 must be set
@@ -210,7 +211,8 @@ func IsNetbootClient(pkt *dhcpv4.DHCPv4) error {
 	}
 	// option 60 must start with PXEClient or HTTPClient
 	opt60 := pkt.GetOneOption(dhcpv4.OptionClassIdentifier)
-	if !strings.HasPrefix(string(opt60), string(PXEClient)) && !strings.HasPrefix(string(opt60), string(HTTPClient)) {
+	if !strings.HasPrefix(string(opt60), string(PXEClient)) &&
+		!strings.HasPrefix(string(opt60), string(HTTPClient)) {
 		err = wrapNonNil(err, "option 60 not PXEClient or HTTPClient")
 	}
 
@@ -253,12 +255,17 @@ func wrapNonNil(err error, format string) error {
 }
 
 // Bootfile returns the calculated dhcp header: "file" value. see https://datatracker.ietf.org/doc/html/rfc2131#section-2 .
-func (i Info) Bootfile(customUC UserClass, ipxeScript, ipxeHTTPBinServer *url.URL, ipxeTFTPBinServer netip.AddrPort) string {
+func (i Info) Bootfile(
+	customUC UserClass,
+	ipxeScript, ipxeHTTPBinServer *url.URL,
+	ipxeTFTPBinServer netip.AddrPort,
+) string {
 	bootfile := "/no-ipxe-script-defined"
 
 	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Tinkerbell userclass (option 77).
 	switch { // order matters here.
-	case i.UserClass == Tinkerbell, (customUC != "" && i.UserClass == customUC): // this case gets us out of an ipxe boot loop.
+	case i.UserClass == Tinkerbell,
+		(customUC != "" && i.UserClass == customUC): // this case gets us out of an ipxe boot loop.
 		if ipxeScript != nil {
 			bootfile = ipxeScript.String()
 		}
@@ -326,7 +333,9 @@ func (i Info) AddRPIOpt43(opts dhcpv4.Options) []byte {
 		// tested with Raspberry Pi 4 using UEFI from here: https://github.com/pftf/RPi4/releases/tag/v1.31
 		// all files were served via a tftp server and lived at the top level dir of the tftp server (i.e tftp://server/)
 		// "\x00\x00\x11" is equal to NUL(Null), NUL(Null), DC1(Device Control 1)
-		opt9, _ := hex.DecodeString("00001152617370626572727920506920426f6f74") // "\x00\x00\x11Raspberry Pi Boot"
+		opt9, _ := hex.DecodeString(
+			"00001152617370626572727920506920426f6f74",
+		) // "\x00\x00\x11Raspberry Pi Boot"
 		opts[9] = opt9
 		// "\x0a\x04\x00" is equal to LF(Line Feed), EOT(End of Transmission), NUL(Null)
 		opt10, _ := hex.DecodeString("00505845") // "\x0a\x04\x00PXE"

@@ -15,12 +15,11 @@ import (
 	"path/filepath"
 	"strings"
 
-	apierrors "k8s.io/apimachinery/pkg/api/errors"
-
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
 	"github.com/bmcpi/pibmc/internal/iso/internal"
 	"github.com/go-logr/logr"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 
 const (
@@ -77,14 +76,20 @@ func (h *Handler) HandlerFunc() (http.HandlerFunc, error) {
 // Copy implements the internal.CopyBuffer interface.
 // This implementation allows us to inspect and patch content on its way to the client without buffering the entire response
 // in memory. This allows memory use to be constant regardless of the size of the response.
-func (h *Handler) Copy(ctx context.Context, dst io.Writer, src io.Reader, buf []byte) (int64, error) {
+func (h *Handler) Copy(
+	ctx context.Context,
+	dst io.Writer,
+	src io.Reader,
+	buf []byte,
+) (int64, error) {
 	if len(buf) == 0 {
 		buf = make([]byte, 32*1024)
 	}
 	var written int64
 	for {
 		nr, rerr := src.Read(buf)
-		if rerr != nil && rerr != io.EOF && rerr != context.Canceled { //nolint: errorlint // going to defer to the stdlib on this one.
+		if rerr != nil && rerr != io.EOF &&
+			rerr != context.Canceled { //nolint: errorlint // going to defer to the stdlib on this one.
 			h.Logger.Info("httputil: ReverseProxy read error during body copy: %v", rerr)
 		}
 		if nr > 0 {
@@ -122,13 +127,24 @@ func (h *Handler) Copy(ctx context.Context, dst io.Writer, src io.Reader, buf []
 // This method is called by the internal.NewSingleHostReverseProxy to handle the incoming request.
 // The method is responsible for validating the incoming request and getting the source ISO.
 func (h *Handler) RoundTrip(req *http.Request) (*http.Response, error) {
-	log := h.Logger.WithValues("method", req.Method, "inboundURI", req.RequestURI, "remoteAddr", req.RemoteAddr)
+	log := h.Logger.WithValues(
+		"method",
+		req.Method,
+		"inboundURI",
+		req.RequestURI,
+		"remoteAddr",
+		req.RemoteAddr,
+	)
 	log.V(1).Info("starting the ISO patching HTTP handler")
 
 	if filepath.Ext(req.URL.Path) != ".iso" {
 		log.Info("extension not supported, only supported extension is '.iso'")
 		return &http.Response{
-			Status:     fmt.Sprintf("%d %s", http.StatusNotFound, http.StatusText(http.StatusNotFound)),
+			Status: fmt.Sprintf(
+				"%d %s",
+				http.StatusNotFound,
+				http.StatusText(http.StatusNotFound),
+			),
 			StatusCode: http.StatusNotFound,
 			Body:       http.NoBody,
 			Request:    req,
@@ -144,7 +160,11 @@ func (h *Handler) RoundTrip(req *http.Request) (*http.Response, error) {
 	if err != nil {
 		log.Info("unable to parse mac address in the URL path", "error", err)
 		return &http.Response{
-			Status:     fmt.Sprintf("%d %s", http.StatusBadRequest, http.StatusText(http.StatusBadRequest)),
+			Status: fmt.Sprintf(
+				"%d %s",
+				http.StatusBadRequest,
+				http.StatusText(http.StatusBadRequest),
+			),
 			StatusCode: http.StatusBadRequest,
 			Body:       http.NoBody,
 			Request:    req,
@@ -156,14 +176,22 @@ func (h *Handler) RoundTrip(req *http.Request) (*http.Response, error) {
 		log.Info("unable to get the hardware object", "error", err, "mac", ha)
 		if apierrors.IsNotFound(err) {
 			return &http.Response{
-				Status:     fmt.Sprintf("%d %s", http.StatusNotFound, http.StatusText(http.StatusNotFound)),
+				Status: fmt.Sprintf(
+					"%d %s",
+					http.StatusNotFound,
+					http.StatusText(http.StatusNotFound),
+				),
 				StatusCode: http.StatusNotFound,
 				Body:       http.NoBody,
 				Request:    req,
 			}, nil
 		}
 		return &http.Response{
-			Status:     fmt.Sprintf("%d %s", http.StatusInternalServerError, http.StatusText(http.StatusInternalServerError)),
+			Status: fmt.Sprintf(
+				"%d %s",
+				http.StatusInternalServerError,
+				http.StatusText(http.StatusInternalServerError),
+			),
 			StatusCode: http.StatusInternalServerError,
 			Body:       http.NoBody,
 			Request:    req,
@@ -181,7 +209,12 @@ func (h *Handler) RoundTrip(req *http.Request) (*http.Response, error) {
 		consoles = defaultConsoles
 	}
 	// The patch is added to the request context so that it can be used in the Copy method.
-	req = req.WithContext(internal.WithPatch(req.Context(), []byte(h.constructPatch(consoles, ha.String(), dhcpData))))
+	req = req.WithContext(
+		internal.WithPatch(
+			req.Context(),
+			[]byte(h.constructPatch(consoles, ha.String(), dhcpData)),
+		),
+	)
 
 	// The internal.NewSingleHostReverseProxy takes the incoming request url and adds the path to the target (h.SourceISO).
 	// This function is more than a pass through proxy. The MAC address in the url path is required to do hardware lookups using the backend reader
@@ -229,7 +262,16 @@ func (h *Handler) constructPatch(console, mac string, d *data.DHCP) string {
 		return ""
 	}()
 	hwAddr := fmt.Sprintf("hw_addr=%s", mac)
-	all := []string{strings.Join(h.ExtraKernelParams, " "), console, vlanID, hwAddr, syslogHost, grpcAuthority, tinkerbellTLS, workerID}
+	all := []string{
+		strings.Join(h.ExtraKernelParams, " "),
+		console,
+		vlanID,
+		hwAddr,
+		syslogHost,
+		grpcAuthority,
+		tinkerbellTLS,
+		workerID,
+	}
 	if h.StaticIPAMEnabled {
 		all = append(all, parseIPAM(d))
 	}
@@ -241,13 +283,21 @@ func getMAC(urlPath string) (net.HardwareAddr, error) {
 	mac := path.Base(path.Dir(urlPath))
 	hw, err := net.ParseMAC(mac)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse URL path: %s , the second to last element in the URL path must be a valid mac address, err: %w", urlPath, err)
+		return nil, fmt.Errorf(
+			"failed to parse URL path: %s , the second to last element in the URL path must be a valid mac address, err: %w",
+			urlPath,
+			err,
+		)
 	}
 
 	return hw, nil
 }
 
-func (h *Handler) getFacility(ctx context.Context, mac net.HardwareAddr, br handler.BackendReader) (string, *data.DHCP, error) {
+func (h *Handler) getFacility(
+	ctx context.Context,
+	mac net.HardwareAddr,
+	br handler.BackendReader,
+) (string, *data.DHCP, error) {
 	if br == nil {
 		return "", nil, errors.New("backend is nil")
 	}

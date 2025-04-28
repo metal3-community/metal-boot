@@ -115,7 +115,10 @@ func NewWatcher(l logr.Logger, f string) (*Watcher, error) {
 
 // GetByMac is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Watcher) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (w *Watcher) GetByMac(
+	ctx context.Context,
+	mac net.HardwareAddr,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.file.GetByMac")
 	defer span.End()
@@ -158,7 +161,10 @@ func (w *Watcher) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHC
 
 // GetByIP is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Watcher) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (w *Watcher) GetByIP(
+	ctx context.Context,
+	ip net.IP,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.file.GetByIP")
 	defer span.End()
@@ -208,7 +214,13 @@ func (w *Watcher) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Net
 	return nil, nil, nil, err
 }
 
-func (w *Watcher) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n *data.Netboot, p *data.Power) error {
+func (w *Watcher) Put(
+	ctx context.Context,
+	mac net.HardwareAddr,
+	d *data.DHCP,
+	n *data.Netboot,
+	p *data.Power,
+) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.file.Put")
 	defer span.End()
@@ -270,7 +282,8 @@ func (w *Watcher) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n
 			if d.DomainName != "" && d.DomainName != v.DomainName {
 				v.DomainName = d.DomainName
 			}
-			if d.BroadcastAddress.String() != "" && d.BroadcastAddress.String() != v.BroadcastAddress {
+			if d.BroadcastAddress.String() != "" &&
+				d.BroadcastAddress.String() != v.BroadcastAddress {
 				v.BroadcastAddress = d.BroadcastAddress.String()
 			}
 			if len(ntpServers) != 0 && len(ntpServers) != len(v.NTPServers) {
@@ -298,7 +311,8 @@ func (w *Watcher) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n
 			if n.AllowNetboot != v.Netboot.AllowPXE {
 				v.Netboot.AllowPXE = n.AllowNetboot
 			}
-			if n.IPXEScriptURL.String() != "" && n.IPXEScriptURL.String() != v.Netboot.IPXEScriptURL {
+			if n.IPXEScriptURL.String() != "" &&
+				n.IPXEScriptURL.String() != v.Netboot.IPXEScriptURL {
 				v.Netboot.IPXEScriptURL = n.IPXEScriptURL.String()
 			}
 			if n.IPXEScript != "" && n.IPXEScript != v.Netboot.IPXEScript {
@@ -368,7 +382,7 @@ func (w *Watcher) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n
 	}
 
 	w.fileMu.RLock()
-	if err := os.WriteFile(w.FilePath, newData, 0755); err != nil {
+	if err := os.WriteFile(w.FilePath, newData, 0o755); err != nil {
 		err := fmt.Errorf("%w: %w", err, errFileFormat)
 		w.Log.Error(err, "failed to write file data")
 		span.SetStatus(codes.Error, err.Error())
@@ -476,7 +490,13 @@ func (w *Watcher) translate(r dhcp) (*data.DHCP, *data.Netboot, *data.Power, err
 
 	// default gateway, optional
 	if dg, err := netip.ParseAddr(r.DefaultGateway); err != nil {
-		w.Log.Info("failed to parse default gateway", "defaultGateway", r.DefaultGateway, "err", err)
+		w.Log.Info(
+			"failed to parse default gateway",
+			"defaultGateway",
+			r.DefaultGateway,
+			"err",
+			err,
+		)
 	} else {
 		d.DefaultGateway = dg
 	}
@@ -499,7 +519,13 @@ func (w *Watcher) translate(r dhcp) (*data.DHCP, *data.Netboot, *data.Power, err
 
 	// broadcast address, optional
 	if ba, err := netip.ParseAddr(r.BroadcastAddress); err != nil {
-		w.Log.Info("failed to parse broadcast address", "broadcastAddress", r.BroadcastAddress, "err", err)
+		w.Log.Info(
+			"failed to parse broadcast address",
+			"broadcastAddress",
+			r.BroadcastAddress,
+			"err",
+			err,
+		)
 	} else {
 		d.BroadcastAddress = ba
 	}

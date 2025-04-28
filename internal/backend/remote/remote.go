@@ -28,9 +28,7 @@ import (
 
 const tracerName = "github.com/bmcpi/pibmc/backend/remote"
 
-var (
-	errRecordNotFound = fmt.Errorf("record not found")
-)
+var errRecordNotFound = fmt.Errorf("record not found")
 
 // Remote represents the backend for watching a file for changes and updating the in memory DHCP data.
 type Remote struct {
@@ -52,7 +50,6 @@ type Remote struct {
 
 // NewRemote creates a new file watcher.
 func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
-
 	client := unifi.Client{}
 
 	if err := client.SetBaseURL(config.Unifi.Endpoint); err != nil {
@@ -134,7 +131,6 @@ func (w *Remote) login(ctx context.Context) error {
 }
 
 func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
-
 	if w.netboot != nil {
 		if netboot, ok := w.netboot[mac.String()]; ok {
 			return &netboot
@@ -162,7 +158,7 @@ func (w *Remote) loadConfigs() error {
 		configFile := filepath.Join(backendDir, fmt.Sprintf("%s.yaml", k))
 
 		if util.Exists(configFile) {
-			f, err := os.OpenFile(configFile, os.O_RDONLY, 0644)
+			f, err := os.OpenFile(configFile, os.O_RDONLY, 0o644)
 			if err != nil {
 				errors = append(errors, err)
 				continue
@@ -189,7 +185,6 @@ func (w *Remote) loadConfigs() error {
 }
 
 func (w *Remote) saveConfigs() error {
-
 	errors := []error{}
 
 	configs := map[string]any{
@@ -200,7 +195,6 @@ func (w *Remote) saveConfigs() error {
 
 	for k, v := range configs {
 		b, err := yaml.Marshal(v)
-
 		if err != nil {
 			errors = append(errors, err)
 			continue
@@ -209,7 +203,7 @@ func (w *Remote) saveConfigs() error {
 		backendDir := path.Dir(w.config.BackendFilePath)
 		configFile := filepath.Join(backendDir, fmt.Sprintf("%s.yaml", k))
 
-		if err := os.WriteFile(configFile, b, 0644); err != nil {
+		if err := os.WriteFile(configFile, b, 0o644); err != nil {
 			errors = append(errors, err)
 		}
 	}
@@ -223,7 +217,10 @@ func (w *Remote) saveConfigs() error {
 
 // GetByMac is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Remote) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (w *Remote) GetByMac(
+	ctx context.Context,
+	mac net.HardwareAddr,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.GetByMac")
 	defer span.End()
@@ -322,22 +319,24 @@ func (w *Remote) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHCP
 	return &dhcp, netboot, &power, nil
 }
 
-type NotFoundError struct {
-}
+type NotFoundError struct{}
 
 func (e *NotFoundError) Error() string {
 	return "no client found"
 }
 
-func (w *Remote) getActiveClientByMac(ctx context.Context, mac net.HardwareAddr) (*unifi.ClientInfo, error) {
-
+func (w *Remote) getActiveClientByMac(
+	ctx context.Context,
+	mac net.HardwareAddr,
+) (*unifi.ClientInfo, error) {
 	filteredClients, err := w.getActiveClientsForDevice(ctx)
 	if err != nil {
 		return nil, err
 	}
 
 	i := slices.IndexFunc(filteredClients, func(i unifi.ClientInfo) bool {
-		if macAddr, err := net.ParseMAC(i.Mac); err == nil && macAddr != nil && macAddr.String() != "" {
+		if macAddr, err := net.ParseMAC(i.Mac); err == nil && macAddr != nil &&
+			macAddr.String() != "" {
 			return macAddr.String() == mac.String()
 		} else {
 			return false
@@ -393,7 +392,6 @@ func (w *Remote) getActiveClientByIP(ctx context.Context, ip net.IP) (*unifi.Cli
 	}
 
 	i := slices.IndexFunc(clients, func(i unifi.ClientInfo) bool {
-
 		ipAddr, err := netip.ParseAddr(i.IP)
 		if err != nil {
 			return false
@@ -408,8 +406,10 @@ func (w *Remote) getActiveClientByIP(ctx context.Context, ip net.IP) (*unifi.Cli
 	return &clients[i], nil
 }
 
-func (w *Remote) getPortOverride(ctx context.Context, port int) (*unifi.DevicePortOverrides, error) {
-
+func (w *Remote) getPortOverride(
+	ctx context.Context,
+	port int,
+) (*unifi.DevicePortOverrides, error) {
 	device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, w.config.Unifi.Device)
 	if err != nil {
 		return nil, err
@@ -427,8 +427,10 @@ func (w *Remote) getPortOverride(ctx context.Context, port int) (*unifi.DevicePo
 
 // GetByIP is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Remote) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
-
+func (w *Remote) GetByIP(
+	ctx context.Context,
+	ip net.IP,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	err := w.login(ctx)
 	if err != nil {
 		return nil, nil, nil, err
@@ -443,7 +445,6 @@ func (w *Remote) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netb
 	if addr, ok := netip.AddrFromSlice(ip); !ok {
 		addr, err := netip.ParseAddr(ip.String())
 		if err != nil {
-
 		} else {
 			ipAddr = addr
 		}
@@ -538,7 +539,13 @@ func (w *Remote) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netb
 	return &dhcp, netboot, &power, nil
 }
 
-func (w *Remote) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n *data.Netboot, p *data.Power) error {
+func (w *Remote) Put(
+	ctx context.Context,
+	mac net.HardwareAddr,
+	d *data.DHCP,
+	n *data.Netboot,
+	p *data.Power,
+) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.Put")
 	defer span.End()
@@ -605,7 +612,6 @@ func (w *Remote) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n 
 }
 
 func (w *Remote) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
-
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.GetKeys")
 	defer span.End()

@@ -45,7 +45,11 @@ func TestNewWatcher(t *testing.T) {
 			}
 			w, err := NewWatcher(logr.Discard(), name)
 			if (err != nil) != (tt.wantErr != nil) {
-				t.Fatalf("NewWatcher() error = %v; type = %[1]T, wantErr %v; type = %[2]T", err, tt.wantErr)
+				t.Fatalf(
+					"NewWatcher() error = %v; type = %[1]T, wantErr %v; type = %[2]T",
+					err,
+					tt.wantErr,
+				)
 			}
 			var got string
 			if tt.wantErr != nil {
@@ -97,7 +101,9 @@ func TestStartAndStop(t *testing.T) {
 }
 
 func TestStartFileUpdateError(t *testing.T) {
-	tt := &testData{expectedOut: `"level"=0 "msg"="file changed, updating cache"` + "\n" + `"msg"="failed to read file" "error"="open not-found.txt: no such file or directory" "file"="not-found.txt"` + "\n" + `"level"=0 "msg"="stopping watcher"` + "\n"}
+	tt := &testData{
+		expectedOut: `"level"=0 "msg"="file changed, updating cache"` + "\n" + `"msg"="failed to read file" "error"="open not-found.txt: no such file or directory" "file"="not-found.txt"` + "\n" + `"level"=0 "msg"="stopping watcher"` + "\n",
+	}
 	out := &bytes.Buffer{}
 	l := stdr.New(log.New(out, "", 0))
 	got, name := tt.helper(t, l)
@@ -117,7 +123,11 @@ func TestStartFileUpdateError(t *testing.T) {
 }
 
 func TestStartFileUpdate(t *testing.T) {
-	tt := &testData{initial: "once upon a time", after: "\nhello world", expectedOut: "once upon a time\nhello world"}
+	tt := &testData{
+		initial:     "once upon a time",
+		after:       "\nhello world",
+		expectedOut: "once upon a time\nhello world",
+	}
 	got, name := tt.helper(t, logr.Discard())
 	defer os.Remove(name)
 	ctx, cancel := context.WithCancel(context.Background())
@@ -163,7 +173,9 @@ func TestStartFileUpdateClosedChan(t *testing.T) {
 }
 
 func TestStartError(t *testing.T) {
-	tt := &testData{expectedOut: `"level"=0 "msg"="error watching file" "err"="test error"` + "\n" + `"level"=0 "msg"="stopping watcher"` + "\n"}
+	tt := &testData{
+		expectedOut: `"level"=0 "msg"="error watching file" "err"="test error"` + "\n" + `"level"=0 "msg"="stopping watcher"` + "\n",
+	}
 	out := &bytes.Buffer{}
 	l := stdr.New(log.New(out, "", 0))
 	ctx, cancel := context.WithCancel(context.Background())
@@ -284,13 +296,47 @@ func TestTranslateErrors(t *testing.T) {
 		input   dhcp
 		wantErr error
 	}{
-		"invalid IP":                {input: dhcp{IPAddress: "not an IP"}, wantErr: errParseIP},
-		"invalid subnet mask":       {input: dhcp{IPAddress: "1.1.1.1", SubnetMask: "not a mask"}, wantErr: errParseSubnet},
-		"invalid gateway":           {input: dhcp{IPAddress: "1.1.1.1", SubnetMask: "192.168.1.255", DefaultGateway: "not a gateway"}, wantErr: nil},
-		"invalid broadcast address": {input: dhcp{IPAddress: "1.1.1.1", SubnetMask: "192.168.1.255"}, wantErr: nil},
-		"invalid NameServers":       {input: dhcp{IPAddress: "1.1.1.1", SubnetMask: "192.168.1.255", NameServers: []string{"no good"}}, wantErr: nil},
-		"invalid ntpservers":        {input: dhcp{IPAddress: "1.1.1.1", SubnetMask: "192.168.1.255", NTPServers: []string{"no good"}}, wantErr: nil},
-		"invalid ipxe script url":   {input: dhcp{IPAddress: "1.1.1.1", SubnetMask: "255.255.255.0", Netboot: netboot{IPXEScriptURL: ":not a url"}}, wantErr: errParseURL},
+		"invalid IP": {input: dhcp{IPAddress: "not an IP"}, wantErr: errParseIP},
+		"invalid subnet mask": {
+			input:   dhcp{IPAddress: "1.1.1.1", SubnetMask: "not a mask"},
+			wantErr: errParseSubnet,
+		},
+		"invalid gateway": {
+			input: dhcp{
+				IPAddress:      "1.1.1.1",
+				SubnetMask:     "192.168.1.255",
+				DefaultGateway: "not a gateway",
+			},
+			wantErr: nil,
+		},
+		"invalid broadcast address": {
+			input:   dhcp{IPAddress: "1.1.1.1", SubnetMask: "192.168.1.255"},
+			wantErr: nil,
+		},
+		"invalid NameServers": {
+			input: dhcp{
+				IPAddress:   "1.1.1.1",
+				SubnetMask:  "192.168.1.255",
+				NameServers: []string{"no good"},
+			},
+			wantErr: nil,
+		},
+		"invalid ntpservers": {
+			input: dhcp{
+				IPAddress:  "1.1.1.1",
+				SubnetMask: "192.168.1.255",
+				NTPServers: []string{"no good"},
+			},
+			wantErr: nil,
+		},
+		"invalid ipxe script url": {
+			input: dhcp{
+				IPAddress:  "1.1.1.1",
+				SubnetMask: "255.255.255.0",
+				Netboot:    netboot{IPXEScriptURL: ":not a url"},
+			},
+			wantErr: errParseURL,
+		},
 	}
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
@@ -308,10 +354,19 @@ func TestGetByMac(t *testing.T) {
 		badData bool
 		wantErr error
 	}{
-		"no record found":        {mac: net.HardwareAddr{0x00, 0x01, 0x02, 0x03, 0x04, 0x05}, wantErr: errRecordNotFound},
-		"record found":           {mac: net.HardwareAddr{0x08, 0x00, 0x27, 0x29, 0x4e, 0x67}, wantErr: nil},
-		"fail error translating": {mac: net.HardwareAddr{0x08, 0x00, 0x27, 0x29, 0x4e, 0x68}, wantErr: errParseIP},
-		"fail parsing file":      {badData: true, wantErr: errFileFormat},
+		"no record found": {
+			mac:     net.HardwareAddr{0x00, 0x01, 0x02, 0x03, 0x04, 0x05},
+			wantErr: errRecordNotFound,
+		},
+		"record found": {
+			mac:     net.HardwareAddr{0x08, 0x00, 0x27, 0x29, 0x4e, 0x67},
+			wantErr: nil,
+		},
+		"fail error translating": {
+			mac:     net.HardwareAddr{0x08, 0x00, 0x27, 0x29, 0x4e, 0x68},
+			wantErr: errParseIP,
+		},
+		"fail parsing file": {badData: true, wantErr: errFileFormat},
 	}
 
 	for name, tt := range tests {

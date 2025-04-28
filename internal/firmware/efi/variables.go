@@ -76,7 +76,7 @@ type EfiVar struct {
 }
 
 // NewEfiVar creates a new EFI variable
-func NewEfiVar(name interface{}, guid *string, attr uint32, data []byte, count int) (*EfiVar, error) {
+func NewEfiVar(name any, guid *string, attr uint32, data []byte, count int) (*EfiVar, error) {
 	v := &EfiVar{
 		Data:  data,
 		Count: count,
@@ -238,7 +238,6 @@ func (v *EfiVar) GetBootEntry() (*BootEntry, error) {
 
 // SetBootEntry sets a boot entry
 func (v *EfiVar) SetBootEntry(attr uint32, title string, path string, optdata []byte) error {
-
 	t := NewUCS16String(title)
 	p := NewDevicePath([]byte(path))
 

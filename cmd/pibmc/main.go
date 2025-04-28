@@ -111,14 +111,27 @@ func decodeBootEntry(data []byte) (string, error) {
 	// Extract MAC address (fixed position based on observed structure)
 	macStart := 24 // Position where MAC is expected
 	macBytes := data[macStart : macStart+6]
-	macAddr := fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", macBytes[0], macBytes[1], macBytes[2], macBytes[3], macBytes[4], macBytes[5])
+	macAddr := fmt.Sprintf(
+		"%02X:%02X:%02X:%02X:%02X:%02X",
+		macBytes[0],
+		macBytes[1],
+		macBytes[2],
+		macBytes[3],
+		macBytes[4],
+		macBytes[5],
+	)
 
 	// Extract optional data (last 16 bytes)
 	optDataStart := len(data) - 16
 	optDataHex := hex.EncodeToString(data[optDataStart:])
 
 	// Format decoded output
-	decoded := fmt.Sprintf(`title="%s (MAC:%s)" devpath=MAC()/IPv4() optdata=%s`, title, macAddr, optDataHex)
+	decoded := fmt.Sprintf(
+		`title="%s (MAC:%s)" devpath=MAC()/IPv4() optdata=%s`,
+		title,
+		macAddr,
+		optDataHex,
+	)
 
 	// Include boot entry info if applicable
 	if isBootEntry {
@@ -168,7 +181,6 @@ func encodeDWord(value uint32) string {
 // }
 
 func main() {
-
 	readFile()
 	readFile()
 
@@ -208,7 +220,12 @@ func main() {
 
 	fmt.Println("Decoding UEFI PXE data...")
 
-	fmt.Printf("title=\"%s\" devpath=%s optdata=%s\n", bootent.Title, bootent.DevicePath.String(), bootent.OptData)
+	fmt.Printf(
+		"title=\"%s\" devpath=%s optdata=%s\n",
+		bootent.Title,
+		bootent.DevicePath.String(),
+		bootent.OptData,
+	)
 
 	fmt.Println(bootent)
 

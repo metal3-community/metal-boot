@@ -6,9 +6,8 @@ import (
 	"fmt"
 	"io"
 	"os"
-	"sort"
-
 	"slices"
+	"sort"
 
 	"github.com/bmcpi/pibmc/internal/firmware/efi"
 	"github.com/go-logr/logr"
@@ -75,7 +74,7 @@ func (vs *Edk2VarStore) WriteVarStore(filename string, varlist efi.EfiVarList) e
 		return err
 	}
 
-	if err := os.WriteFile(filename, blob, 0644); err != nil {
+	if err := os.WriteFile(filename, blob, 0o644); err != nil {
 		vs.Logger.Error(err, "failed to write file", "filename", filename)
 		return err
 	}

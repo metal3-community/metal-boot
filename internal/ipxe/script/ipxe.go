@@ -140,7 +140,13 @@ func (h *Handler) HandlerFunc() http.HandlerFunc {
 			}
 			if err != nil || !hw.AllowNetboot {
 				w.WriteHeader(http.StatusNotFound)
-				h.Logger.Info("the hardware data for this machine, or lack there of, does not allow it to pxe", "client", ha, "error", err)
+				h.Logger.Info(
+					"the hardware data for this machine, or lack there of, does not allow it to pxe",
+					"client",
+					ha,
+					"error",
+					err,
+				)
 
 				return
 			}
@@ -156,7 +162,13 @@ func (h *Handler) HandlerFunc() http.HandlerFunc {
 			}
 			if err != nil || !hw.AllowNetboot {
 				w.WriteHeader(http.StatusNotFound)
-				h.Logger.Info("the hardware data for this machine, or lack there of, does not allow it to pxe", "client", r.RemoteAddr, "error", err)
+				h.Logger.Info(
+					"the hardware data for this machine, or lack there of, does not allow it to pxe",
+					"client",
+					r.RemoteAddr,
+					"error",
+					err,
+				)
 
 				return
 			}
@@ -166,7 +178,13 @@ func (h *Handler) HandlerFunc() http.HandlerFunc {
 
 		// If we get here, we were unable to get the MAC address from the URL path or the source IP address.
 		w.WriteHeader(http.StatusNotFound)
-		h.Logger.Info("unable to get the MAC address from the URL path or the source IP address", "client", r.RemoteAddr, "urlPath", r.URL.Path)
+		h.Logger.Info(
+			"unable to get the MAC address from the URL path or the source IP address",
+			"client",
+			r.RemoteAddr,
+			"urlPath",
+			r.URL.Path,
+		)
 	}
 }
 
@@ -206,13 +224,21 @@ func getMAC(urlPath string) (net.HardwareAddr, error) {
 	mac := path.Base(path.Dir(urlPath))
 	ha, err := net.ParseMAC(mac)
 	if err != nil {
-		return net.HardwareAddr{}, fmt.Errorf("URL path not supported, the second to last element in the URL path must be a valid mac address, err: %w", err)
+		return net.HardwareAddr{}, fmt.Errorf(
+			"URL path not supported, the second to last element in the URL path must be a valid mac address, err: %w",
+			err,
+		)
 	}
 
 	return ha, nil
 }
 
-func (h *Handler) serveBootScript(ctx context.Context, w http.ResponseWriter, name string, hw data) {
+func (h *Handler) serveBootScript(
+	ctx context.Context,
+	w http.ResponseWriter,
+	name string,
+	hw data,
+) {
 	span := trace.SpanFromContext(ctx)
 	span.SetAttributes(attribute.String("smee.script_name", name))
 	var script []byte

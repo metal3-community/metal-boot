@@ -170,7 +170,10 @@ func (c Config) initTracing(ctx context.Context) (context.Context, context.Cance
 	)
 
 	// set global propagator to tracecontext (the default is no-op).
-	prop := propagation.NewCompositeTextMapPropagator(propagation.TraceContext{}, propagation.Baggage{})
+	prop := propagation.NewCompositeTextMapPropagator(
+		propagation.TraceContext{},
+		propagation.Baggage{},
+	)
 	otel.SetTextMapPropagator(prop)
 
 	// inject the tracer into the otel globals, start background goroutines

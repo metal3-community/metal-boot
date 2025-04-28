@@ -13,7 +13,6 @@ func PowerOn(c *gin.Context) {
 	hostname := c.Param("host")
 	hostIP := os.Getenv(hostname)
 	data, err := c.GetRawData()
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -57,7 +56,6 @@ func PowerOff(c *gin.Context) {
 	hostname := c.Param("host")
 	hostIP := os.Getenv(hostname)
 	data, err := c.GetRawData()
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -100,7 +98,6 @@ func Cycle(c *gin.Context) {
 	hostname := c.Param("host")
 	hostIP := os.Getenv(hostname)
 	data, err := c.GetRawData()
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -137,14 +134,12 @@ func Cycle(c *gin.Context) {
 	} else {
 		c.JSON(http.StatusOK, gin.H{"message": "Compute node already powered off"})
 	}
-
 }
 
 func Soft(c *gin.Context) {
 	hostname := c.Param("host")
 	hostIP := os.Getenv(hostname)
 	data, err := c.GetRawData()
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return
@@ -189,7 +184,6 @@ func Reset(c *gin.Context) {
 	hostname := c.Param("host")
 	hostIP := os.Getenv(hostname)
 	data, err := c.GetRawData()
-
 	if err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{"error": err.Error()})
 		return

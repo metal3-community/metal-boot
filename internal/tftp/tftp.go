@@ -18,7 +18,6 @@ import (
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
 	"github.com/bmcpi/pibmc/internal/firmware/edk2"
 	"github.com/go-logr/logr"
-
 	"github.com/pin/tftp/v3"
 	"github.com/tinkerbell/ipxedust/binary"
 )
@@ -48,7 +47,11 @@ func (h Handler) OnFailure(stats tftp.TransferStats, err error) {
 }
 
 // ListenAndServe sets up the listener on the given address and serves TFTP requests.
-func (r *Server) ListenAndServe(ctx context.Context, addr netip.AddrPort, backend handler.BackendReader) error {
+func (r *Server) ListenAndServe(
+	ctx context.Context,
+	addr netip.AddrPort,
+	backend handler.BackendReader,
+) error {
 	tftpHandler := &Handler{
 		ctx:           ctx,
 		RootDirectory: r.RootDirectory,
@@ -91,7 +94,10 @@ func Serve(_ context.Context, conn net.PacketConn, s *tftp.Server) error {
 	return s.Serve(conn)
 }
 
-func (h *Handler) getDhcpInfo(ctx context.Context, f any) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (h *Handler) getDhcpInfo(
+	ctx context.Context,
+	f any,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	outgoingTransfer, ok := f.(tftp.OutgoingTransfer)
 	if !ok {
 		err := fmt.Errorf("invalid type: %w", os.ErrInvalid)
@@ -183,7 +189,7 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
 		if !root.Exists(filedir) {
 			h.Log.Info("creating directories for %s", rootpath)
 			// If the mac address directory does not exist, create it.
-			err := root.MkdirAll(filedir, 0755)
+			err := root.MkdirAll(filedir, 0o755)
 			if err != nil {
 				h.Log.Error(err, "creating directory failed", "directory", filedir)
 				return fmt.Errorf("creating %s: %w", filedir, err)
@@ -238,7 +244,16 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
 		ct := bytes.NewReader([]byte(pxeConfig))
 		b, err := rf.ReadFrom(ct)
 		if err != nil {
-			h.Log.Error(err, "file serve failed", "fullfilepath", fullfilepath, "b", b, "contentSize", len(content))
+			h.Log.Error(
+				err,
+				"file serve failed",
+				"fullfilepath",
+				fullfilepath,
+				"b",
+				b,
+				"contentSize",
+				len(content),
+			)
 			return err
 		} else {
 			h.Log.Info("file served", "bytesSent", b, "contentSize", len(content))
@@ -333,7 +348,12 @@ func (h *Handler) createFile(root *Root, filename string, content []byte) error 
 var magicString = []byte(`#a8b7e61f1075c37a793f2f92cee89f7bba00c4a8d7842ce3d40b5889032d8881
 #ddd16a4fc4926ecefdfb6941e33c44ed3647133638f5e84021ea44d3152e7f97`)
 
-func (h *Handler) HandleIpxeRead(filename string, rf io.ReaderFrom, content []byte, patch string) error {
+func (h *Handler) HandleIpxeRead(
+	filename string,
+	rf io.ReaderFrom,
+	content []byte,
+	patch string,
+) error {
 	if patch == "" {
 		patch = h.Patch
 	}
@@ -359,7 +379,6 @@ func (h *Handler) HandleIpxeRead(filename string, rf io.ReaderFrom, content []by
 
 // HandleWrite handles TFTP PUT requests. It will always return an error. This library does not support PUT.
 func (h *Handler) HandleWrite(fullfilepath string, wt io.WriterTo) error {
-
 	dhcpInfo, _, _, err := h.getDhcpInfo(h.ctx, wt)
 	if err != nil {
 		return err
@@ -390,7 +409,7 @@ func (h *Handler) HandleWrite(fullfilepath string, wt io.WriterTo) error {
 	}
 	defer root.Close()
 
-	file, err := root.OpenFile(fullfilepath, os.O_RDWR|os.O_CREATE, 0755)
+	file, err := root.OpenFile(fullfilepath, os.O_RDWR|os.O_CREATE, 0o755)
 	if err != nil {
 		h.Log.Error(err, "opening file failed", "filename", fullfilepath)
 		return nil

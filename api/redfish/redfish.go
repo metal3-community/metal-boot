@@ -7,8 +7,10 @@ import (
 	"net/http"
 )
 
-func (server *RedfishServer) ListenAndServe(ctx context.Context, handlers map[string]http.HandlerFunc) error {
-
+func (server *RedfishServer) ListenAndServe(
+	ctx context.Context,
+	handlers map[string]http.HandlerFunc,
+) error {
 	m := http.NewServeMux()
 
 	options := StdHTTPServerOptions{

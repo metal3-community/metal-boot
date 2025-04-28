@@ -33,7 +33,6 @@ type Persist struct {
 
 // NewPersist creates a new file watcher.
 func NewPersist(l logr.Logger, config *config.Config) (*Persist, error) {
-
 	fileBackend, err := file.NewWatcher(l, config.BackendFilePath)
 	if err != nil {
 		return nil, err
@@ -54,7 +53,10 @@ func NewPersist(l logr.Logger, config *config.Config) (*Persist, error) {
 
 // GetByMac is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Persist) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (w *Persist) GetByMac(
+	ctx context.Context,
+	mac net.HardwareAddr,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.persist.GetByMac")
 	defer span.End()
@@ -91,7 +93,10 @@ func (w *Persist) GetByMac(ctx context.Context, mac net.HardwareAddr) (*data.DHC
 
 // GetByIP is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Persist) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (w *Persist) GetByIP(
+	ctx context.Context,
+	ip net.IP,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.persist.GetByIP")
 	defer span.End()
@@ -128,7 +133,13 @@ func (w *Persist) GetByIP(ctx context.Context, ip net.IP) (*data.DHCP, *data.Net
 	return d, n, p, nil
 }
 
-func (w *Persist) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n *data.Netboot, p *data.Power) error {
+func (w *Persist) Put(
+	ctx context.Context,
+	mac net.HardwareAddr,
+	d *data.DHCP,
+	n *data.Netboot,
+	p *data.Power,
+) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.persist.Put")
 	defer span.End()
@@ -153,7 +164,6 @@ func (w *Persist) Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n
 }
 
 func (p *Persist) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
-
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.PowerCycle")
 	defer span.End()
@@ -162,7 +172,6 @@ func (p *Persist) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 }
 
 func (w *Persist) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
-
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.GetKeys")
 	defer span.End()
@@ -175,7 +184,10 @@ func (w *Persist) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
 
 	if k, err := w.remoteBackend.GetKeys(ctx); err == nil {
 		for _, key := range k {
-			if slices.ContainsFunc(keys, func(e net.HardwareAddr) bool { return e.String() == key.String() }) {
+			if slices.ContainsFunc(
+				keys,
+				func(e net.HardwareAddr) bool { return e.String() == key.String() },
+			) {
 				continue
 			}
 			keys = append(keys, key)

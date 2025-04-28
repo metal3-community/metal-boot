@@ -10,10 +10,16 @@ import (
 	"unicode/utf16"
 )
 
+// DeviceType represents the type of EFI device path element
+type DeviceType uint8
+
 const (
-	DevTypeMessage = 0x03
-	DevTypeMedia   = 0x04
-	DevTypeFile    = 0x05
+	DevTypeHardware DeviceType = 0x01
+	DevTypeAcpi     DeviceType = 0x02
+	DevTypeMessage  DeviceType = 0x03
+	DevTypeMedia    DeviceType = 0x04
+	DevTypeFile     DeviceType = 0x05
+	DevTypeEnd      DeviceType = 0x7f
 )
 
 //
@@ -107,7 +113,7 @@ func ucs16FromUcs16(data []byte, offset int) string {
 
 // DevicePathElem is a class representing an efi device path element.
 type DevicePathElem struct {
-	Devtype uint8
+	Devtype DeviceType
 	Subtype uint8
 	Data    []byte
 }
@@ -116,12 +122,12 @@ type DevicePathElem struct {
 // If data is provided, it unpacks devtype, subtype, and the size from the data.
 func NewDevicePathElem(data []byte) *DevicePathElem {
 	dpe := &DevicePathElem{
-		Devtype: 0x7f,
+		Devtype: DevTypeEnd,
 		Subtype: 0xff,
 		Data:    []byte{},
 	}
 	if len(data) >= 4 {
-		dpe.Devtype = data[0]
+		dpe.Devtype = DeviceType(data[0])
 		dpe.Subtype = data[1]
 		size := binary.LittleEndian.Uint16(data[2:4])
 		if int(size) > 4 && int(size) <= len(data) {
@@ -337,7 +343,7 @@ func (dpe *DevicePathElem) size() int {
 
 func (dpe *DevicePathElem) Bytes() []byte {
 	buf := new(bytes.Buffer)
-	binary.Write(buf, binary.LittleEndian, dpe.Devtype)
+	binary.Write(buf, binary.LittleEndian, uint8(dpe.Devtype))
 	binary.Write(buf, binary.LittleEndian, dpe.Subtype)
 	binary.Write(buf, binary.LittleEndian, uint16(dpe.size()))
 	buf.Write(dpe.Data)
@@ -346,13 +352,13 @@ func (dpe *DevicePathElem) Bytes() []byte {
 
 func (dpe *DevicePathElem) String() string {
 	switch dpe.Devtype {
-	case 0x01:
+	case DevTypeHardware:
 		return dpe.fmt_hw()
-	case 0x02:
+	case DevTypeAcpi:
 		return dpe.fmt_acpi()
-	case 0x03:
+	case DevTypeMessage:
 		return dpe.fmt_msg()
-	case 0x04:
+	case DevTypeMedia:
 		return dpe.fmt_media()
 	}
 	return fmt.Sprintf("Unknown(type=0x%x,subtype=0x%x)", dpe.Devtype, dpe.Subtype)

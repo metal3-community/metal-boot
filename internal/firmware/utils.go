@@ -20,7 +20,12 @@ func CreateBootNetworkManager(firmwarePath string, logger logr.Logger) (Firmware
 }
 
 // ConfigureNetworkBoot sets up the firmware for optimal network booting
-func ConfigureNetworkBoot(manager FirmwareManager, mac net.HardwareAddr, enableIPv6 bool, timeout int) error {
+func ConfigureNetworkBoot(
+	manager FirmwareManager,
+	mac net.HardwareAddr,
+	enableIPv6 bool,
+	timeout int,
+) error {
 	// Set the MAC address
 	if err := manager.SetMacAddress(mac); err != nil {
 		return fmt.Errorf("failed to set MAC address: %w", err)
@@ -65,7 +70,7 @@ func BackupFirmware(firmwarePath string) (string, error) {
 		return "", fmt.Errorf("failed to read firmware file: %w", err)
 	}
 
-	if err := os.WriteFile(backupPath, sourceFile, 0644); err != nil {
+	if err := os.WriteFile(backupPath, sourceFile, 0o644); err != nil {
 		return "", fmt.Errorf("failed to write backup file: %w", err)
 	}
 
@@ -73,7 +78,12 @@ func BackupFirmware(firmwarePath string) (string, error) {
 }
 
 // CreateCustomBootEntry creates a custom boot entry for an iPXE binary
-func CreateCustomBootEntry(manager FirmwareManager, name string, ipxeUrl string, position int) error {
+func CreateCustomBootEntry(
+	manager FirmwareManager,
+	name string,
+	ipxeUrl string,
+	position int,
+) error {
 	// Create a new boot entry for iPXE
 	entry := BootEntry{
 		Name:     name,

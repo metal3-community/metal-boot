@@ -22,7 +22,13 @@ type BackendReader interface {
 type BackendWriter interface {
 	// Write data (to a backend) based on a mac address
 	// and return DHCP headers and options, including netboot info.
-	Put(ctx context.Context, mac net.HardwareAddr, d *data.DHCP, n *data.Netboot, p *data.Power) error
+	Put(
+		ctx context.Context,
+		mac net.HardwareAddr,
+		d *data.DHCP,
+		n *data.Netboot,
+		p *data.Power,
+	) error
 }
 
 type BackendPower interface {

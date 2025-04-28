@@ -86,12 +86,18 @@ type Netboot struct {
 func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Packet) {
 	// validations
 	if dp.Pkt == nil {
-		h.Log.Error(errors.New("incoming packet is nil"), "not able to respond when the incoming packet is nil")
+		h.Log.Error(
+			errors.New("incoming packet is nil"),
+			"not able to respond when the incoming packet is nil",
+		)
 		return
 	}
 	upeer, ok := dp.Peer.(*net.UDPAddr)
 	if !ok {
-		h.Log.Error(errors.New("peer is not a UDP connection"), "not able to respond when the peer is not a UDP connection")
+		h.Log.Error(
+			errors.New("peer is not a UDP connection"),
+			"not able to respond when the peer is not a UDP connection",
+		)
 		return
 	}
 	if upeer == nil {
@@ -99,7 +105,10 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Pac
 		return
 	}
 	if conn == nil {
-		h.Log.Error(errors.New("connection is nil"), "not able to respond when the connection is nil")
+		h.Log.Error(
+			errors.New("connection is nil"),
+			"not able to respond when the connection is nil",
+		)
 		return
 	}
 
@@ -107,7 +116,14 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Pac
 	if dp.Md != nil {
 		ifName = dp.Md.IfName
 	}
-	log := h.Log.WithValues("mac", dp.Pkt.ClientHWAddr.String(), "xid", dp.Pkt.TransactionID.String(), "interface", ifName)
+	log := h.Log.WithValues(
+		"mac",
+		dp.Pkt.ClientHWAddr.String(),
+		"xid",
+		dp.Pkt.TransactionID.String(),
+		"interface",
+		ifName,
+	)
 	tracer := otel.Tracer(tracerName)
 	var span trace.Span
 	ctx, span = tracer.Start(
@@ -140,7 +156,12 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Pac
 	}
 
 	// Set option 97
-	reply.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionClientMachineIdentifier, dp.Pkt.GetOneOption(dhcpv4.OptionClientMachineIdentifier)))
+	reply.UpdateOption(
+		dhcpv4.OptGeneric(
+			dhcpv4.OptionClientMachineIdentifier,
+			dp.Pkt.GetOneOption(dhcpv4.OptionClientMachineIdentifier),
+		),
+	)
 
 	i := dhcp.NewInfo(dp.Pkt)
 
@@ -152,7 +173,10 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Pac
 	}
 	if err := i.IsNetbootClient; err != nil {
 		log.V(1).Info("Ignoring packet: not from a PXE enabled client", "error", err.Error())
-		span.SetStatus(codes.Ok, fmt.Sprintf("Ignoring packet: not from a PXE enabled client: %s", err.Error()))
+		span.SetStatus(
+			codes.Ok,
+			fmt.Sprintf("Ignoring packet: not from a PXE enabled client: %s", err.Error()),
+		)
 
 		return
 	}
@@ -164,8 +188,12 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Pac
 	}
 
 	// Set option 43
-	opts := dhcpv4.Options{6: []byte{8}} // PXE Boot Server Discovery Control - bypass, just boot from dhcp header: bootfile. No need to set opt for tftp server address.
-	reply.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, i.AddRPIOpt43(opts)))
+	opts := dhcpv4.Options{
+		6: []byte{8},
+	} // PXE Boot Server Discovery Control - bypass, just boot from dhcp header: bootfile. No need to set opt for tftp server address.
+	reply.UpdateOption(
+		dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, i.AddRPIOpt43(opts)),
+	)
 
 	// Set option 60
 	// The PXE spec says the server should identify itself as a PXEClient or HTTPClient
@@ -186,7 +214,12 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, dp data.Pac
 	// setSNAME(reply, dp.Pkt.GetOneOption(dhcpv4.OptionClassIdentifier), h.Netboot.IPXEBinServerTFTP.Addr().AsSlice(), net.ParseIP(h.Netboot.IPXEBinServerHTTP.Hostname()))
 
 	// set bootfile header
-	reply.BootFileName = i.Bootfile("", h.Netboot.IPXEScriptURL(dp.Pkt), h.Netboot.IPXEBinServerHTTP, h.Netboot.IPXEBinServerTFTP)
+	reply.BootFileName = i.Bootfile(
+		"",
+		h.Netboot.IPXEScriptURL(dp.Pkt),
+		h.Netboot.IPXEBinServerHTTP,
+		h.Netboot.IPXEBinServerTFTP,
+	)
 
 	log.Info(
 		"received DHCP packet",
@@ -233,7 +266,10 @@ func setMessageType(reply *dhcpv4.DHCPv4, reqMsg dhcpv4.MessageType) error {
 	case dhcpv4.MessageTypeRequest:
 		reply.UpdateOption(dhcpv4.OptMessageType(dhcpv4.MessageTypeAck))
 	default:
-		return IgnorePacketError{PacketType: mt, Details: "proxyDHCP only responds to Discover or Request message types"}
+		return IgnorePacketError{
+			PacketType: mt,
+			Details:    "proxyDHCP only responds to Discover or Request message types",
+		}
 	}
 	return nil
 }

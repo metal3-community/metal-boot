@@ -36,7 +36,12 @@ type RegistrationFunc = func(router *http.ServeMux)
 
 // ServeHTTP sets up all the HTTP routes using a stdlib mux and starts the http
 // server, which will block. App functionality is instrumented in Prometheus and OpenTelemetry.
-func (s *Config) ServeHTTP(ctx context.Context, addr string, handlers HandlerMapping, registrations ...RegistrationFunc) error {
+func (s *Config) ServeHTTP(
+	ctx context.Context,
+	addr string,
+	handlers HandlerMapping,
+	registrations ...RegistrationFunc,
+) error {
 	mux := http.NewServeMux()
 
 	for pattern, handler := range handlers {
@@ -122,13 +127,15 @@ func (s *Config) serveHealthchecker(rev string, start time.Time) http.HandlerFun
 
 // otelFuncWrapper takes a route and an http handler function, wraps the function
 // with otelhttp, and returns the route again and http.Handler all set for mux.Handle().
-func otelFuncWrapper(route string, h func(w http.ResponseWriter, req *http.Request)) (string, http.Handler) {
+func otelFuncWrapper(
+	route string,
+	h func(w http.ResponseWriter, req *http.Request),
+) (string, http.Handler) {
 	return route, otelhttp.WithRouteTag(route, http.HandlerFunc(h))
 }
 
 func (c *Config) HandlerFunc() http.HandlerFunc {
 	return func(w http.ResponseWriter, req *http.Request) {
-
 		basePath := filepath.Base(req.URL.Path)
 
 		if _, ok := binary.Files[basePath]; ok {
