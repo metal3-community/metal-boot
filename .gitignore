@@ -19,3 +19,4 @@ images/
 tools/*.json
 _out/
 tools/*/
+*.fd

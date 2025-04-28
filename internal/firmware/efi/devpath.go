@@ -22,6 +22,42 @@ const (
 	DevTypeEnd      DeviceType = 0x7f
 )
 
+// DeviceSubType represents the subtype of EFI device path element
+type DeviceSubType uint8
+
+// Hardware subtypes
+const (
+	DevSubTypePCI      DeviceSubType = 0x01
+	DevSubTypeVendorHW DeviceSubType = 0x04
+)
+
+// ACPI subtypes
+const (
+	DevSubTypeACPI DeviceSubType = 0x01
+	DevSubTypeGOP  DeviceSubType = 0x03
+)
+
+// Message subtypes
+const (
+	DevSubTypeSCSI  DeviceSubType = 0x02
+	DevSubTypeUSB   DeviceSubType = 0x05
+	DevSubTypeMAC   DeviceSubType = 0x0b
+	DevSubTypeIPv4  DeviceSubType = 0x0c
+	DevSubTypeIPv6  DeviceSubType = 0x0d
+	DevSubTypeSATA  DeviceSubType = 0x12
+	DevSubTypeISCSI DeviceSubType = 0x13
+	DevSubTypeURI   DeviceSubType = 0x18
+	DevSubTypeDNS   DeviceSubType = 0x1f
+)
+
+// Media subtypes
+const (
+	DevSubTypePartition  DeviceSubType = 0x01
+	DevSubTypeFilePath   DeviceSubType = 0x04
+	DevSubTypeFVFilename DeviceSubType = 0x06
+	DevSubTypeFVName     DeviceSubType = 0x07
+)
+
 //
 // The following helper code emulates the functionality of the Python modules:
 //   - guids (provides GUID parsing and formatting)
@@ -114,7 +150,7 @@ func ucs16FromUcs16(data []byte, offset int) string {
 // DevicePathElem is a class representing an efi device path element.
 type DevicePathElem struct {
 	Devtype DeviceType
-	Subtype uint8
+	Subtype DeviceSubType
 	Data    []byte
 }
 
@@ -123,12 +159,12 @@ type DevicePathElem struct {
 func NewDevicePathElem(data []byte) *DevicePathElem {
 	dpe := &DevicePathElem{
 		Devtype: DevTypeEnd,
-		Subtype: 0xff,
+		Subtype: DeviceSubType(0xff),
 		Data:    []byte{},
 	}
 	if len(data) >= 4 {
 		dpe.Devtype = DeviceType(data[0])
-		dpe.Subtype = data[1]
+		dpe.Subtype = DeviceSubType(data[1])
 		size := binary.LittleEndian.Uint16(data[2:4])
 		if int(size) > 4 && int(size) <= len(data) {
 			dpe.Data = data[4:int(size)]
@@ -139,25 +175,25 @@ func NewDevicePathElem(data []byte) *DevicePathElem {
 
 func (dpe *DevicePathElem) set_mac() {
 	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x0b           // mac
+	dpe.Subtype = DevSubTypeMAC  // mac
 	dpe.Data = make([]byte, 6)   // use dhcp
 }
 
 func (dpe *DevicePathElem) set_ipv4() {
 	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x0c           // ipv4
+	dpe.Subtype = DevSubTypeIPv4 // ipv4
 	dpe.Data = make([]byte, 23)  // use dhcp
 }
 
 func (dpe *DevicePathElem) set_ipv6() {
 	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x0d           // ipv6
+	dpe.Subtype = DevSubTypeIPv6 // ipv6
 	dpe.Data = make([]byte, 39)  // use dhcp
 }
 
 func (dpe *DevicePathElem) set_iscsi(target string) {
-	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x13           // iscsi
+	dpe.Devtype = DevTypeMessage  // msg
+	dpe.Subtype = DevSubTypeISCSI // iscsi
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, uint16(0)) // reserved
 	binary.Write(&buf, binary.LittleEndian, uint16(0)) // reserved
@@ -167,7 +203,7 @@ func (dpe *DevicePathElem) set_iscsi(target string) {
 
 func (dpe *DevicePathElem) set_sata(port uint16) {
 	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x12           // sata
+	dpe.Subtype = DevSubTypeSATA // sata
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, port)
 	dpe.Data = buf.Bytes()
@@ -175,25 +211,25 @@ func (dpe *DevicePathElem) set_sata(port uint16) {
 
 func (dpe *DevicePathElem) set_usb(port uint8) {
 	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x05           // usb
+	dpe.Subtype = DevSubTypeUSB  // usb
 	dpe.Data = []byte{port, 0}   // port, interface (not used)
 }
 
 func (dpe *DevicePathElem) set_uri(uri string) {
 	dpe.Devtype = DevTypeMessage // msg
-	dpe.Subtype = 0x18           // uri
+	dpe.Subtype = DevSubTypeURI  // uri
 	dpe.Data = []byte(uri)
 }
 
 func (dpe *DevicePathElem) set_filepath(filepath string) {
-	dpe.Devtype = DevTypeMedia // media
-	dpe.Subtype = 0x04         // filepath
+	dpe.Devtype = DevTypeMedia       // media
+	dpe.Subtype = DevSubTypeFilePath // filepath
 	dpe.Data = ucs16FromString(filepath)
 }
 
 func (dpe *DevicePathElem) set_fvname(guid string) {
-	dpe.Devtype = DevTypeMedia // media
-	dpe.Subtype = 0x07         // fv name
+	dpe.Devtype = DevTypeMedia     // media
+	dpe.Subtype = DevSubTypeFVName // fv name
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
@@ -205,8 +241,8 @@ func (dpe *DevicePathElem) set_fvname(guid string) {
 }
 
 func (dpe *DevicePathElem) set_fvfilename(guid string) {
-	dpe.Devtype = DevTypeMedia // media
-	dpe.Subtype = 0x06         // fv filename
+	dpe.Devtype = DevTypeMedia         // media
+	dpe.Subtype = DevSubTypeFVFilename // fv filename
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
@@ -218,8 +254,8 @@ func (dpe *DevicePathElem) set_fvfilename(guid string) {
 }
 
 func (dpe *DevicePathElem) set_gpt(pnr uint32, poff uint64, plen uint64, guid string) {
-	dpe.Devtype = DevTypeMedia // media
-	dpe.Subtype = 0x01         // hard drive
+	dpe.Devtype = DevTypeMedia        // media
+	dpe.Subtype = DevSubTypePartition // hard drive
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, pnr)
 	binary.Write(&buf, binary.LittleEndian, poff)
@@ -234,12 +270,12 @@ func (dpe *DevicePathElem) set_gpt(pnr uint32, poff uint64, plen uint64, guid st
 }
 
 func (dpe *DevicePathElem) fmt_hw() string {
-	if dpe.Subtype == 0x01 && len(dpe.Data) >= 2 {
+	if dpe.Subtype == DevSubTypePCI && len(dpe.Data) >= 2 {
 		funcVal := dpe.Data[0]
 		devVal := dpe.Data[1]
 		return fmt.Sprintf("PCI(dev=%02x:%x)", devVal, funcVal)
 	}
-	if dpe.Subtype == 0x04 {
+	if dpe.Subtype == DevSubTypeVendorHW {
 		guidObj, err := guidsParseBin(dpe.Data, 0)
 		if err == nil {
 			return fmt.Sprintf("VendorHW(%s)", guidObj.String())
@@ -250,7 +286,7 @@ func (dpe *DevicePathElem) fmt_hw() string {
 }
 
 func (dpe *DevicePathElem) fmt_acpi() string {
-	if dpe.Subtype == 0x01 && len(dpe.Data) >= 8 {
+	if dpe.Subtype == DevSubTypeACPI && len(dpe.Data) >= 8 {
 		hid := binary.LittleEndian.Uint32(dpe.Data[0:4])
 		uid := binary.LittleEndian.Uint32(dpe.Data[4:8])
 		if hid == 0xa0341d0 {
@@ -258,7 +294,7 @@ func (dpe *DevicePathElem) fmt_acpi() string {
 		}
 		return fmt.Sprintf("ACPI(hid=0x%x,uid=0x%x)", hid, uid)
 	}
-	if dpe.Subtype == 0x03 && len(dpe.Data) >= 4 {
+	if dpe.Subtype == DevSubTypeGOP && len(dpe.Data) >= 4 {
 		adr := binary.LittleEndian.Uint32(dpe.Data[0:4])
 		return fmt.Sprintf("GOP(adr=0x%x)", adr)
 	}
@@ -266,14 +302,14 @@ func (dpe *DevicePathElem) fmt_acpi() string {
 }
 
 func (dpe *DevicePathElem) fmt_msg() string {
-	if dpe.Subtype == 0x02 {
+	if dpe.Subtype == DevSubTypeSCSI {
 		if len(dpe.Data) >= 4 {
 			pun := binary.LittleEndian.Uint16(dpe.Data[0:2])
 			lun := binary.LittleEndian.Uint16(dpe.Data[2:4])
 			return fmt.Sprintf("SCSI(pun=%d,lun=%d)", pun, lun)
 		}
 	}
-	if dpe.Subtype == 0x05 {
+	if dpe.Subtype == DevSubTypeUSB {
 		if len(dpe.Data) >= 2 {
 			port := dpe.Data[0]
 			intf := dpe.Data[1]
@@ -281,53 +317,53 @@ func (dpe *DevicePathElem) fmt_msg() string {
 			return fmt.Sprintf("USB(port=%d)", port)
 		}
 	}
-	if dpe.Subtype == 0x0b {
+	if dpe.Subtype == DevSubTypeMAC {
 		return "MAC()"
 	}
-	if dpe.Subtype == 0x0c {
+	if dpe.Subtype == DevSubTypeIPv4 {
 		return "IPv4()"
 	}
-	if dpe.Subtype == 0x0d {
+	if dpe.Subtype == DevSubTypeIPv6 {
 		return "IPv6()"
 	}
-	if dpe.Subtype == 0x12 {
+	if dpe.Subtype == DevSubTypeSATA {
 		if len(dpe.Data) >= 6 {
 			port := binary.LittleEndian.Uint16(dpe.Data[0:2])
 			return fmt.Sprintf("SATA(port=%d)", port)
 		}
 	}
-	if dpe.Subtype == 0x13 {
+	if dpe.Subtype == DevSubTypeISCSI {
 		if len(dpe.Data) >= 14 {
 			target := string(dpe.Data[14:])
 			return fmt.Sprintf("ISCSI(%s)", target)
 		}
 	}
-	if dpe.Subtype == 0x18 {
+	if dpe.Subtype == DevSubTypeURI {
 		return fmt.Sprintf("URI(%s)", string(dpe.Data))
 	}
-	if dpe.Subtype == 0x1f {
+	if dpe.Subtype == DevSubTypeDNS {
 		return "DNS()"
 	}
 	return fmt.Sprintf("Msg(subtype=0x%x)", dpe.Subtype)
 }
 
 func (dpe *DevicePathElem) fmt_media() string {
-	if dpe.Subtype == 0x01 && len(dpe.Data) >= 20 {
+	if dpe.Subtype == DevSubTypePartition && len(dpe.Data) >= 20 {
 		pnr := binary.LittleEndian.Uint32(dpe.Data[0:4])
 		return fmt.Sprintf("Partition(nr=%d)", pnr)
 	}
-	if dpe.Subtype == 0x04 {
+	if dpe.Subtype == DevSubTypeFilePath {
 		path := ucs16FromUcs16(dpe.Data, 0)
 		return fmt.Sprintf("FilePath(%s)", path)
 	}
-	if dpe.Subtype == 0x06 {
+	if dpe.Subtype == DevSubTypeFVFilename {
 		guidObj, err := guidsParseBin(dpe.Data, 0)
 		if err == nil {
 			return fmt.Sprintf("FvFileName(%s)", guidObj.String())
 		}
 		return fmt.Sprintf("FvFileName(ERROR:%v)", err)
 	}
-	if dpe.Subtype == 0x07 {
+	if dpe.Subtype == DevSubTypeFVName {
 		guidObj, err := guidsParseBin(dpe.Data, 0)
 		if err == nil {
 			return fmt.Sprintf("FvName(%s)", guidObj.String())
@@ -344,7 +380,7 @@ func (dpe *DevicePathElem) size() int {
 func (dpe *DevicePathElem) Bytes() []byte {
 	buf := new(bytes.Buffer)
 	binary.Write(buf, binary.LittleEndian, uint8(dpe.Devtype))
-	binary.Write(buf, binary.LittleEndian, dpe.Subtype)
+	binary.Write(buf, binary.LittleEndian, uint8(dpe.Subtype))
 	binary.Write(buf, binary.LittleEndian, uint16(dpe.size()))
 	buf.Write(dpe.Data)
 	return buf.Bytes()
@@ -371,7 +407,7 @@ func (dpe *DevicePathElem) Equal(other *DevicePathElem) bool {
 	if dpe.Subtype != other.Subtype {
 		return false
 	}
-	if dpe.Devtype == 0x04 && dpe.Subtype == 0x04 {
+	if dpe.Devtype == DevTypeMedia && dpe.Subtype == DevSubTypeFilePath {
 		p1 := strings.ToLower(ucs16FromUcs16(dpe.Data, 0))
 		p2 := strings.ToLower(ucs16FromUcs16(other.Data, 0))
 		return p1 == p2
@@ -386,8 +422,8 @@ type DevicePath struct {
 
 func (dp *DevicePath) VendorHW(guid GUID) *DevicePath {
 	elem := NewDevicePathElem(nil)
-	elem.Devtype = DevTypeMedia // media
-	elem.Subtype = 0x04         // vendor hardware
+	elem.Devtype = DevTypeHardware    // hardware
+	elem.Subtype = DevSubTypeVendorHW // vendor hardware
 	var buf bytes.Buffer
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
