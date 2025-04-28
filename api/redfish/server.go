@@ -17,6 +17,7 @@ import (
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
 	"github.com/bmcpi/pibmc/internal/firmware"
+	"github.com/bmcpi/pibmc/internal/firmware/edk2"
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
@@ -104,6 +105,26 @@ type RedfishServer struct {
 	backend handler.BackendStore
 
 	firmwarePath string
+}
+
+func (f *RedfishServer) GetEdk2FirmwareManager(macAddress net.HardwareAddr) (firmware.FirmwareManager, error) {
+
+	if f.firmwarePath == "" {
+		f.firmwarePath = filepath.Join(f.Config.Tftp.RootDirectory, edk2.FirmwareFileName)
+	}
+
+	firmwarePath := filepath.Join(f.Config.Tftp.RootDirectory, macAddress.String(), edk2.FirmwareFileName)
+
+	firmwareMgr, err := firmware.NewEDK2Manager(firmwarePath, f.Log)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create firmware manager: %w", err)
+	}
+
+	if _, err = firmwareMgr.GetMacAddress(); err != nil {
+		firmwareMgr.SetMacAddress(macAddress)
+	}
+
+	return firmwareMgr, nil
 }
 
 func NewRedfishServer(cfg *config.Config, backend handler.BackendStore) *RedfishServer {
@@ -1037,7 +1058,7 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 			return
 		}
 
-		firmwareMgr, err := firmware.NewEDK2Manager(s.firmwarePath, s.Log)
+		firmwareMgr, err := s.GetEdk2FirmwareManager(systemIdAddr)
 		if err != nil {
 			s.Log.Error(err, "failed to create firmware manager")
 			w.WriteHeader(http.StatusInternalServerError)

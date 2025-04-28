@@ -207,6 +207,16 @@ func (v *EfiVar) SetBool(value bool) {
 	v.updateTime(nil)
 }
 
+func (v *EfiVar) SetString(value string) {
+	buf := []byte(value)
+	// Ensure the string is null-terminated
+	if len(buf) == 0 || buf[len(buf)-1] != 0 {
+		buf = append(buf, 0)
+	}
+	v.Data = buf
+	v.updateTime(nil)
+}
+
 // SetUint32 sets a 32-bit unsigned integer value
 func (v *EfiVar) SetUint32(value uint32) {
 	buf := make([]byte, 4)
@@ -239,6 +249,13 @@ func (v *EfiVar) SetBootEntry(attr uint32, title string, path string, optdata []
 	return nil
 }
 
+func (v *EfiVar) GetBootNext() (uint16, error) {
+	if len(v.Data) < 2 {
+		return 0, errors.New("data too short for BootNext")
+	}
+	return binary.LittleEndian.Uint16(v.Data), nil
+}
+
 // SetBootNext sets the BootNext variable
 func (v *EfiVar) SetBootNext(index uint16) {
 	buf := make([]byte, 2)
@@ -250,7 +267,7 @@ func (v *EfiVar) SetBootNext(index uint16) {
 // GetBootOrder retrieves the BootOrder variable
 func (v *EfiVar) GetBootOrder() ([]uint16, error) {
 	var order []uint16
-	for pos := 0; pos < len(v.Data)/2; pos++ {
+	for pos := range len(v.Data) / 2 {
 		nr := binary.LittleEndian.Uint16(v.Data[pos*2:])
 		order = append(order, nr)
 	}

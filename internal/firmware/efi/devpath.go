@@ -131,10 +131,46 @@ func NewDevicePathElem(data []byte) *DevicePathElem {
 	return dpe
 }
 
+func (dpe *DevicePathElem) set_mac() {
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x0b           // mac
+	dpe.Data = make([]byte, 6)   // use dhcp
+}
+
 func (dpe *DevicePathElem) set_ipv4() {
 	dpe.Devtype = DevTypeMessage // msg
 	dpe.Subtype = 0x0c           // ipv4
 	dpe.Data = make([]byte, 23)  // use dhcp
+}
+
+func (dpe *DevicePathElem) set_ipv6() {
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x0d           // ipv6
+	dpe.Data = make([]byte, 39)  // use dhcp
+}
+
+func (dpe *DevicePathElem) set_iscsi(target string) {
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x13           // iscsi
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint16(0)) // reserved
+	binary.Write(&buf, binary.LittleEndian, uint16(0)) // reserved
+	buf.WriteString(target)
+	dpe.Data = buf.Bytes()
+}
+
+func (dpe *DevicePathElem) set_sata(port uint16) {
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x12           // sata
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, port)
+	dpe.Data = buf.Bytes()
+}
+
+func (dpe *DevicePathElem) set_usb(port uint8) {
+	dpe.Devtype = DevTypeMessage // msg
+	dpe.Subtype = 0x05           // usb
+	dpe.Data = []byte{port, 0}   // port, interface (not used)
 }
 
 func (dpe *DevicePathElem) set_uri(uri string) {
@@ -315,6 +351,42 @@ func (dpe *DevicePathElem) Equal(other *DevicePathElem) bool {
 type DevicePath struct {
 	elems []*DevicePathElem
 }
+
+func (dp *DevicePath) VendorHW(guid GUID) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.Devtype = DevTypeMedia // media
+	elem.Subtype = 0x04         // vendor hardware
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
+	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
+	binary.Write(&buf, binary.LittleEndian, guid.BytesLE())
+	elem.Data = buf.Bytes()
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) Mac() *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_mac()
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) IPv4() *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_ipv4()
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) GptPartition(pnr uint32, poff uint64, plen uint64, guid string) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_gpt(pnr, poff, plen, guid)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) Append(elem *DevicePathElem) *DevicePath {
 
 // NewDevicePath creates a new DevicePath from data.
 // It parses each DevicePathElem until a terminating element is found.

@@ -4,6 +4,8 @@ import (
 	_ "embed"
 )
 
+const FirmwareFileName = "RPI_EFI.fd"
+
 const edk2Conf = `arm_64bit=1
 arm_boost=1
 enable_uart=1
@@ -79,7 +81,7 @@ var ConfigTxt []byte = []byte(edk2Conf)
 
 // Files is the mapping to the embedded iPXE binaries.
 var Files = map[string][]byte{
-	"RPI_EFI.fd":                                 RpiEfi,
+	FirmwareFileName:                             RpiEfi,
 	"fixup4.dat":                                 Fixup4Dat,
 	"start4.elf":                                 Start4ElfDat,
 	"bcm2711-rpi-4-b.dtb":                        Bcm2711Rpi4BDtb,

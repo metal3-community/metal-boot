@@ -25,6 +25,7 @@ type BootEntry struct {
 	Name     string
 	DevPath  string
 	Enabled  bool
+	OptData  string
 	Position int
 }
 
@@ -37,6 +38,9 @@ type FirmwareManager interface {
 	AddBootEntry(entry BootEntry) error
 	UpdateBootEntry(id string, entry BootEntry) error
 	DeleteBootEntry(id string) error
+
+	SetBootNext(index uint16) error
+	GetBootNext() (uint16, error)
 
 	// Network Management
 	GetNetworkSettings() (NetworkSettings, error)

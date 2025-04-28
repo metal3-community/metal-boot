@@ -18,6 +18,7 @@ const (
 
 	BootOrderName       = "BootOrder"
 	BootPrefix          = "Boot"
+	BootNextName        = "BootNext"
 	EFI_GLOBAL_VARIABLE = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
 
 	Ffs          = "8c8ce578-8a3d-4f1c-9935-896185c32dd3"
@@ -29,10 +30,12 @@ const (
 	OvmfPeiFv = "6938079b-b503-4e3d-9d24-b28337a25806"
 	OvmfDxeFv = "7cb8bdc9-f8eb-4f34-aaea-3ee4af6516a1"
 
-	EfiGlobalVariable          = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
-	EfiImageSecurityDatabase   = "d719b2cb-3d3a-4596-a3bc-dad00e67656f"
-	EfiSecureBootEnableDisable = "f0a30bc7-af08-4556-99c4-001009c93a44"
-	EfiCustomModeEnable        = "c076ec0c-7028-4399-a072-71ee5c448b9f"
+	EfiGlobalVariable              = "8be4df61-93ca-11d2-aa0d-00e098032b8c"
+	EfiImageSecurityDatabase       = "d719b2cb-3d3a-4596-a3bc-dad00e67656f"
+	EfiSecureBootEnableDisable     = "f0a30bc7-af08-4556-99c4-001009c93a44"
+	EfiCustomModeEnable            = "c076ec0c-7028-4399-a072-71ee5c448b9f"
+	EfiDhcp6ServiceBindingProtocol = "9fb9a8a1-2f4a-43a6-889c-d0f7b6c47ad5"
+	EfiIp6ConfigProtocol           = "937fe521-95ae-4d1a-8929-48bcd90ad31a"
 
 	EfiCertX509   = "a5c059a1-94e4-4aa7-87b5-ab155c2bf072"
 	EfiCertSha256 = "c1c41626-504c-4092-aca9-41f936934328"

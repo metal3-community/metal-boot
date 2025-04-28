@@ -4,10 +4,12 @@ import (
 	"fmt"
 	"net"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"time"
 
+	"github.com/bmcpi/pibmc/internal/firmware/edk2"
 	"github.com/bmcpi/pibmc/internal/firmware/efi"
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/go-logr/logr"
@@ -28,9 +30,35 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 		logger:       logger.WithName("edk2-manager"),
 	}
 
+	if _, err := os.Stat(firmwarePath); os.IsNotExist(err) {
+
+		firmwareRoot := filepath.Dir(firmwarePath)
+
+		if err := os.MkdirAll(firmwareRoot, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create firmware directory: %w", err)
+		}
+
+		for k, f := range edk2.Files {
+			kf := filepath.Join(firmwareRoot, k)
+			kfr := filepath.Dir(kf)
+
+			if kfr != firmwareRoot {
+				if err := os.MkdirAll(kfr, 0755); err != nil {
+					return nil, fmt.Errorf("failed to create firmware directory: %w", err)
+				}
+			}
+
+			if err := os.WriteFile(kf, f, 0644); err != nil {
+				return nil, fmt.Errorf("failed to create firmware file: %w", err)
+			}
+		}
+	} else {
+		return nil, fmt.Errorf("firmware file already exists: %s", firmwarePath)
+	}
+
 	// Initialize the variable store
 	manager.varStore = varstore.NewEdk2VarStore(firmwarePath)
-	manager.varStore.Logger = logger
+	manager.varStore.Logger = logger.WithName("edk2-varstore")
 
 	// Load the variable list
 	var err error
@@ -64,6 +92,14 @@ func (m *EDK2Manager) GetBootOrder() ([]string, error) {
 
 func (m *EDK2Manager) SetBootNext(index uint16) error {
 	return m.varList.SetBootNext(index)
+}
+
+func (m *EDK2Manager) GetBootNext() (uint16, error) {
+	bootNextVar, found := m.varList[efi.BootNextName]
+	if !found {
+		return 0, nil
+	}
+	return bootNextVar.GetBootNext()
 }
 
 // SetBootOrder sets the boot order from a list of entry IDs
@@ -182,7 +218,7 @@ func (m *EDK2Manager) AddBootEntry(entry BootEntry) error {
 	}
 
 	// Set the boot entry with the specified title and device path
-	err := bootEntryVar.SetBootEntry(attr, entry.Name, entry.DevPath, nil)
+	err := bootEntryVar.SetBootEntry(attr, entry.Name, entry.DevPath, []byte(entry.OptData))
 	if err != nil {
 		return fmt.Errorf("failed to set boot entry: %w", err)
 	}
@@ -447,6 +483,64 @@ func (m *EDK2Manager) GetMacAddress() (net.HardwareAddr, error) {
 	return nil, fmt.Errorf("MAC address not found")
 }
 
+func (m *EDK2Manager) SetDefaultBootEntries() error {
+	entries, err := m.GetBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to get boot entries: %w", err)
+	}
+	if len(entries) > 0 {
+		return nil
+	}
+
+	defaultBootEntries := []BootEntry{
+		{
+			Name:    "UiApp",
+			DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(462caa21-7614-4503-836e-8ab6f4662331)",
+		},
+		{
+			Name:    "SD/MMC on Arasan SDHCI",
+			DevPath: "VendorHW(100c2cfa-b586-4198-9b4c-1683d195b1da)",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI SupTronics X862 202101000087",
+			DevPath: "ACPI(hid=0xa0841d0,uid=0x0)/PCI(dev=00:0)/PCI(dev=00:0)/USB(port=2)",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI PXEv4 (MAC:000000000000)",
+			DevPath: "MAC()/IPv4()",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI PXEv6 (MAC:000000000000)",
+			DevPath: "MAC()/IPv6()",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI HTTPv4 (MAC:000000000000)",
+			DevPath: "MAC()/IPv4()/URI()",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI HTTPv6 (MAC:000000000000)",
+			DevPath: "MAC()/IPv6()/URI()",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI Shell",
+			DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)",
+		},
+	}
+
+	for _, entry := range defaultBootEntries {
+		if err := m.AddBootEntry(entry); err != nil {
+			return fmt.Errorf("failed to add default boot entry: %w", err)
+		}
+	}
+	return nil
+}
+
 // SetMacAddress sets the MAC address in the firmware
 func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	if mac == nil {
@@ -456,8 +550,22 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	// Format MAC address without colons
 	macStr := strings.ToUpper(strings.ReplaceAll(mac.String(), ":", ""))
 
+	clientId := m.getOrCreateVar("ClientId", efi.EfiDhcp6ServiceBindingProtocol)
+	clientIdStr := fmt.Sprintf("120000041531c000000000000000%s", strings.ToLower(macStr))
+	clientId.SetString(clientIdStr)
+
+	ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
+	ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
+	uniqueID := macStr[len(macStr)/2:]
+	ndl.SetString(fmt.Sprintf("030b2500d83add%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(uniqueID)))
+
 	// Set the dedicated MAC address variable
-	_ = m.getOrCreateVar(macStr, "937fe521-95ae-4d1a-8929-48bcd90ad31a")
+	_ = m.getOrCreateVar(macStr, efi.EfiIp6ConfigProtocol)
+
+	err := m.SetDefaultBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to set default boot entries: %w", err)
+	}
 
 	// Update MAC address in boot entries
 	entries, err := m.GetBootEntries()
