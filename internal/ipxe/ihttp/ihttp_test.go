@@ -231,7 +231,7 @@ func TestExtractTraceparentFromFilename(t *testing.T) {
 			ctx, outfile, err := extractTraceparentFromFilename(ctx, tc.fileIn)
 			if !errors.Is(err, tc.err) {
 				if diff := cmp.Diff(fmt.Sprint(err), fmt.Sprint(tc.err)); diff != "" {
-					t.Errorf(diff)
+					t.Error(diff)
 					t.Errorf(
 						"filename %q should have resulted in error %q but got %q",
 						tc.fileIn,

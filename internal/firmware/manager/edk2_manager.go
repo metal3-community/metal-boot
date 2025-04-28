@@ -121,16 +121,18 @@ func (m *EDK2Manager) GetBootEntries() ([]types.BootEntry, error) {
 	var bootEntries []types.BootEntry
 
 	for _, v := range m.varList {
-		if !strings.HasPrefix(v.Name, "Boot") || v.Name == "BootOrder" || v.Name == "BootNext" {
+		name := v.Name.String()
+
+		if !strings.HasPrefix(name, "Boot") || name == "BootOrder" || name == "BootNext" {
 			continue
 		}
 
 		// Extract the boot ID (e.g., "0000" from "Boot0000")
-		bootID := strings.TrimPrefix(v.Name, "Boot")
+		bootID := strings.TrimPrefix(name, "Boot")
 
 		// Parse boot entry data
 		if len(v.Data) < 8 {
-			m.logger.Info("Skipping invalid boot entry", "name", v.Name, "data_len", len(v.Data))
+			m.logger.Info("Skipping invalid boot entry", "name", name, "data_len", len(v.Data))
 			continue
 		}
 
@@ -212,7 +214,7 @@ func (m *EDK2Manager) AddBootEntry(entry types.BootEntry) error {
 
 	// Check if this boot entry already exists
 	for _, v := range m.varList {
-		if v.Name == bootName {
+		if name == bootName {
 			return fmt.Errorf("boot entry %s already exists", bootName)
 		}
 	}
@@ -346,7 +348,7 @@ func (m *EDK2Manager) UpdateBootEntry(id string, entry types.BootEntry) error {
 	// Find the existing boot entry
 	var existingVar *efi.EfiVar
 	for i, v := range m.varList {
-		if v.Name == bootName {
+		if name == bootName {
 			existingVar = m.varList[i]
 			break
 		}
@@ -461,21 +463,8 @@ func (m *EDK2Manager) UpdateBootEntry(id string, entry types.BootEntry) error {
 func (m *EDK2Manager) DeleteBootEntry(id string) error {
 	bootName := "Boot" + id
 
-	// Find the boot entry
-	index := -1
-	for i, v := range m.varList {
-		if v.Name == bootName {
-			index = i
-			break
-		}
-	}
-
-	if index == -1 {
-		return fmt.Errorf("boot entry %s not found", bootName)
-	}
-
 	// Remove from var list
-	m.varList = append(m.varList[:index], m.varList[index+1:]...)
+	m.varList.Delete(bootName)
 
 	// Remove from boot order
 	bootOrder, err := m.GetBootOrder()
@@ -502,16 +491,17 @@ func (m *EDK2Manager) SetBootNext(index uint16) error {
 	data := make([]byte, 2)
 	binary.LittleEndian.PutUint16(data, index)
 
-	bootNextVar := m.varList.FindFirst("BootNext")
+	bootNextVar, _ := m.varList.FindFirst("BootNext")
 	if bootNextVar == nil {
 		// Create new BootNext variable if it doesn't exist
 		bootNextVar = &efi.EfiVar{
-			Name:       "BootNext",
-			Guid:       efi.EfiGlobalVariable,
-			Attributes: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
-			Data:       data,
+			Name: efi.ToUCS16("BootNext"),
+			Guid: efi.EFI_GLOBAL_VARIABLE_GUID,
+			Attr: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
+			Data: data,
 		}
-		m.varList = append(m.varList, bootNextVar)
+
+		m.varList["BootNext"] = bootNextVar
 	} else {
 		bootNextVar.Data = data
 	}
@@ -545,21 +535,22 @@ func (m *EDK2Manager) GetNetworkSettings() (types.NetworkSettings, error) {
 
 	// Find UEFI network configuration variables
 	for _, v := range m.varList {
+		name := v.Name.String()
 		if v.Guid == efi.EfiNetworkInterfaceIdGuid {
-			if strings.HasPrefix(v.Name, "IPv4") {
+			if strings.HasPrefix(name, "IPv4") {
 				// Parse IPv4 settings
-				if strings.Contains(v.Name, "DHCPEnabled") && len(v.Data) >= 1 {
+				if strings.Contains(name, "DHCPEnabled") && len(v.Data) >= 1 {
 					settings.EnableDHCP = v.Data[0] != 0
-				} else if strings.Contains(v.Name, "Address") && len(v.Data) >= 4 {
+				} else if strings.Contains(name, "Address") && len(v.Data) >= 4 {
 					settings.IPAddress = fmt.Sprintf("%d.%d.%d.%d",
 						v.Data[0], v.Data[1], v.Data[2], v.Data[3])
-				} else if strings.Contains(v.Name, "SubnetMask") && len(v.Data) >= 4 {
+				} else if strings.Contains(name, "SubnetMask") && len(v.Data) >= 4 {
 					settings.SubnetMask = fmt.Sprintf("%d.%d.%d.%d",
 						v.Data[0], v.Data[1], v.Data[2], v.Data[3])
-				} else if strings.Contains(v.Name, "Gateway") && len(v.Data) >= 4 {
+				} else if strings.Contains(name, "Gateway") && len(v.Data) >= 4 {
 					settings.Gateway = fmt.Sprintf("%d.%d.%d.%d",
 						v.Data[0], v.Data[1], v.Data[2], v.Data[3])
-				} else if strings.Contains(v.Name, "DNSServers") && len(v.Data) >= 4 {
+				} else if strings.Contains(name, "DNSServers") && len(v.Data) >= 4 {
 					// Each DNS server is 4 bytes
 					for i := 0; i < len(v.Data); i += 4 {
 						if i+3 < len(v.Data) {
@@ -569,14 +560,14 @@ func (m *EDK2Manager) GetNetworkSettings() (types.NetworkSettings, error) {
 						}
 					}
 				}
-			} else if strings.HasPrefix(v.Name, "IPv6") {
+			} else if strings.HasPrefix(name, "IPv6") {
 				// Basic IPv6 support for now
 				settings.EnableIPv6 = true
-			} else if strings.Contains(v.Name, "VLAN") {
+			} else if strings.Contains(name, "VLAN") {
 				// Parse VLAN settings
-				if strings.Contains(v.Name, "Enabled") && len(v.Data) >= 1 {
+				if strings.Contains(name, "Enabled") && len(v.Data) >= 1 {
 					settings.VLANEnabled = v.Data[0] != 0
-				} else if strings.Contains(v.Name, "ID") && len(v.Data) >= 2 {
+				} else if strings.Contains(name, "ID") && len(v.Data) >= 2 {
 					vlanID := binary.LittleEndian.Uint16(v.Data)
 					settings.VLANID = fmt.Sprintf("%d", vlanID)
 				}
@@ -800,7 +791,8 @@ func (m *EDK2Manager) ListVariables() (map[string]*efi.EfiVar, error) {
 	variables := make(map[string]*efi.EfiVar)
 
 	for _, v := range m.varList {
-		variables[v.Name] = v
+		name := v.Name.String()
+		variables[name] = v
 	}
 
 	return variables, nil

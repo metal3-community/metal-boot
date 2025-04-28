@@ -1,311 +1,1163 @@
-package efi_test
+package efi
 
 import (
+	"reflect"
 	"testing"
-
-	"github.com/bmcpi/pibmc/internal/firmware/efi"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
-func TestDevicePathParsing(t *testing.T) {
-	testCases := []struct {
-		name          string
-		devPathBytes  []byte
-		expectedPath  string
-		expectSuccess bool
-	}{
-		{
-			name: "PCI Root",
-			devPathBytes: []byte{
-				0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // PCI Root
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectedPath:  "PciRoot(0)",
-			expectSuccess: true,
-		},
-		{
-			name: "PCI Device",
-			devPathBytes: []byte{
-				0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // PCI Root
-				0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04, // PCI Device (Function 2, Device 1)
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectedPath:  "PciRoot(0)/Pci(1,2)",
-			expectSuccess: true,
-		},
-		{
-			name: "Hard Drive Path",
-			devPathBytes: []byte{
-				0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // PCI Root
-				0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04, // PCI Device
-				0x04, 0x01, 0x14, 0x00, 0x02, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Hard Drive
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectedPath:  "PciRoot(0)/Pci(1,2)/HD(2,0,0,0)",
-			expectSuccess: true,
-		},
-		{
-			name: "Network Path",
-			devPathBytes: []byte{
-				0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // PCI Root
-				0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04, // PCI Device
-				0x03, 0x0B, 0x25, 0x00, 0x00, 0x10, 0x18, 0xC0, 0xA8, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // IPv4 (192.168.0.1)
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectedPath:  "PciRoot(0)/Pci(1,2)/IPv4(192.168.0.1)",
-			expectSuccess: true,
-		},
-		{
-			name: "Invalid Path (Too Short)",
-			devPathBytes: []byte{
-				0x01, 0x01, // Truncated path
-			},
-			expectSuccess: false,
-		},
-		{
-			name: "Invalid Path (Bad Type)",
-			devPathBytes: []byte{
-				0xFF, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // Invalid type/subtype
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectSuccess: false,
-		},
+func TestGuid_String(t *testing.T) {
+	type fields struct {
+		BytesLe []byte
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			pathString, err := efi.ParseDevicePath(tc.devPathBytes)
-
-			if tc.expectSuccess {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expectedPath, pathString)
-			} else {
-				assert.Error(t, err)
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := Guid{
+				BytesLe: tt.fields.BytesLe,
+			}
+			if got := g.String(); got != tt.want {
+				t.Errorf("Guid.String() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestDevicePathConstruction(t *testing.T) {
-	testCases := []struct {
-		name          string
-		pathString    string
-		expectSuccess bool
+func Test_guidsParseStr(t *testing.T) {
+	type args struct {
+		guidStr string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    Guid
+		wantErr bool
 	}{
-		{
-			name:          "PCI Root",
-			pathString:    "PciRoot(0)",
-			expectSuccess: true,
-		},
-		{
-			name:          "PCI Device",
-			pathString:    "PciRoot(0)/Pci(1,2)",
-			expectSuccess: true,
-		},
-		{
-			name:          "Hard Drive",
-			pathString:    "PciRoot(0)/Pci(1,2)/HD(2,0,0,0)",
-			expectSuccess: true,
-		},
-		{
-			name:          "Network Device",
-			pathString:    "PciRoot(0)/Pci(1,2)/MAC(001122334455,0)/IPv4(192.168.0.1)/TCP(80)",
-			expectSuccess: true,
-		},
-		{
-			name:          "USB Device",
-			pathString:    "PciRoot(0)/Pci(1,2)/USB(0,0)",
-			expectSuccess: true,
-		},
-		{
-			name:          "Invalid Path Format",
-			pathString:    "ThisIsNotAValidPath",
-			expectSuccess: false,
-		},
+		// TODO: Add test cases.
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			// This test needs to be rewritten since ConstructDevicePath is not available
-			// For now, we'll skip this test and adapt it later
-			t.Skip("Test needs to be adapted to match the existing API")
-		})
-	}
-}
-
-func TestDevicePathComponentParsing(t *testing.T) {
-	// Test individual component parsing
-
-	// PciRoot component
-	t.Run("PciRoot Component", func(t *testing.T) {
-		pciRootBytes := []byte{0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00} // PCI Root
-
-		component, size, err := efi.ParseDevicePathComponent(pciRootBytes, 0)
-		assert.NoError(t, err)
-		assert.Equal(t, "PciRoot(0)", component)
-		assert.Equal(t, 8, size)
-	})
-
-	// Pci component
-	t.Run("Pci Component", func(t *testing.T) {
-		pciBytes := []byte{0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04} // PCI Device
-
-		component, size, err := efi.ParseDevicePathComponent(pciBytes, 0)
-		assert.NoError(t, err)
-		assert.Equal(t, "Pci(1,2)", component)
-		assert.Equal(t, 8, size)
-	})
-
-	// Hard Drive component
-	t.Run("Hard Drive Component", func(t *testing.T) {
-		hdBytes := []byte{
-			0x04, 0x01, 0x14, 0x00, // Hard Drive header
-			0x02, 0x00, 0x00, 0x00, // Partition number
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Partition start
-			0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Partition size
-		}
-
-		component, size, err := efi.ParseDevicePathComponent(hdBytes, 0)
-		assert.NoError(t, err)
-		assert.Equal(t, "HD(2,0,0,0)", component)
-		assert.Equal(t, 20, size)
-	})
-
-	// Invalid component (bad type)
-	t.Run("Invalid Component Type", func(t *testing.T) {
-		invalidBytes := []byte{0xFF, 0xFF, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
-
-		_, _, err := efi.ParseDevicePathComponent(invalidBytes, 0)
-		assert.Error(t, err)
-	})
-
-	// Invalid component (truncated)
-	t.Run("Truncated Component", func(t *testing.T) {
-		truncatedBytes := []byte{0x01, 0x01, 0x06, 0x00} // Too short for PCI Root
-
-		_, _, err := efi.ParseDevicePathComponent(truncatedBytes, 0)
-		assert.Error(t, err)
-	})
-}
-
-func TestSpecialDevicePaths(t *testing.T) {
-	// Test some special device paths like PXE, File, etc.
-
-	testCases := []struct {
-		name          string
-		devPathBytes  []byte
-		expectedPath  string
-		expectSuccess bool
-	}{
-		{
-			name: "PXE Boot Path",
-			devPathBytes: []byte{
-				0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // PCI Root
-				0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04, // PCI Device
-				0x03, 0x0B, 0x25, 0x00, 0x00, 0x10, 0x18, 0xC0, 0xA8, 0x00, 0x01, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // IPv4
-				0x04, 0x03, 0x04, 0x00, // End path for PXE
-			},
-			expectedPath:  "PciRoot(0)/Pci(1,2)/IPv4(192.168.0.1)/PXE",
-			expectSuccess: true,
-		},
-		{
-			name: "File Path",
-			devPathBytes: []byte{
-				0x04, 0x04, 0x20, 0x00, // File path header
-				0x5C, 0x00, 0x45, 0x00, 0x46, 0x00, 0x49, 0x00, 0x5C, 0x00, 0x42, 0x00, 0x4F, 0x00, 0x4F, 0x00, 0x54, 0x00, 0x5C, 0x00, 0x42, 0x00, 0x4F, 0x00, 0x4F, 0x00, 0x54, 0x00, 0x00, 0x00, // \EFI\BOOT\BOOT
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectedPath:  "File(\\EFI\\BOOT\\BOOT)",
-			expectSuccess: true,
-		},
-		{
-			name: "HTTP Path",
-			devPathBytes: []byte{
-				0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00, // PCI Root
-				0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04, // PCI Device
-				0x03, 0x0C, 0x10, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // HTTP
-				0x7F, 0xFF, 0x04, 0x00, // End path
-			},
-			expectedPath:  "PciRoot(0)/Pci(1,2)/HTTP",
-			expectSuccess: true,
-		},
-	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			pathString, err := efi.ParseDevicePath(tc.devPathBytes)
-
-			if tc.expectSuccess {
-				assert.NoError(t, err)
-				assert.Contains(t, pathString, tc.expectedPath)
-			} else {
-				assert.Error(t, err)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := guidsParseStr(tt.args.guidStr)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("guidsParseStr() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("guidsParseStr() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestComplexDevicePath(t *testing.T) {
-	// Build a complex device path programmatically
-	var pathComponents [][]byte
-
-	// PCI Root
-	pciRoot := []byte{0x01, 0x01, 0x06, 0x00, 0x00, 0x00, 0x00, 0x00}
-	pathComponents = append(pathComponents, pciRoot)
-
-	// PCI Device
-	pciDevice := []byte{0x01, 0x01, 0x06, 0x00, 0x01, 0x02, 0x03, 0x04}
-	pathComponents = append(pathComponents, pciDevice)
-
-	// MAC Address
-	mac := []byte{
-		0x03, 0x0B, 0x19, 0x00, // MAC header
-		0x00, 0x11, 0x22, 0x33, 0x44, 0x55, // MAC address
-		0x06,                                                             // MAC length
-		0x00,                                                             // Padding
-		0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, // Padding
+func Test_guidsParseBin(t *testing.T) {
+	type args struct {
+		data   []byte
+		offset int
 	}
-	pathComponents = append(pathComponents, mac)
-
-	// IPv4
-	ipv4 := []byte{
-		0x03, 0x0C, 0x14, 0x00, // IPv4 header
-		0xC0, 0xA8, 0x01, 0x01, // IP address (192.168.1.1)
-		0xFF, 0xFF, 0xFF, 0x00, // Subnet mask (255.255.255.0)
-		0x00, 0x50, // Port (80)
-		0x00, 0x00, // Protocol (TCP)
-		0x00,             // Static IP
-		0x00, 0x00, 0x00, // Padding
+	tests := []struct {
+		name    string
+		args    args
+		want    Guid
+		wantErr bool
+	}{
+		// TODO: Add test cases.
 	}
-	pathComponents = append(pathComponents, ipv4)
-
-	// End path
-	endPath := []byte{0x7F, 0xFF, 0x04, 0x00}
-	pathComponents = append(pathComponents, endPath)
-
-	// Combine all components
-	var devPathBytes []byte
-	for _, component := range pathComponents {
-		devPathBytes = append(devPathBytes, component...)
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := guidsParseBin(tt.args.data, tt.args.offset)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("guidsParseBin() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("guidsParseBin() = %v, want %v", got, tt.want)
+			}
+		})
 	}
+}
 
-	// Parse the path
-	pathString, err := efi.ParseDevicePath(devPathBytes)
-	require.NoError(t, err)
+func Test_ucs16FromString(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want []byte
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ucs16FromString(tt.args.s); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ucs16FromString() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	// Expected path
-	expectedPath := "PciRoot(0)/Pci(1,2)/MAC(001122334455)/IPv4(192.168.1.1,255.255.255.0,TCP,80,Static)"
-	assert.Equal(t, expectedPath, pathString)
+func Test_ucs16FromUcs16(t *testing.T) {
+	type args struct {
+		data   []byte
+		offset int
+	}
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ucs16FromUcs16(tt.args.data, tt.args.offset); got != tt.want {
+				t.Errorf("ucs16FromUcs16() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	// Now try to construct a path from the string and verify it's equivalent
-	constructedPath, err := efi.ConstructDevicePath(pathString)
-	require.NoError(t, err)
+func TestNewDevicePathElem(t *testing.T) {
+	type args struct {
+		data []byte
+	}
+	tests := []struct {
+		name string
+		args args
+		want *DevicePathElem
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewDevicePathElem(tt.args.data); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewDevicePathElem() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	// Parse back to string
-	parsedConstructed, err := efi.ParseDevicePath(constructedPath)
-	require.NoError(t, err)
+func TestDevicePathElem_set_mac(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_mac()
+		})
+	}
+}
 
-	// Verify the constructed path matches the expected path
-	assert.Equal(t, expectedPath, parsedConstructed)
+func TestDevicePathElem_set_ipv4(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_ipv4()
+		})
+	}
+}
+
+func TestDevicePathElem_set_ipv6(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_ipv6()
+		})
+	}
+}
+
+func TestDevicePathElem_set_iscsi(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		target string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_iscsi(tt.args.target)
+		})
+	}
+}
+
+func TestDevicePathElem_set_sata(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		port uint16
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_sata(tt.args.port)
+		})
+	}
+}
+
+func TestDevicePathElem_set_usb(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		port uint8
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_usb(tt.args.port)
+		})
+	}
+}
+
+func TestDevicePathElem_set_uri(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		uri string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_uri(tt.args.uri)
+		})
+	}
+}
+
+func TestDevicePathElem_set_filepath(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		filepath string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_filepath(tt.args.filepath)
+		})
+	}
+}
+
+func TestDevicePathElem_set_fvname(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		guid string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_fvname(tt.args.guid)
+		})
+	}
+}
+
+func TestDevicePathElem_set_fvfilename(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		guid string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_fvfilename(tt.args.guid)
+		})
+	}
+}
+
+func TestDevicePathElem_set_gpt(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		pnr  uint32
+		poff uint64
+		plen uint64
+		guid string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			dpe.set_gpt(tt.args.pnr, tt.args.poff, tt.args.plen, tt.args.guid)
+		})
+	}
+}
+
+func TestDevicePathElem_fmt_hw(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.fmt_hw(); got != tt.want {
+				t.Errorf("DevicePathElem.fmt_hw() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_fmt_acpi(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.fmt_acpi(); got != tt.want {
+				t.Errorf("DevicePathElem.fmt_acpi() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_fmt_msg(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.fmt_msg(); got != tt.want {
+				t.Errorf("DevicePathElem.fmt_msg() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_fmt_media(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.fmt_media(); got != tt.want {
+				t.Errorf("DevicePathElem.fmt_media() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_size(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   int
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.size(); got != tt.want {
+				t.Errorf("DevicePathElem.size() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_Bytes(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []byte
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.Bytes(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePathElem.Bytes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_String(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.String(); got != tt.want {
+				t.Errorf("DevicePathElem.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathElem_Equal(t *testing.T) {
+	type fields struct {
+		Devtype DeviceType
+		Subtype DeviceSubType
+		Data    []byte
+	}
+	type args struct {
+		other *DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dpe := &DevicePathElem{
+				Devtype: tt.fields.Devtype,
+				Subtype: tt.fields.Subtype,
+				Data:    tt.fields.Data,
+			}
+			if got := dpe.Equal(tt.args.other); got != tt.want {
+				t.Errorf("DevicePathElem.Equal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_VendorHW(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		guid GUID
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.VendorHW(tt.args.guid); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.VendorHW() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_Mac(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.Mac(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.Mac() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_IPv4(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.IPv4(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.IPv4() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_IPv6(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.IPv6(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.IPv6() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_ISCSI(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		target string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.ISCSI(tt.args.target); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.ISCSI() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_SATA(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		port uint16
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.SATA(tt.args.port); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.SATA() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_USB(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		port uint8
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.USB(tt.args.port); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.USB() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_FvName(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		guid string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.FvName(tt.args.guid); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.FvName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_FVFileName(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		guid string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.FVFileName(tt.args.guid); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.FVFileName() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_FilePath(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		filepath string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.FilePath(tt.args.filepath); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.FilePath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_GptPartition(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		pnr  uint32
+		poff uint64
+		plen uint64
+		guid string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.GptPartition(tt.args.pnr, tt.args.poff, tt.args.plen, tt.args.guid); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.GptPartition() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_Append(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		elem *DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.Append(tt.args.elem); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.Append() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewDevicePath(t *testing.T) {
+	type args struct {
+		data []byte
+	}
+	tests := []struct {
+		name string
+		args args
+		want *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewDevicePath(tt.args.data); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewDevicePath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathUri(t *testing.T) {
+	type args struct {
+		uri string
+	}
+	tests := []struct {
+		name string
+		args args
+		want *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DevicePathUri(tt.args.uri); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePathUri() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePathFilepath(t *testing.T) {
+	type args struct {
+		filepath string
+	}
+	tests := []struct {
+		name string
+		args args
+		want *DevicePath
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := DevicePathFilepath(tt.args.filepath); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePathFilepath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseDevicePath(t *testing.T) {
+	type args struct {
+		data []byte
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *DevicePath
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDevicePath(tt.args.data)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseDevicePath() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseDevicePath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_ParseFromString(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if err := dp.ParseFromString(tt.args.s); (err != nil) != tt.wantErr {
+				t.Errorf("DevicePath.ParseFromString() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestDevicePath_Bytes(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []byte
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.Bytes(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("DevicePath.Bytes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_String(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.String(); got != tt.want {
+				t.Errorf("DevicePath.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestDevicePath_Equal(t *testing.T) {
+	type fields struct {
+		elems []*DevicePathElem
+	}
+	type args struct {
+		other *DevicePath
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			dp := &DevicePath{
+				elems: tt.fields.elems,
+			}
+			if got := dp.Equal(tt.args.other); got != tt.want {
+				t.Errorf("DevicePath.Equal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

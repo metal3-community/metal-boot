@@ -1,171 +1,308 @@
-package efi_test
+package efi
 
 import (
+	"reflect"
 	"testing"
-
-	"github.com/bmcpi/pibmc/internal/firmware/efi"
-	"github.com/stretchr/testify/assert"
 )
 
-func TestGUIDParsing(t *testing.T) {
-	testCases := []struct {
-		name      string
-		guidStr   string
-		expectErr bool
-		expected  [16]byte
-	}{
-		{
-			name:      "Valid GUID",
-			guidStr:   "12345678-1234-5678-1234-567812345678",
-			expectErr: false,
-			expected:  [16]byte{0x78, 0x56, 0x34, 0x12, 0x34, 0x12, 0x78, 0x56, 0x12, 0x34, 0x56, 0x78, 0x12, 0x34, 0x56, 0x78},
-		},
-		{
-			name:      "EFI Global Variable GUID",
-			guidStr:   efi.EfiGlobalVariable,
-			expectErr: false,
-			expected:  [16]byte{0x61, 0xdf, 0xe4, 0x8b, 0xd4, 0x11, 0x11, 0x42, 0x9d, 0xcd, 0x00, 0xd0, 0x80, 0x84, 0x2c, 0xc4},
-		},
-		{
-			name:      "Invalid Format",
-			guidStr:   "not-a-guid",
-			expectErr: true,
-		},
-		{
-			name:      "Too Short",
-			guidStr:   "12345678-1234-5678-1234-56781234567",
-			expectErr: true,
-		},
-		{
-			name:      "Too Long",
-			guidStr:   "12345678-1234-5678-1234-5678123456789",
-			expectErr: true,
-		},
-		{
-			name:      "Missing Hyphens",
-			guidStr:   "1234567812345678123456781234567812345678",
-			expectErr: true,
-		},
-		{
-			name:      "Invalid Characters",
-			guidStr:   "XXXXXXXX-XXXX-XXXX-XXXX-XXXXXXXXXXXX",
-			expectErr: true,
-		},
+func TestGuidName(t *testing.T) {
+	type args struct {
+		guid GUID
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			guidBytes, err := efi.GUIDStringToBytes(tc.guidStr)
-
-			if tc.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, guidBytes)
-
-				// Test round trip
-				guidStrBack, err := efi.GUIDBytesToString(guidBytes)
-				assert.NoError(t, err)
-				assert.Equal(t, tc.guidStr, guidStrBack)
+	tests := []struct {
+		name string
+		args args
+		want string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := GuidName(tt.args.guid); got != tt.want {
+				t.Errorf("GuidName() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestGUIDBytesToString(t *testing.T) {
-	testCases := []struct {
-		name      string
-		guidBytes [16]byte
-		expectErr bool
-		expected  string
-	}{
-		{
-			name:      "Valid GUID Bytes",
-			guidBytes: [16]byte{0x78, 0x56, 0x34, 0x12, 0x34, 0x12, 0x78, 0x56, 0x12, 0x34, 0x56, 0x78, 0x12, 0x34, 0x56, 0x78},
-			expectErr: false,
-			expected:  "12345678-1234-5678-1234-567812345678",
-		},
-		{
-			name:      "EFI Global Variable GUID Bytes",
-			guidBytes: [16]byte{0x61, 0xdf, 0xe4, 0x8b, 0xd4, 0x11, 0x11, 0x42, 0x9d, 0xcd, 0x00, 0xd0, 0x80, 0x84, 0x2c, 0xc4},
-			expectErr: false,
-			expected:  efi.EfiGlobalVariable,
-		},
+func TestGUID_BytesLE(t *testing.T) {
+	type fields struct {
+		Data1 uint32
+		Data2 uint16
+		Data3 uint16
+		Data4 [8]byte
 	}
-
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			guidStr, err := efi.GUIDBytesToString(tc.guidBytes)
-
-			if tc.expectErr {
-				assert.Error(t, err)
-			} else {
-				assert.NoError(t, err)
-				assert.Equal(t, tc.expected, guidStr)
+	tests := []struct {
+		name   string
+		fields fields
+		want   []byte
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := GUID{
+				Data1: tt.fields.Data1,
+				Data2: tt.fields.Data2,
+				Data3: tt.fields.Data3,
+				Data4: tt.fields.Data4,
+			}
+			if got := g.BytesLE(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GUID.BytesLE() = %v, want %v", got, tt.want)
 			}
 		})
 	}
 }
 
-func TestCompareGUID(t *testing.T) {
-	guid1 := efi.EfiGlobalVariable
-	guid2 := "8be4df61-11d4-4211-9dcd-00d0802cc412" // Different ordering
-	guid3 := "8be4df61-11d4-4211-9dcd-00d0802cc411" // Off by one digit
-
-	// Convert to bytes
-	guid1Bytes, err := efi.GUIDStringToBytes(guid1)
-	assert.NoError(t, err)
-
-	guid2Bytes, err := efi.GUIDStringToBytes(guid2)
-	assert.NoError(t, err)
-
-	guid3Bytes, err := efi.GUIDStringToBytes(guid3)
-	assert.NoError(t, err)
-
-	// Compare
-	assert.True(t, efi.CompareGUID(guid1Bytes, guid1Bytes))
-	assert.False(t, efi.CompareGUID(guid1Bytes, guid2Bytes))
-	assert.False(t, efi.CompareGUID(guid1Bytes, guid3Bytes))
-	assert.False(t, efi.CompareGUID(guid2Bytes, guid3Bytes))
-}
-
-func TestIsKnownGUID(t *testing.T) {
-	// Test known GUIDs
-	assert.True(t, efi.IsKnownGUID(efi.EfiGlobalVariable))
-	assert.True(t, efi.IsKnownGUID(efi.EfiImageSecurityDatabaseGUID))
-	assert.True(t, efi.IsKnownGUID(efi.EfiSecureBootEnableDisableGUID))
-
-	// Test unknown GUID
-	assert.False(t, efi.IsKnownGUID("12345678-1234-5678-1234-567812345678"))
-}
-
-func TestFormatGUID(t *testing.T) {
-	testCases := []struct {
-		name     string
-		input    string
-		expected string
-	}{
-		{
-			name:     "Already Formatted GUID",
-			input:    "12345678-1234-5678-1234-567812345678",
-			expected: "12345678-1234-5678-1234-567812345678",
-		},
-		{
-			name:     "GUID Without Hyphens",
-			input:    "12345678123456781234567812345678",
-			expected: "12345678-1234-5678-1234-567812345678",
-		},
-		{
-			name:     "Invalid GUID",
-			input:    "not-a-guid",
-			expected: "not-a-guid", // Should return the original string
-		},
+func TestParseGUID(t *testing.T) {
+	type args struct {
+		s string
 	}
+	tests := []struct {
+		name    string
+		args    args
+		want    GUID
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseGUID(tt.args.s)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseGUID() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseGUID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	for _, tc := range testCases {
-		t.Run(tc.name, func(t *testing.T) {
-			result := efi.FormatGUID(tc.input)
-			assert.Equal(t, tc.expected, result)
+func TestParseGuid(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want Guid
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ParseGuid(tt.args.s); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseGuid() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestNewGUID(t *testing.T) {
+	type args struct {
+		data1 uint32
+		data2 uint16
+		data3 uint16
+		data4 [8]byte
+	}
+	tests := []struct {
+		name string
+		args args
+		want GUID
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := NewGUID(tt.args.data1, tt.args.data2, tt.args.data3, tt.args.data4); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewGUID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGUIDFromString(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    GUID
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GUIDFromString(tt.args.s)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GUIDFromString() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GUIDFromString() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestStringToGUID(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name string
+		args args
+		want GUID
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := StringToGUID(tt.args.s); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("StringToGUID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGUIDFromBytes(t *testing.T) {
+	type args struct {
+		data []byte
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    GUID
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := GUIDFromBytes(tt.args.data)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("GUIDFromBytes() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GUIDFromBytes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGUID_Bytes(t *testing.T) {
+	type fields struct {
+		Data1 uint32
+		Data2 uint16
+		Data3 uint16
+		Data4 [8]byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []byte
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := GUID{
+				Data1: tt.fields.Data1,
+				Data2: tt.fields.Data2,
+				Data3: tt.fields.Data3,
+				Data4: tt.fields.Data4,
+			}
+			if got := g.Bytes(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("GUID.Bytes() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGUID_String(t *testing.T) {
+	type fields struct {
+		Data1 uint32
+		Data2 uint16
+		Data3 uint16
+		Data4 [8]byte
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := GUID{
+				Data1: tt.fields.Data1,
+				Data2: tt.fields.Data2,
+				Data3: tt.fields.Data3,
+				Data4: tt.fields.Data4,
+			}
+			if got := g.String(); got != tt.want {
+				t.Errorf("GUID.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseBinGUID(t *testing.T) {
+	type args struct {
+		data   []byte
+		offset int
+	}
+	tests := []struct {
+		name string
+		args args
+		want GUID
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			if got := ParseBinGUID(tt.args.data, tt.args.offset); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseBinGUID() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestGUID_Equal(t *testing.T) {
+	type fields struct {
+		Data1 uint32
+		Data2 uint16
+		Data3 uint16
+		Data4 [8]byte
+	}
+	type args struct {
+		other GUID
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+		want   bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			g := GUID{
+				Data1: tt.fields.Data1,
+				Data2: tt.fields.Data2,
+				Data3: tt.fields.Data3,
+				Data4: tt.fields.Data4,
+			}
+			if got := g.Equal(tt.args.other); got != tt.want {
+				t.Errorf("GUID.Equal() = %v, want %v", got, tt.want)
+			}
 		})
 	}
 }

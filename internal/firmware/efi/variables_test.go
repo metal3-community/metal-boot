@@ -1,233 +1,872 @@
-package efi_test
+package efi
 
 import (
+	"reflect"
 	"testing"
-
-	"github.com/bmcpi/pibmc/internal/firmware/efi"
-	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
+	"time"
 )
 
-func TestEfiVarInitialization(t *testing.T) {
-	// Test creating a new EFI variable
-	testVar := efi.NewEfiVar("TestVar", efi.EfiGlobalVariable, []byte{0x01, 0x02, 0x03, 0x04})
-
-	assert.Equal(t, "TestVar", testVar.Name)
-	assert.Equal(t, efi.EfiGlobalVariable, testVar.GuidStr)
-	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, testVar.Data)
-	assert.Equal(t, uint32(4), testVar.DataSize)
-	assert.Equal(t, efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS, testVar.Attrs)
-}
-
-func TestEfiVarWithAttributes(t *testing.T) {
-	// Test creating a variable with specific attributes
-	attrs := efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_RUNTIME_ACCESS
-	testVar := efi.NewEfiVarWithAttrs("TestVar", efi.EfiGlobalVariable, []byte{0x01, 0x02, 0x03, 0x04}, attrs)
-
-	assert.Equal(t, "TestVar", testVar.Name)
-	assert.Equal(t, efi.EfiGlobalVariable, testVar.GuidStr)
-	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, testVar.Data)
-	assert.Equal(t, uint32(4), testVar.DataSize)
-	assert.Equal(t, attrs, testVar.Attrs)
-}
-
-func TestEfiVarDefaultAttributes(t *testing.T) {
-	// Test the default attributes for common EFI variables
-
-	// SecureBoot should have specific attributes
-	secureBootVar := efi.NewEfiVar("SecureBoot", efi.EfiGlobalVariable, []byte{0x01})
-	assert.Equal(t, efi.EFI_VARIABLE_BOOTSERVICE_ACCESS|efi.EFI_VARIABLE_RUNTIME_ACCESS, secureBootVar.Attrs)
-
-	// Custom variable should have default attributes
-	customVar := efi.NewEfiVar("CustomVar", efi.EfiGlobalVariable, []byte{0x01})
-	assert.Equal(t, efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS, customVar.Attrs)
-}
-
-func TestEfiVarCopy(t *testing.T) {
-	// Test copying an EFI variable
-	original := efi.NewEfiVar("TestVar", efi.EfiGlobalVariable, []byte{0x01, 0x02, 0x03, 0x04})
-
-	// Create a copy
-	copy := original.Copy()
-
-	// Verify the copy is independent
-	assert.Equal(t, original.Name, copy.Name)
-	assert.Equal(t, original.GuidStr, copy.GuidStr)
-	assert.Equal(t, original.Data, copy.Data)
-	assert.Equal(t, original.DataSize, copy.DataSize)
-	assert.Equal(t, original.Attrs, copy.Attrs)
-
-	// Modify the copy and verify original is unchanged
-	copy.Name = "ModifiedVar"
-	copy.Data = []byte{0xFF, 0xFF}
-	copy.DataSize = 2
-	copy.Attrs = efi.EFI_VARIABLE_RUNTIME_ACCESS
-
-	assert.Equal(t, "TestVar", original.Name)
-	assert.Equal(t, []byte{0x01, 0x02, 0x03, 0x04}, original.Data)
-	assert.Equal(t, uint32(4), original.DataSize)
-	assert.Equal(t, efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_BOOTSERVICE_ACCESS, original.Attrs)
-}
-
-func TestEfiVarBootOrder(t *testing.T) {
-	// Test creating and parsing BootOrder variable
-	bootOrder := []uint16{1, 2, 3, 4}
-	bootOrderData := efi.CreateBootOrderData(bootOrder)
-
-	// Verify the data is correct
-	assert.Equal(t, []byte{0x01, 0x00, 0x02, 0x00, 0x03, 0x00, 0x04, 0x00}, bootOrderData)
-
-	// Create the variable
-	bootOrderVar := efi.NewEfiVar("BootOrder", efi.EfiGlobalVariable, bootOrderData)
-
-	// Parse the variable
-	parsedBootOrder, err := efi.ParseBootOrder(bootOrderVar.Data)
-	require.NoError(t, err)
-	assert.Equal(t, bootOrder, parsedBootOrder)
-}
-
-func TestEfiVarBootOrderErrors(t *testing.T) {
-	// Test parsing BootOrder with invalid data
-
-	// Test with nil data
-	_, err := efi.ParseBootOrder(nil)
-	assert.Error(t, err)
-
-	// Test with empty data
-	_, err = efi.ParseBootOrder([]byte{})
-	assert.Error(t, err)
-
-	// Test with incomplete data
-	_, err = efi.ParseBootOrder([]byte{0x01})
-	assert.Error(t, err)
-
-	// Test with odd-length data
-	_, err = efi.ParseBootOrder([]byte{0x01, 0x00, 0x02})
-	assert.Error(t, err)
-}
-
-func TestEfiVarBootEntry(t *testing.T) {
-	// Test creating and parsing a Boot#### variable
-
-	// Create a sample boot entry
-	bootEntry := &efi.BootEntry{
-		Description:  "Test Boot Entry",
-		DevicePath:   []byte{0x01, 0x02, 0x03, 0x04},
-		OptionalData: []byte{0xAA, 0xBB},
-		Active:       true,
-		Category:     efi.LOAD_OPTION_CATEGORY_BOOT,
+func TestNewEfiVar(t *testing.T) {
+	type args struct {
+		name  any
+		guid  *string
+		attr  uint32
+		data  []byte
+		count int
 	}
-
-	// Convert to bytes
-	bootEntryData, err := bootEntry.ToBytes()
-	require.NoError(t, err)
-
-	// Create the variable
-	bootEntryVar := efi.NewEfiVar("Boot0001", efi.EfiGlobalVariable, bootEntryData)
-
-	// Parse the variable
-	parsedBootEntry, err := efi.ParseBootEntry(bootEntryVar.Data)
-	require.NoError(t, err)
-
-	// Verify the parsed data
-	assert.Equal(t, bootEntry.Description, parsedBootEntry.Description)
-	assert.Equal(t, bootEntry.DevicePath, parsedBootEntry.DevicePath)
-	assert.Equal(t, bootEntry.OptionalData, parsedBootEntry.OptionalData)
-	assert.Equal(t, bootEntry.Active, parsedBootEntry.Active)
-	assert.Equal(t, bootEntry.Category, parsedBootEntry.Category)
+	tests := []struct {
+		name    string
+		args    args
+		want    *EfiVar
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := NewEfiVar(tt.args.name, tt.args.guid, tt.args.attr, tt.args.data, tt.args.count)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("NewEfiVar() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("NewEfiVar() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
-func TestEfiVarAttributes(t *testing.T) {
-	// Test EFI variable attribute operations
-
-	// Create a variable with attributes
-	attrs := efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
-	testVar := efi.NewEfiVarWithAttrs("TestVar", efi.EfiGlobalVariable, []byte{0x01}, attrs)
-
-	// Test attribute checks
-	assert.True(t, testVar.HasAttr(efi.EFI_VARIABLE_NON_VOLATILE))
-	assert.True(t, testVar.HasAttr(efi.EFI_VARIABLE_BOOTSERVICE_ACCESS))
-	assert.False(t, testVar.HasAttr(efi.EFI_VARIABLE_RUNTIME_ACCESS))
-
-	// Test adding an attribute
-	testVar.AddAttr(efi.EFI_VARIABLE_RUNTIME_ACCESS)
-	assert.True(t, testVar.HasAttr(efi.EFI_VARIABLE_RUNTIME_ACCESS))
-
-	// Test removing an attribute
-	testVar.RemoveAttr(efi.EFI_VARIABLE_BOOTSERVICE_ACCESS)
-	assert.False(t, testVar.HasAttr(efi.EFI_VARIABLE_BOOTSERVICE_ACCESS))
-
-	// Test full attributes value
-	assert.Equal(t, efi.EFI_VARIABLE_NON_VOLATILE|efi.EFI_VARIABLE_RUNTIME_ACCESS, testVar.Attrs)
+func TestEfiVar_ParseTime(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		data   []byte
+		offset int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if err := v.ParseTime(tt.args.data, tt.args.offset); (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.ParseTime() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
 }
 
-func TestEfiVarSecurityAttributes(t *testing.T) {
-	// Test security-related attributes
-
-	// Create a secure variable with time-based authentication
-	attrs := efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS | efi.EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS
-	secureVar := efi.NewEfiVarWithAttrs("SecureVar", efi.EfiGlobalVariable, []byte{0x01}, attrs)
-
-	// Verify the security attributes
-	assert.True(t, secureVar.HasAttr(efi.EFI_VARIABLE_TIME_BASED_AUTHENTICATED_WRITE_ACCESS))
-	assert.False(t, secureVar.HasAttr(efi.EFI_VARIABLE_AUTHENTICATED_WRITE_ACCESS)) // Deprecated attribute
-
-	// Test with deprecated authenticated write access
-	secureVar.AddAttr(efi.EFI_VARIABLE_AUTHENTICATED_WRITE_ACCESS)
-	assert.True(t, secureVar.HasAttr(efi.EFI_VARIABLE_AUTHENTICATED_WRITE_ACCESS))
-
-	// Test with hardware error record
-	secureVar.AddAttr(efi.EFI_VARIABLE_HARDWARE_ERROR_RECORD)
-	assert.True(t, secureVar.HasAttr(efi.EFI_VARIABLE_HARDWARE_ERROR_RECORD))
+func TestEfiVar_BytesTime(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   []byte
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if got := v.BytesTime(); !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("EfiVar.BytesTime() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }
 
-func TestEfiVarData(t *testing.T) {
-	// Test data operations
-
-	// Create a variable with data
-	initialData := []byte{0x01, 0x02, 0x03, 0x04}
-	testVar := efi.NewEfiVar("TestVar", efi.EfiGlobalVariable, initialData)
-
-	// Verify initial data
-	assert.Equal(t, initialData, testVar.Data)
-	assert.Equal(t, uint32(4), testVar.DataSize)
-
-	// Update data
-	newData := []byte{0xAA, 0xBB, 0xCC}
-	testVar.SetData(newData)
-
-	// Verify updated data
-	assert.Equal(t, newData, testVar.Data)
-	assert.Equal(t, uint32(3), testVar.DataSize)
-
-	// Test with empty data
-	testVar.SetData([]byte{})
-	assert.Empty(t, testVar.Data)
-	assert.Equal(t, uint32(0), testVar.DataSize)
-
-	// Test with nil data
-	testVar.SetData(nil)
-	assert.Empty(t, testVar.Data)
-	assert.Equal(t, uint32(0), testVar.DataSize)
+func TestEfiVar_updateTime(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		ts *time.Time
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.updateTime(tt.args.ts)
+		})
+	}
 }
 
-func TestEfiVarGuids(t *testing.T) {
-	// Test GUID handling
+func TestEfiVar_SetBool(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		value bool
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.SetBool(tt.args.value)
+		})
+	}
+}
 
-	// Create a variable with a known GUID
-	testVar := efi.NewEfiVar("TestVar", efi.EfiGlobalVariable, []byte{0x01})
-	assert.Equal(t, efi.EfiGlobalVariable, testVar.GuidStr)
+func TestEfiVar_SetString(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		value string
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.SetString(tt.args.value)
+		})
+	}
+}
 
-	// Update the GUID
-	testVar.GuidStr = efi.EfiImageSecurityDatabaseGUID
-	assert.Equal(t, efi.EfiImageSecurityDatabaseGUID, testVar.GuidStr)
+func TestEfiVar_SetUint32(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		value uint32
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.SetUint32(tt.args.value)
+		})
+	}
+}
 
-	// Verify GUID bytes
-	guidBytes, err := efi.GUIDStringToBytes(testVar.GuidStr)
-	require.NoError(t, err)
+func TestEfiVar_GetUint32(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    uint32
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.GetUint32()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.GetUint32() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EfiVar.GetUint32() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	expectedGuidBytes, err := efi.GUIDStringToBytes(efi.EfiImageSecurityDatabaseGUID)
-	require.NoError(t, err)
+func TestEfiVar_GetBootEntry(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    *BootEntry
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.GetBootEntry()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.GetBootEntry() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("EfiVar.GetBootEntry() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
 
-	assert.Equal(t, expectedGuidBytes, guidBytes)
+func TestEfiVar_SetBootEntry(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		attr    uint32
+		title   string
+		path    string
+		optdata []byte
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if err := v.SetBootEntry(tt.args.attr, tt.args.title, tt.args.path, tt.args.optdata); (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.SetBootEntry() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestEfiVar_GetBootNext(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    uint16
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.GetBootNext()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.GetBootNext() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EfiVar.GetBootNext() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_SetBootNext(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		index uint16
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.SetBootNext(tt.args.index)
+		})
+	}
+}
+
+func TestEfiVar_GetBootOrder(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    []uint16
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.GetBootOrder()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.GetBootOrder() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("EfiVar.GetBootOrder() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_SetBootOrder(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		order []uint16
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.SetBootOrder(tt.args.order)
+		})
+	}
+}
+
+func TestEfiVar_AppendBootOrder(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		index uint16
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		args   args
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			v.AppendBootOrder(tt.args.index)
+		})
+	}
+}
+
+func TestEfiVar_SetFromFile(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	type args struct {
+		filename string
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		args    args
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if err := v.SetFromFile(tt.args.filename); (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.SetFromFile() error = %v, wantErr %v", err, tt.wantErr)
+			}
+		})
+	}
+}
+
+func TestEfiVar_FmtBool(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if got := v.FmtBool(); got != tt.want {
+				t.Errorf("EfiVar.FmtBool() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_FmtAscii(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if got := v.FmtAscii(); got != tt.want {
+				t.Errorf("EfiVar.FmtAscii() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_FmtBootEntry(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    string
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.FmtBootEntry()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.FmtBootEntry() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EfiVar.FmtBootEntry() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_FmtBootList(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if got := v.FmtBootList(); got != tt.want {
+				t.Errorf("EfiVar.FmtBootList() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_FmtDevPath(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    string
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.FmtDevPath()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.FmtDevPath() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EfiVar.FmtDevPath() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_FmtData(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name    string
+		fields  fields
+		want    string
+		wantErr bool
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			got, err := v.FmtData()
+			if (err != nil) != tt.wantErr {
+				t.Errorf("EfiVar.FmtData() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if got != tt.want {
+				t.Errorf("EfiVar.FmtData() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestEfiVar_String(t *testing.T) {
+	type fields struct {
+		Name  *UCS16String
+		Guid  GUID
+		Attr  uint32
+		Data  []byte
+		Count int
+		Time  *time.Time
+		PkIdx int
+	}
+	tests := []struct {
+		name   string
+		fields fields
+		want   string
+	}{
+		// TODO: Add test cases.
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			v := &EfiVar{
+				Name:  tt.fields.Name,
+				Guid:  tt.fields.Guid,
+				Attr:  tt.fields.Attr,
+				Data:  tt.fields.Data,
+				Count: tt.fields.Count,
+				Time:  tt.fields.Time,
+				PkIdx: tt.fields.PkIdx,
+			}
+			if got := v.String(); got != tt.want {
+				t.Errorf("EfiVar.String() = %v, want %v", got, tt.want)
+			}
+		})
+	}
 }

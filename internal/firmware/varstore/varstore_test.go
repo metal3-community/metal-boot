@@ -43,7 +43,8 @@ func TestVarStoreInterface(t *testing.T) {
 	// Create some test variables
 	varList := efi.NewEfiVarList()
 
-	bootOrderVar := efi.NewEfiVar("BootOrder", efi.EfiGlobalVariable, []byte{0x01, 0x00, 0x02, 0x00})
+	bootOrderVar, err := efi.NewEfiVar("BootOrder", efi.EfiGlobalVariable, []byte{0x01, 0x00, 0x02, 0x00})
+	assert.NoError(t, err)
 	assert.NoError(t, varList.Add(bootOrderVar))
 
 	// Write to the mock varstore

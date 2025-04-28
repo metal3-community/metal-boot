@@ -36,6 +36,7 @@ const (
 	EfiCustomModeEnable            = "c076ec0c-7028-4399-a072-71ee5c448b9f"
 	EfiDhcp6ServiceBindingProtocol = "9fb9a8a1-2f4a-43a6-889c-d0f7b6c47ad5"
 	EfiIp6ConfigProtocol           = "937fe521-95ae-4d1a-8929-48bcd90ad31a"
+	EfiNetworkInterfaceIdGuid      = "f2a4b0c1-3d5e-4f6a-8b9c-7d8e5f6a7b8c"
 
 	EfiCertX509   = "a5c059a1-94e4-4aa7-87b5-ab155c2bf072"
 	EfiCertSha256 = "c1c41626-504c-4092-aca9-41f936934328"
