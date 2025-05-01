@@ -228,7 +228,17 @@ func TestDevicePathElem_set_iscsi(t *testing.T) {
 		fields fields
 		args   args
 	}{
-		// TODO: Add test cases.
+		{
+			name: "test_iscsi",
+			fields: fields{
+				Devtype: DevTypeMessage,
+				Subtype: DevSubTypeISCSI,
+				Data:    make([]byte, 0),
+			},
+			args: args{
+				target: "iqn.1994-05.com.redhat:example",
+			},
+		},
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
@@ -1157,6 +1167,46 @@ func TestDevicePath_Equal(t *testing.T) {
 			}
 			if got := dp.Equal(tt.args.other); got != tt.want {
 				t.Errorf("DevicePath.Equal() = %v, want %v", got, tt.want)
+			}
+		})
+	}
+}
+
+func TestParseDevicePathFromString(t *testing.T) {
+	type args struct {
+		s string
+	}
+	tests := []struct {
+		name    string
+		args    args
+		want    *DevicePath
+		wantErr bool
+	}{
+		{
+			name: "valid_device_path",
+			args: args{
+				s: "PciRoot(0x0)",
+			},
+			want: &DevicePath{
+				elems: []*DevicePathElem{
+					{
+						Devtype: DevTypeHardware,
+						Subtype: DevSubTypePCI,
+						Data:    []byte{0x00, 0x00},
+					},
+				},
+			},
+		},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got, err := ParseDevicePathFromString(tt.args.s)
+			if (err != nil) != tt.wantErr {
+				t.Errorf("ParseDevicePathFromString() error = %v, wantErr %v", err, tt.wantErr)
+				return
+			}
+			if !reflect.DeepEqual(got, tt.want) {
+				t.Errorf("ParseDevicePathFromString() = %v, want %v", got, tt.want)
 			}
 		})
 	}

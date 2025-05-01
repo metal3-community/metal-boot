@@ -48,7 +48,7 @@ func TestVarStoreInterface(t *testing.T) {
 	assert.NoError(t, varList.Add(bootOrderVar))
 
 	// Write to the mock varstore
-	err := mock.WriteVarStore("test.bin", varList)
+	err = mock.WriteVarStore("test.bin", varList)
 	assert.NoError(t, err)
 
 	// Get the variable list back

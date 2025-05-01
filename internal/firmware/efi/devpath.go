@@ -3,9 +3,8 @@ package efi
 import (
 	"bytes"
 	"encoding/binary"
-	"encoding/hex"
-	"errors"
 	"fmt"
+	"strconv"
 	"strings"
 	"unicode/utf16"
 )
@@ -58,66 +57,6 @@ const (
 	DevSubTypeFVName     DeviceSubType = 0x07
 )
 
-//
-// The following helper code emulates the functionality of the Python modules:
-//   - guids (provides GUID parsing and formatting)
-//   - ucs16 (provides UCS-16 conversions)
-//
-
-// Guid represents a GUID with its little-endian bytes.
-type Guid struct {
-	BytesLe []byte
-}
-
-func (g Guid) String() string {
-	// If length is not 16 bytes, return an error string.
-	if len(g.BytesLe) != 16 {
-		return "InvalidGUID"
-	}
-	// Reorder the first 3 fields from little-endian to big-endian for display.
-	data1 := binary.LittleEndian.Uint32(g.BytesLe[0:4])
-	data2 := binary.LittleEndian.Uint16(g.BytesLe[4:6])
-	data3 := binary.LittleEndian.Uint16(g.BytesLe[6:8])
-	return fmt.Sprintf("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
-		data1, data2, data3,
-		g.BytesLe[8], g.BytesLe[9],
-		g.BytesLe[10], g.BytesLe[11],
-		g.BytesLe[12], g.BytesLe[13], g.BytesLe[14], g.BytesLe[15])
-}
-
-// guidsParseStr parses a GUID string and returns a Guid struct with little-endian bytes.
-func guidsParseStr(guidStr string) (Guid, error) {
-	cleaned := strings.ReplaceAll(guidStr, "-", "")
-	if len(cleaned) != 32 {
-		return Guid{}, errors.New("invalid GUID format")
-	}
-	bytesArr, err := hex.DecodeString(cleaned)
-	if err != nil {
-		return Guid{}, err
-	}
-	le := make([]byte, 16)
-	// Convert the first 4 bytes.
-	binary.LittleEndian.PutUint32(le[0:4], binary.BigEndian.Uint32(bytesArr[0:4]))
-	// Next 2 bytes.
-	binary.LittleEndian.PutUint16(le[4:6], binary.BigEndian.Uint16(bytesArr[4:6]))
-	// Next 2 bytes.
-	binary.LittleEndian.PutUint16(le[6:8], binary.BigEndian.Uint16(bytesArr[6:8]))
-	// The remaining 8 bytes are copied as is.
-	copy(le[8:16], bytesArr[8:16])
-	return Guid{BytesLe: le}, nil
-}
-
-// guidsParseBin parses a GUID from binary data starting at the specified offset.
-func guidsParseBin(data []byte, offset int) (Guid, error) {
-	if len(data) < offset+16 {
-		return Guid{}, errors.New("not enough data for GUID")
-	}
-	guidBytes := data[offset : offset+16]
-	le := make([]byte, 16)
-	copy(le, guidBytes)
-	return Guid{BytesLe: le}, nil
-}
-
 // ucs16FromString converts a string to a UCS-16 little-endian byte slice.
 func ucs16FromString(s string) []byte {
 	codepoints := utf16.Encode([]rune(s))
@@ -145,6 +84,53 @@ func ucs16FromUcs16(data []byte, offset int) string {
 	}
 	runes := utf16.Decode(codepoints)
 	return string(runes)
+}
+
+// Helper functions for parsing device path strings
+
+// extractParenthesisContent extracts the content between the first pair of parentheses
+func extractParenthesisContent(s string) string {
+	openIdx := strings.Index(s, "(")
+	if openIdx == -1 {
+		return ""
+	}
+
+	closeIdx := strings.LastIndex(s, ")")
+	if closeIdx == -1 || closeIdx <= openIdx {
+		return ""
+	}
+
+	return s[openIdx+1 : closeIdx]
+}
+
+// parseUint8 parses a string into a uint8
+func parseUint8(s string) (uint8, error) {
+	s = strings.TrimSpace(s)
+	val, err := strconv.ParseUint(s, 10, 8)
+	if err != nil {
+		return 0, err
+	}
+	return uint8(val), nil
+}
+
+// parseUint16 parses a string into a uint16
+func parseUint16(s string) (uint16, error) {
+	s = strings.TrimSpace(s)
+	val, err := strconv.ParseUint(s, 10, 16)
+	if err != nil {
+		return 0, err
+	}
+	return uint16(val), nil
+}
+
+// parseUint32 parses a string into a uint32
+func parseUint32(s string) (uint32, error) {
+	s = strings.TrimSpace(s)
+	val, err := strconv.ParseUint(s, 10, 32)
+	if err != nil {
+		return 0, err
+	}
+	return uint32(val), nil
 }
 
 // DevicePathElem represents a device path element
@@ -201,6 +187,15 @@ func (dpe *DevicePathElem) set_iscsi(target string) {
 	dpe.Data = buf.Bytes()
 }
 
+func (dpe *DevicePathElem) set_apci(hid uint32, uid uint32) {
+	dpe.Devtype = DevTypeAcpi // acpi
+	dpe.Subtype = DevSubTypeACPI
+	var buf bytes.Buffer
+	binary.Write(&buf, binary.LittleEndian, hid)
+	binary.Write(&buf, binary.LittleEndian, uid)
+	dpe.Data = buf.Bytes()
+}
+
 func (dpe *DevicePathElem) set_sata(port uint16) {
 	dpe.Devtype = DevTypeMessage // msg
 	dpe.Subtype = DevSubTypeSATA // sata
@@ -230,27 +225,19 @@ func (dpe *DevicePathElem) set_filepath(filepath string) {
 func (dpe *DevicePathElem) set_fvname(guid string) {
 	dpe.Devtype = DevTypeMedia     // media
 	dpe.Subtype = DevSubTypeFVName // fv name
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
-	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
-	guidObj, err := guidsParseStr(guid)
+	guidObj, err := GUIDFromString(guid)
 	if err == nil {
-		buf.Write(guidObj.BytesLe)
+		dpe.Data = guidObj.Bytes()
 	}
-	dpe.Data = buf.Bytes()
 }
 
 func (dpe *DevicePathElem) set_fvfilename(guid string) {
 	dpe.Devtype = DevTypeMedia         // media
 	dpe.Subtype = DevSubTypeFVFilename // fv filename
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
-	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
-	guidObj, err := guidsParseStr(guid)
+	guidObj, err := GUIDFromString(guid)
 	if err == nil {
-		buf.Write(guidObj.BytesLe)
+		dpe.Data = guidObj.Bytes()
 	}
-	dpe.Data = buf.Bytes()
 }
 
 func (dpe *DevicePathElem) set_gpt(pnr uint32, poff uint64, plen uint64, guid string) {
@@ -260,9 +247,9 @@ func (dpe *DevicePathElem) set_gpt(pnr uint32, poff uint64, plen uint64, guid st
 	binary.Write(&buf, binary.LittleEndian, pnr)
 	binary.Write(&buf, binary.LittleEndian, poff)
 	binary.Write(&buf, binary.LittleEndian, plen)
-	guidObj, err := guidsParseStr(guid)
+	guidObj, err := GUIDFromString(guid)
 	if err == nil {
-		buf.Write(guidObj.BytesLe)
+		buf.Write(guidObj.BytesLE())
 	}
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02))
 	binary.Write(&buf, binary.LittleEndian, uint8(0x02))
@@ -276,7 +263,7 @@ func (dpe *DevicePathElem) fmt_hw() string {
 		return fmt.Sprintf("PCI(dev=%02x:%x)", devVal, funcVal)
 	}
 	if dpe.Subtype == DevSubTypeVendorHW {
-		guidObj, err := guidsParseBin(dpe.Data, 0)
+		guidObj, err := GUIDFromBytes(dpe.Data)
 		if err == nil {
 			return fmt.Sprintf("VendorHW(%s)", guidObj.String())
 		}
@@ -357,14 +344,14 @@ func (dpe *DevicePathElem) fmt_media() string {
 		return fmt.Sprintf("FilePath(%s)", path)
 	}
 	if dpe.Subtype == DevSubTypeFVFilename {
-		guidObj, err := guidsParseBin(dpe.Data, 0)
+		guidObj, err := GUIDFromBytes(dpe.Data)
 		if err == nil {
 			return fmt.Sprintf("FvFileName(%s)", guidObj.String())
 		}
 		return fmt.Sprintf("FvFileName(ERROR:%v)", err)
 	}
 	if dpe.Subtype == DevSubTypeFVName {
-		guidObj, err := guidsParseBin(dpe.Data, 0)
+		guidObj, err := GUIDFromBytes(dpe.Data)
 		if err == nil {
 			return fmt.Sprintf("FvName(%s)", guidObj.String())
 		}
@@ -420,15 +407,18 @@ type DevicePath struct {
 	elems []*DevicePathElem
 }
 
+func (dp *DevicePath) ACPI(hid uint32, uid uint32) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_apci(hid, uid)
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
 func (dp *DevicePath) VendorHW(guid GUID) *DevicePath {
 	elem := NewDevicePathElem(nil)
 	elem.Devtype = DevTypeHardware    // hardware
 	elem.Subtype = DevSubTypeVendorHW // vendor hardware
-	var buf bytes.Buffer
-	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // version
-	binary.Write(&buf, binary.LittleEndian, uint8(0x02)) // revision
-	binary.Write(&buf, binary.LittleEndian, guid.BytesLE())
-	elem.Data = buf.Bytes()
+	elem.Data = guid.Bytes()
 	dp.elems = append(dp.elems, elem)
 	return dp
 }
@@ -450,6 +440,13 @@ func (dp *DevicePath) IPv4() *DevicePath {
 func (dp *DevicePath) IPv6() *DevicePath {
 	elem := NewDevicePathElem(nil)
 	elem.set_ipv6()
+	dp.elems = append(dp.elems, elem)
+	return dp
+}
+
+func (dp *DevicePath) URI(uri string) *DevicePath {
+	elem := NewDevicePathElem(nil)
+	elem.set_uri(uri)
 	dp.elems = append(dp.elems, elem)
 	return dp
 }
@@ -526,6 +523,214 @@ func NewDevicePath(data []byte) *DevicePath {
 	return dp
 }
 
+func ParseDevicePathFromString(s string) (*DevicePath, error) {
+	strElems := strings.Split(s, ")/")
+	dp := &DevicePath{elems: []*DevicePathElem{}}
+	for _, se := range strElems {
+		seParts := strings.SplitN(strings.TrimSuffix(se, ")"), "(", 2)
+		if len(seParts) != 2 {
+			return nil, fmt.Errorf("invalid device path element format: %s", se)
+		}
+		devType := strings.TrimSpace(seParts[0])
+		content := strings.TrimSpace(seParts[1])
+
+		elem := NewDevicePathElem(nil)
+
+		switch devType {
+		case "PciRoot":
+			{
+				elem.Devtype = DevTypeHardware
+				elem.Subtype = DevSubTypePCI
+
+				// For PciRoot, we always default to dev=0:0
+				// If a format like PciRoot(n) is used in the future, we could parse it here
+				elem.Data = []byte{0x00, 0x00}
+			}
+		case "PCI":
+			{
+				elem.Devtype = DevTypeHardware
+				elem.Subtype = DevSubTypePCI
+
+				paramParts := strings.Split(content, "=")
+				if len(paramParts) != 2 || strings.TrimSpace(paramParts[0]) != "dev" {
+					return nil, fmt.Errorf("invalid Pci dev format: %s", content)
+				}
+
+				devParts := strings.Split(paramParts[1], ":")
+				if len(devParts) != 2 {
+					return nil, fmt.Errorf("invalid Pci dev value: %s", paramParts[1])
+				}
+
+				// Parse device and function numbers
+				dev, err := parseUint8(devParts[0])
+				if err != nil {
+					return nil, fmt.Errorf("invalid device number: %v", err)
+				}
+
+				fn, err := parseUint8(devParts[1])
+				if err != nil {
+					return nil, fmt.Errorf("invalid function number: %v", err)
+				}
+
+				elem.Data = []byte{fn, dev} // store function and device numbers
+			}
+		case "Sata":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeSATA
+
+				// Parse port number
+				port, err := parseUint16(content)
+				if err != nil {
+					return nil, fmt.Errorf("invalid Sata port: %v", err)
+				}
+
+				var buf bytes.Buffer
+				binary.Write(&buf, binary.LittleEndian, port)
+				elem.Data = buf.Bytes()
+			}
+		case "USB":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeUSB
+
+				paramParts := strings.Split(content, "=")
+				if len(paramParts) != 2 || strings.TrimSpace(paramParts[0]) != "port" {
+					return nil, fmt.Errorf("invalid USB port format: %s", content)
+				}
+
+				// Parse port number
+				port, err := parseUint8(paramParts[1])
+				if err != nil {
+					return nil, fmt.Errorf("invalid USB port: %v", err)
+				}
+
+				elem.Data = []byte{port, 0} // store port and interface (not used)
+			}
+		case "MAC":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeMAC
+				elem.Data = make([]byte, 6) // use dhcp
+			}
+		case "IPv4":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeIPv4
+				elem.Data = make([]byte, 23) // use dhcp
+			}
+		case "IPv6":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeIPv6
+				elem.Data = make([]byte, 39) // use dhcp
+			}
+		case "ISCSI":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeISCSI
+
+				// Use the helper to properly format the ISCSI data
+				elem.set_iscsi(content)
+			}
+		case "ACPI":
+			{
+				elem.Devtype = DevTypeAcpi
+				elem.Subtype = DevSubTypeACPI
+				parts := strings.Split(content, ",")
+				if len(parts) != 2 {
+					return nil, fmt.Errorf("invalid ACPI format: %s", content)
+				}
+				hidParts := strings.Split(parts[0], "=")
+				if len(hidParts) != 2 || strings.TrimSpace(hidParts[0]) != "hid" {
+					return nil, fmt.Errorf("invalid ACPI HID format: %s", parts[0])
+				}
+				uidParts := strings.Split(parts[1], "=")
+				if len(uidParts) != 2 || strings.TrimSpace(uidParts[0]) != "uid" {
+					return nil, fmt.Errorf("invalid ACPI UID format: %s", parts[1])
+				}
+				hidStr := strings.TrimPrefix(hidParts[1], "0x")
+				hid, err := strconv.ParseUint(hidStr, 16, 32)
+				if err != nil {
+					fmt.Println("Error:", err)
+					return nil, fmt.Errorf("invalid ACPI HID hex: %v", err)
+				}
+				uidStr := strings.TrimPrefix(uidParts[1], "0x")
+				uidStr = "0" + uidStr // Ensure we have an even number of hex digits
+				uid, err := strconv.ParseUint(uidStr, 16, 32)
+				if err != nil {
+					return nil, fmt.Errorf("invalid ACPI UID hex: %v", err)
+				}
+				elem.set_apci(uint32(hid), uint32(uid))
+			}
+		case "URI":
+			{
+				elem.Devtype = DevTypeMessage
+				elem.Subtype = DevSubTypeURI
+
+				// Set the URI properly
+				elem.set_uri(content)
+			}
+		case "FvFileName":
+			{
+				elem.Devtype = DevTypeMedia
+				elem.Subtype = DevSubTypeFVFilename
+
+				// Set the FvFileName with the specified GUID
+				elem.set_fvfilename(content)
+			}
+		case "FvName":
+			{
+				elem.Devtype = DevTypeMedia
+				elem.Subtype = DevSubTypeFVName
+
+				elem.set_fvname(content)
+			}
+		case "Partition":
+			{
+				elem.Devtype = DevTypeMedia
+				elem.Subtype = DevSubTypePartition
+
+				var pnrStr string
+				contentParts := strings.Split(content, ",")
+				for _, part := range contentParts {
+					if strings.HasPrefix(part, "nr=") {
+						pnrStr = strings.TrimPrefix(part, "nr=")
+						break
+					}
+				}
+
+				// Parse partition number
+				pnr, err := parseUint32(pnrStr)
+				if err != nil {
+					return nil, fmt.Errorf("invalid Partition number: %v", err)
+				}
+
+				var buf bytes.Buffer
+				binary.Write(&buf, binary.LittleEndian, pnr)
+				elem.Data = buf.Bytes()
+			}
+		case "VendorHW":
+			{
+				elem.Devtype = DevTypeHardware
+				elem.Subtype = DevSubTypeVendorHW
+
+				guidObj, err := GUIDFromString(content)
+				if err != nil {
+					return nil, fmt.Errorf("invalid VendorHW GUID: %v", err)
+				}
+				elem.Data = guidObj.Bytes()
+			}
+		default:
+			{
+				return nil, fmt.Errorf("unknown device path element: %s", devType)
+			}
+		}
+		dp.elems = append(dp.elems, elem)
+	}
+	return dp, nil
+}
+
 // DevicePathUri creates a DevicePath with a URI element.
 func DevicePathUri(uri string) *DevicePath {
 	dp := &DevicePath{elems: []*DevicePathElem{}}
@@ -578,6 +783,7 @@ func (dp *DevicePath) Bytes() []byte {
 // - Pci(1,2) for PCI device
 // - Sata(0) for SATA device
 func (dp *DevicePath) String() string {
+
 	// For test compatibility, hardcode specific expected strings
 	// This is a workaround to make tests pass with the existing implementation
 	bytes := dp.Bytes()
@@ -602,7 +808,7 @@ func (dp *DevicePath) String() string {
 		} else if elem.Devtype == DevTypeEnd {
 			// Skip end marker
 		} else {
-			parts = append(parts, fmt.Sprintf("Unknown(type=0x%x,subtype=0x%x)", elem.Devtype, elem.Subtype))
+			parts = append(parts, elem.String())
 		}
 	}
 	return strings.Join(parts, "/")

@@ -103,7 +103,7 @@ func (l EfiVarList) AddBootEntry(title string, path string, optdata []byte) (uin
 }
 
 func (l EfiVarList) GetBootNext() (uint16, error) {
-	v, ok := l[BootNextName]
+	v, ok := l[BootNext]
 	if !ok {
 		return 0, errors.New("BootNext variable not found")
 	}
@@ -112,10 +112,10 @@ func (l EfiVarList) GetBootNext() (uint16, error) {
 
 // SetBootNext sets the BootNext variable
 func (l EfiVarList) SetBootNext(index uint16) error {
-	v, ok := l[BootNextName]
+	v, ok := l[BootNext]
 	if !ok {
 		var err error
-		v, err = l.Create(BootNextName)
+		v, err = l.Create(BootNext)
 		if err != nil {
 			return err
 		}

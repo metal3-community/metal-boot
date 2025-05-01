@@ -18,7 +18,6 @@ type FirmwareManager interface {
 	UpdateBootEntry(id string, entry types.BootEntry) error
 	DeleteBootEntry(id string) error
 
-	// Boot Next Management
 	SetBootNext(index uint16) error
 	GetBootNext() (uint16, error)
 
@@ -40,7 +39,7 @@ type FirmwareManager interface {
 
 	// Device Specific Settings
 	SetConsoleConfig(consoleName string, baudRate int) error
-	GetSystemInfo() (types.SystemInfo, error)
+	GetSystemInfo() (map[string]string, error)
 
 	// Firmware Updates
 	UpdateFirmware(firmwareData []byte) error

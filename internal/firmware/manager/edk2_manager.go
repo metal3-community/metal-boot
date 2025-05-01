@@ -1,10 +1,8 @@
-// Package manager provides implementations for firmware management interfaces.
 package manager
 
 import (
-	"encoding/binary"
+	"encoding/hex"
 	"fmt"
-	"io"
 	"net"
 	"os"
 	"path/filepath"
@@ -12,13 +10,14 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bmcpi/pibmc/internal/firmware/edk2"
 	"github.com/bmcpi/pibmc/internal/firmware/efi"
 	"github.com/bmcpi/pibmc/internal/firmware/types"
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/go-logr/logr"
 )
 
-// EDK2Manager implements the FirmwareManager interface for Raspberry Pi EDK2 firmware.
+// EDK2Manager implements the FirmwareManager interface for Raspberry Pi EDK2 firmware
 type EDK2Manager struct {
 	firmwarePath string
 	varStore     *varstore.Edk2VarStore
@@ -26,285 +25,239 @@ type EDK2Manager struct {
 	logger       logr.Logger
 }
 
-// NewEDK2Manager creates a new EDK2Manager for the given firmware file.
+// NewEDK2Manager creates a new EDK2Manager for the given firmware file
 func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, error) {
 	manager := &EDK2Manager{
 		firmwarePath: firmwarePath,
 		logger:       logger.WithName("edk2-manager"),
 	}
 
-	if _, err := os.Stat(firmwarePath); err != nil {
-		return nil, fmt.Errorf("firmware file not found: %w", err)
+	if _, err := os.Stat(firmwarePath); os.IsNotExist(err) {
+
+		firmwareRoot := filepath.Dir(firmwarePath)
+
+		if err := os.MkdirAll(firmwareRoot, 0755); err != nil {
+			return nil, fmt.Errorf("failed to create firmware directory: %w", err)
+		}
+
+		for k, f := range edk2.Files {
+			kf := filepath.Join(firmwareRoot, k)
+			kfr := filepath.Dir(kf)
+
+			if kfr != firmwareRoot {
+				if err := os.MkdirAll(kfr, 0755); err != nil {
+					return nil, fmt.Errorf("failed to create firmware directory: %w", err)
+				}
+			}
+
+			if err := os.WriteFile(kf, f, 0644); err != nil {
+				return nil, fmt.Errorf("failed to create firmware file: %w", err)
+			}
+		}
 	}
 
+	// Initialize the variable store
 	manager.varStore = varstore.NewEdk2VarStore(firmwarePath)
-	if manager.varStore == nil {
-		return nil, fmt.Errorf("failed to create varstore for %s", firmwarePath)
-	}
+	manager.varStore.Logger = logger.WithName("edk2-varstore")
 
-	varList, err := manager.varStore.GetVarList()
+	// Load the variable list
+	var err error
+	manager.varList, err = manager.varStore.GetVarList()
 	if err != nil {
 		return nil, fmt.Errorf("failed to get variable list: %w", err)
 	}
-	manager.varList = varList
 
 	return manager, nil
 }
 
-// GetBootOrder retrieves the current boot order.
+// GetBootOrder retrieves the boot order as a list of entry IDs
 func (m *EDK2Manager) GetBootOrder() ([]string, error) {
-	bootOrderVar, _ := m.varList.FindFirst(func(name string, efiVar *efi.EfiVar) bool {
-		return name == "BootOrder"
-	})
-
-	if bootOrderVar == nil {
-		return nil, fmt.Errorf("BootOrder variable not found")
+	bootOrderVar, found := m.varList[efi.BootOrder]
+	if !found {
+		return []string{}, nil
 	}
 
-	bootOrder := []string{}
-	data := bootOrderVar.Data
-	for i := 0; i < len(data); i += 2 {
-		if i+1 >= len(data) {
-			break
-		}
-		val := binary.LittleEndian.Uint16(data[i : i+2])
-		bootOrder = append(bootOrder, fmt.Sprintf("Boot%04X", val))
+	bootSequence, err := bootOrderVar.GetBootOrder()
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse boot order: %w", err)
 	}
 
-	return bootOrder, nil
+	result := make([]string, len(bootSequence))
+	for i, id := range bootSequence {
+		result[i] = fmt.Sprintf("%04X", id)
+	}
+
+	return result, nil
 }
 
-// SetBootOrder sets a new boot order.
-func (m *EDK2Manager) SetBootOrder(bootOrder []string) error {
-	if len(bootOrder) == 0 {
-		return fmt.Errorf("empty boot order")
+func (m *EDK2Manager) SetBootNext(index uint16) error {
+	return m.varList.SetBootNext(index)
+}
+
+func (m *EDK2Manager) GetBootNext() (uint16, error) {
+	bootNextVar, found := m.varList[efi.BootNext]
+	if !found {
+		return 0, nil
 	}
+	return bootNextVar.GetBootNext()
+}
 
-	data := make([]byte, len(bootOrder)*2)
-	for i, bootName := range bootOrder {
-		if !strings.HasPrefix(bootName, "Boot") {
-			return fmt.Errorf("invalid boot entry name: %s", bootName)
-		}
+// SetBootOrder sets the boot order from a list of entry IDs
+func (m *EDK2Manager) SetBootOrder(order []string) error {
+	bootSequence := make([]uint16, len(order))
 
-		hexStr := strings.TrimPrefix(bootName, "Boot")
-		val, err := strconv.ParseUint(hexStr, 16, 16)
+	for i, id := range order {
+		// Remove "Boot" prefix if present
+		id = strings.TrimPrefix(id, "Boot")
+
+		// Parse the hex entry ID
+		entryID, err := strconv.ParseUint(id, 16, 16)
 		if err != nil {
-			return fmt.Errorf("invalid boot entry ID: %s", hexStr)
+			return fmt.Errorf("invalid boot entry ID '%s': %w", id, err)
 		}
 
-		binary.LittleEndian.PutUint16(data[i*2:], uint16(val))
+		bootSequence[i] = uint16(entryID)
 	}
 
-	// Create new BootOrder variable if it doesn't exist
-	// Create new BootOrder variable if it doesn't exist
-	bootOrderVar, ok := m.varList["BootOrder"]
-	if !ok || bootOrderVar == nil {
-		// Create a new UCS16String for "BootOrder"
-		bootOrderName := efi.ToUCS16("BootOrder")
-
+	// Get or create the BootOrder variable
+	bootOrderVar, found := m.varList[efi.BootOrder]
+	if !found {
 		bootOrderVar = &efi.EfiVar{
-			Name: bootOrderName,
-			Guid: efi.ParseGuid(efi.EfiGlobalVariable),
-			Attr: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
-			Data: data,
+			Name: efi.NewUCS16String(efi.BootOrder),
+			Guid: efi.StringToGUID(efi.EFI_GLOBAL_VARIABLE),
+			Attr: efi.EFI_VARIABLE_NON_VOLATILE |
+				efi.EFI_VARIABLE_BOOTSERVICE_ACCESS |
+				efi.EFI_VARIABLE_RUNTIME_ACCESS,
 		}
-		m.varList["BootOrder"] = bootOrderVar
-	} else {
-		bootOrderVar.Data = data
+		m.varList[efi.BootOrder] = bootOrderVar
 	}
+
+	// Set the new boot order
+	bootOrderVar.SetBootOrder(bootSequence)
 
 	return nil
 }
 
-// GetBootEntries retrieves all boot entries.
+// GetBootEntries returns all boot entries from the firmware
 func (m *EDK2Manager) GetBootEntries() ([]types.BootEntry, error) {
-	var bootEntries []types.BootEntry
-
-	for _, v := range m.varList {
-		name := v.Name.String()
-
-		if !strings.HasPrefix(name, "Boot") || name == "BootOrder" || name == "BootNext" {
-			continue
-		}
-
-		// Extract the boot ID (e.g., "0000" from "Boot0000")
-		bootID := strings.TrimPrefix(name, "Boot")
-
-		// Parse boot entry data
-		if len(v.Data) < 8 {
-			m.logger.Info("Skipping invalid boot entry", "name", name, "data_len", len(v.Data))
-			continue
-		}
-
-		// First 4 bytes are attributes
-		attributes := binary.LittleEndian.Uint32(v.Data[0:4])
-
-		// Next 2 bytes are device path length
-		pathLen := binary.LittleEndian.Uint16(v.Data[4:6])
-
-		// Description starts at offset 6
-		descEnd := 6
-		for descEnd < len(v.Data) && v.Data[descEnd] != 0 && v.Data[descEnd+1] != 0 {
-			descEnd += 2
-		}
-
-		// Get the description (UCS-16 encoded)
-		name := efi.Ucs16ToString(v.Data[6 : descEnd+2])
-
-		// Device path starts after the description (aligned to even boundary)
-		dpStart := descEnd + 2
-		if dpStart%2 != 0 {
-			dpStart++
-		}
-
-		// Device path data
-		var devPath string
-		var optData string
-
-		if dpStart+int(pathLen) <= len(v.Data) {
-			dpData := v.Data[dpStart : dpStart+int(pathLen)]
-			dp := efi.ParseDevicePath(dpData)
-			devPath = dp.String()
-
-			// Optional data if present
-			if dpStart+int(pathLen) < len(v.Data) {
-				optData = fmt.Sprintf("%x", v.Data[dpStart+int(pathLen):])
-			}
-		}
-
-		enabled := (attributes & 1) == 1 // Check if LOAD_OPTION_ACTIVE is set
-
-		entry := types.BootEntry{
-			ID:       bootID,
-			Name:     name,
-			DevPath:  devPath,
-			Enabled:  enabled,
-			OptData:  optData,
-			Position: -1, // Will be set based on BootOrder
-		}
-
-		bootEntries = append(bootEntries, entry)
+	bootEntries, err := m.varList.ListBootEntries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to list boot entries: %w", err)
 	}
 
-	// Update positions based on boot order
-	bootOrder, err := m.GetBootOrder()
-	if err == nil && len(bootOrder) > 0 {
-		for i, bootName := range bootOrder {
-			for j := range bootEntries {
-				if "Boot"+bootEntries[j].ID == bootName {
-					bootEntries[j].Position = i
-					break
+	// Convert to the public types.BootEntry type
+	result := make([]types.BootEntry, 0, len(bootEntries))
+	for id, entry := range bootEntries {
+		// Skip empty entries
+		if entry == nil {
+			continue
+		}
+
+		position := 0
+		enabled := (entry.Attr & efi.LOAD_OPTION_ACTIVE) != 0
+
+		// Get position from boot order
+		bootOrderVar, found := m.varList[efi.BootOrder]
+		if found {
+			bootSequence, err := bootOrderVar.GetBootOrder()
+			if err == nil {
+				for i, bootID := range bootSequence {
+					if bootID == uint16(id) {
+						position = i
+						break
+					}
 				}
 			}
 		}
+
+		bootEntry := types.BootEntry{
+			ID:       fmt.Sprintf("%04X", id),
+			Name:     entry.Title.String(),
+			DevPath:  entry.DevicePath.String(),
+			Enabled:  enabled,
+			Position: position,
+		}
+
+		result = append(result, bootEntry)
 	}
 
-	return bootEntries, nil
+	return result, nil
 }
 
-// AddBootEntry adds a new boot entry.
+// AddBootEntry adds a new boot entry to the firmware
 func (m *EDK2Manager) AddBootEntry(entry types.BootEntry) error {
-	// Validate entry
-	if entry.ID == "" || entry.Name == "" {
-		return fmt.Errorf("boot entry must have ID and Name")
-	}
-
-	// Create the boot variable name (e.g., "Boot0000")
-	bootName := "Boot" + entry.ID
-
-	// Check if this boot entry already exists
-	for _, v := range m.varList {
-		if name == bootName {
-			return fmt.Errorf("boot entry %s already exists", bootName)
+	foundKey := false
+	// Find the next available boot entry ID
+	maxID := uint16(0)
+	for k := range m.varList {
+		if strings.HasPrefix(k, efi.BootPrefix) && len(k) == 8 {
+			foundKey = true
+			idStr := k[4:] // Extract the ID portion
+			id, err := strconv.ParseUint(idStr, 16, 16)
+			if err == nil && uint16(id) > maxID {
+				maxID = uint16(id)
+			}
 		}
 	}
-
-	// Construct device path from string
-	dp := efi.NewDevicePath()
-	if err := dp.ParseFromString(entry.DevPath); err != nil {
-		return fmt.Errorf("failed to parse device path: %w", err)
+	nextID := maxID + 1
+	if !foundKey {
+		nextID = 0
 	}
 
-	dpData := dp.Bytes()
+	// Create the boot entry name
+	bootEntryName := fmt.Sprintf("%s%04X", efi.BootPrefix, nextID)
 
-	// Build the boot entry data
-	// Format: [4 bytes attributes][2 bytes path length][description string (UCS-16)][null terminator][device path][optional data]
+	// Create or update the boot entry variable
+	bootEntryVar := &efi.EfiVar{
+		Name: efi.NewUCS16String(bootEntryName),
+		Guid: efi.StringToGUID(efi.EFI_GLOBAL_VARIABLE),
+		Attr: efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS | efi.EFI_VARIABLE_RUNTIME_ACCESS,
+	}
 
-	attributes := uint32(0)
+	// Set attributes based on enabled status
+	attr := uint32(0)
 	if entry.Enabled {
-		attributes |= 1 // Set LOAD_OPTION_ACTIVE flag
+		attr |= efi.LOAD_OPTION_ACTIVE
 	}
 
-	// Convert description to UCS-16
-	descData := efi.StringToUcs16(entry.Name)
+	var err error
 
-	// Calculate total size
-	totalSize := 6 + len(descData) + len(dpData)
-	if entry.OptData != "" {
-		// Parse optional data from hex
-		optBytes, err := parseHexString(entry.OptData)
-		if err != nil {
-			return fmt.Errorf("invalid optional data: %w", err)
+	optData := []byte{}
+	if len(entry.OptData) != 0 {
+		optData, err = hex.DecodeString(entry.OptData)
+		if err != nil && entry.OptData != "" {
+			return fmt.Errorf("invalid optional data format: %w", err)
 		}
-		totalSize += len(optBytes)
 	}
 
-	// Construct the variable data
-	data := make([]byte, totalSize)
-	binary.LittleEndian.PutUint32(data[0:], attributes)
-	binary.LittleEndian.PutUint16(data[4:], uint16(len(dpData)))
-
-	offset := 6
-	copy(data[offset:], descData)
-	offset += len(descData)
-
-	copy(data[offset:], dpData)
-	offset += len(dpData)
-
-	if entry.OptData != "" {
-		optBytes, _ := parseHexString(entry.OptData) // Error already checked
-		copy(data[offset:], optBytes)
+	// Set the boot entry with the specified title and device path
+	err = bootEntryVar.SetBootEntry(attr, entry.Name, entry.DevPath, optData)
+	if err != nil {
+		return fmt.Errorf("failed to set boot entry: %w", err)
 	}
 
-	// Create the EFI variable
-	efiVar := &efi.EfiVar{
-		Name:       bootName,
-		Guid:       efi.EfiGlobalVariable,
-		Attributes: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
-		Data:       data,
-	}
+	// Add the entry to the variable list
+	m.varList[bootEntryName] = bootEntryVar
 
-	// Add to var list
-	m.varList = append(m.varList, efiVar)
-
-	// Update boot order if position is specified
+	// Update the boot order if position is specified
 	if entry.Position >= 0 {
 		bootOrder, err := m.GetBootOrder()
 		if err != nil {
-			bootOrder = []string{}
+			return fmt.Errorf("failed to get boot order: %w", err)
 		}
 
-		// Create new boot order with the entry at the specified position
-		newBootOrder := make([]string, 0, len(bootOrder)+1)
-		entryAdded := false
+		// Convert the new ID to a string format matching the boot order
+		newEntryID := fmt.Sprintf("%04X", nextID)
 
-		for i := 0; i <= len(bootOrder); i++ {
-			if i == entry.Position {
-				newBootOrder = append(newBootOrder, bootName)
-				entryAdded = true
-			}
-
-			if i < len(bootOrder) {
-				newBootOrder = append(newBootOrder, bootOrder[i])
-			}
+		// Insert the new entry at the specified position
+		if entry.Position >= len(bootOrder) {
+			bootOrder = append(bootOrder, newEntryID)
+		} else {
+			bootOrder = append(bootOrder[:entry.Position], append([]string{newEntryID}, bootOrder[entry.Position:]...)...)
 		}
 
-		// If position was beyond the end, append at the end
-		if !entryAdded {
-			newBootOrder = append(newBootOrder, bootName)
-		}
-
-		if err := m.SetBootOrder(newBootOrder); err != nil {
+		// Update the boot order
+		if err := m.SetBootOrder(bootOrder); err != nil {
 			return fmt.Errorf("failed to update boot order: %w", err)
 		}
 	}
@@ -312,273 +265,166 @@ func (m *EDK2Manager) AddBootEntry(entry types.BootEntry) error {
 	return nil
 }
 
-// parseHexString converts a hex string to bytes.
-func parseHexString(hexStr string) ([]byte, error) {
-	// Remove any whitespace and "0x" prefixes
-	cleaned := strings.ReplaceAll(hexStr, " ", "")
-	cleaned = strings.ReplaceAll(cleaned, "0x", "")
-
-	// If odd length, pad with a leading zero
-	if len(cleaned)%2 != 0 {
-		cleaned = "0" + cleaned
-	}
-
-	bytes := make([]byte, len(cleaned)/2)
-	for i := 0; i < len(cleaned); i += 2 {
-		byteVal, err := strconv.ParseUint(cleaned[i:i+2], 16, 8)
-		if err != nil {
-			return nil, err
-		}
-		bytes[i/2] = byte(byteVal)
-	}
-
-	return bytes, nil
-}
-
-// UpdateBootEntry updates an existing boot entry.
+// UpdateBootEntry updates an existing boot entry in the firmware
 func (m *EDK2Manager) UpdateBootEntry(id string, entry types.BootEntry) error {
-	// Validate entry
-	if entry.Name == "" {
-		return fmt.Errorf("boot entry must have a Name")
+	// Add "Boot" prefix if not present
+	if !strings.HasPrefix(id, efi.BootPrefix) {
+		id = efi.BootPrefix + id
 	}
 
-	// Create the boot variable name (e.g., "Boot0000")
-	bootName := "Boot" + id
-
-	// Find the existing boot entry
-	var existingVar *efi.EfiVar
-	for i, v := range m.varList {
-		if name == bootName {
-			existingVar = m.varList[i]
-			break
-		}
+	// Check if the entry exists
+	bootEntryVar, found := m.varList[id]
+	if !found {
+		return fmt.Errorf("boot entry not found: %s", id)
 	}
 
-	if existingVar == nil {
-		return fmt.Errorf("boot entry %s not found", bootName)
+	// Get the current boot entry
+	currentEntry, err := bootEntryVar.GetBootEntry()
+	if err != nil {
+		return fmt.Errorf("failed to parse boot entry: %w", err)
 	}
 
-	// Construct device path from string
-	dp := efi.NewDevicePath()
-	if err := dp.ParseFromString(entry.DevPath); err != nil {
-		return fmt.Errorf("failed to parse device path: %w", err)
-	}
-
-	dpData := dp.Bytes()
-
-	// Build the boot entry data
-	// Format: [4 bytes attributes][2 bytes path length][description string (UCS-16)][null terminator][device path][optional data]
-
-	attributes := uint32(0)
+	// Set attributes based on enabled status
+	attr := currentEntry.Attr
 	if entry.Enabled {
-		attributes |= 1 // Set LOAD_OPTION_ACTIVE flag
+		attr |= efi.LOAD_OPTION_ACTIVE
+	} else {
+		attr &= ^uint32(efi.LOAD_OPTION_ACTIVE)
 	}
 
-	// Convert description to UCS-16
-	descData := efi.StringToUcs16(entry.Name)
-
-	// Calculate total size
-	totalSize := 6 + len(descData) + len(dpData)
-	var optBytes []byte
-	if entry.OptData != "" {
-		// Parse optional data from hex
-		var err error
-		optBytes, err = parseHexString(entry.OptData)
-		if err != nil {
-			return fmt.Errorf("invalid optional data: %w", err)
-		}
-		totalSize += len(optBytes)
+	// Update the boot entry
+	err = bootEntryVar.SetBootEntry(attr, entry.Name, entry.DevPath, currentEntry.OptData)
+	if err != nil {
+		return fmt.Errorf("failed to update boot entry: %w", err)
 	}
 
-	// Construct the variable data
-	data := make([]byte, totalSize)
-	binary.LittleEndian.PutUint32(data[0:], attributes)
-	binary.LittleEndian.PutUint16(data[4:], uint16(len(dpData)))
-
-	offset := 6
-	copy(data[offset:], descData)
-	offset += len(descData)
-
-	copy(data[offset:], dpData)
-	offset += len(dpData)
-
-	if len(optBytes) > 0 {
-		copy(data[offset:], optBytes)
-	}
-
-	// Update the EFI variable
-	existingVar.Data = data
-
-	// Update boot order if position has changed
+	// Update the boot order if position is specified
 	if entry.Position >= 0 {
+		// Extract numeric ID from the boot entry
+		idStr := strings.TrimPrefix(id, efi.BootPrefix)
+		bootEntryID, err := strconv.ParseUint(idStr, 16, 16)
+		if err != nil {
+			return fmt.Errorf("invalid boot entry ID: %w", err)
+		}
+
 		bootOrder, err := m.GetBootOrder()
 		if err != nil {
 			return fmt.Errorf("failed to get boot order: %w", err)
 		}
 
-		// Find current position of this entry
-		currentPos := -1
-		for i, name := range bootOrder {
-			if name == bootName {
-				currentPos = i
+		// Find and remove the entry from the current boot order
+		entryIndex := -1
+		entryIDStr := fmt.Sprintf("%04X", bootEntryID)
+		for i, orderID := range bootOrder {
+			if orderID == entryIDStr {
+				entryIndex = i
 				break
 			}
 		}
 
-		// If position has changed and entry is in boot order
-		if currentPos != entry.Position && currentPos != -1 {
-			// Remove from current position
-			bootOrder = append(bootOrder[:currentPos], bootOrder[currentPos+1:]...)
+		if entryIndex >= 0 {
+			bootOrder = append(bootOrder[:entryIndex], bootOrder[entryIndex+1:]...)
+		}
 
-			// Insert at new position
-			newBootOrder := make([]string, 0, len(bootOrder))
-			inserted := false
+		// Insert the entry at the new position
+		if entry.Position >= len(bootOrder) {
+			bootOrder = append(bootOrder, entryIDStr)
+		} else {
+			bootOrder = append(bootOrder[:entry.Position], append([]string{entryIDStr}, bootOrder[entry.Position:]...)...)
+		}
 
-			for i := 0; i <= len(bootOrder); i++ {
-				if i == entry.Position {
-					newBootOrder = append(newBootOrder, bootName)
-					inserted = true
-				}
-
-				if i < len(bootOrder) {
-					newBootOrder = append(newBootOrder, bootOrder[i])
-				}
-			}
-
-			// If position was beyond the end, append at the end
-			if !inserted {
-				newBootOrder = append(newBootOrder, bootName)
-			}
-
-			if err := m.SetBootOrder(newBootOrder); err != nil {
-				return fmt.Errorf("failed to update boot order: %w", err)
-			}
+		// Update the boot order
+		if err := m.SetBootOrder(bootOrder); err != nil {
+			return fmt.Errorf("failed to update boot order: %w", err)
 		}
 	}
 
 	return nil
 }
 
-// DeleteBootEntry deletes a boot entry.
+// DeleteBootEntry deletes a boot entry from the firmware
 func (m *EDK2Manager) DeleteBootEntry(id string) error {
-	bootName := "Boot" + id
+	// Add "Boot" prefix if not present
+	if !strings.HasPrefix(id, efi.BootPrefix) {
+		id = efi.BootPrefix + id
+	}
 
-	// Remove from var list
-	m.varList.Delete(bootName)
+	// Check if the entry exists
+	_, found := m.varList[id]
+	if !found {
+		return fmt.Errorf("boot entry not found: %s", id)
+	}
 
-	// Remove from boot order
+	// Remove the entry from the boot order
 	bootOrder, err := m.GetBootOrder()
-	if err == nil {
-		newBootOrder := make([]string, 0, len(bootOrder))
-		for _, name := range bootOrder {
-			if name != bootName {
-				newBootOrder = append(newBootOrder, name)
-			}
-		}
+	if err != nil {
+		return fmt.Errorf("failed to get boot order: %w", err)
+	}
 
-		if len(newBootOrder) < len(bootOrder) {
-			if err := m.SetBootOrder(newBootOrder); err != nil {
-				return fmt.Errorf("failed to update boot order: %w", err)
-			}
+	// Extract numeric ID from the boot entry
+	idStr := strings.TrimPrefix(id, efi.BootPrefix)
+
+	// Remove the entry from the boot order
+	newBootOrder := make([]string, 0, len(bootOrder))
+	for _, orderID := range bootOrder {
+		if orderID != idStr {
+			newBootOrder = append(newBootOrder, orderID)
 		}
 	}
+
+	// Update the boot order
+	if err := m.SetBootOrder(newBootOrder); err != nil {
+		return fmt.Errorf("failed to update boot order: %w", err)
+	}
+
+	// Delete the entry from the variable list
+	delete(m.varList, id)
 
 	return nil
 }
 
-// SetBootNext sets the boot entry to use on next boot.
-func (m *EDK2Manager) SetBootNext(index uint16) error {
-	data := make([]byte, 2)
-	binary.LittleEndian.PutUint16(data, index)
-
-	bootNextVar, _ := m.varList.FindFirst("BootNext")
-	if bootNextVar == nil {
-		// Create new BootNext variable if it doesn't exist
-		bootNextVar = &efi.EfiVar{
-			Name: efi.ToUCS16("BootNext"),
-			Guid: efi.EFI_GLOBAL_VARIABLE_GUID,
-			Attr: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
-			Data: data,
-		}
-
-		m.varList["BootNext"] = bootNextVar
-	} else {
-		bootNextVar.Data = data
-	}
-
-	return nil
-}
-
-// GetBootNext retrieves the boot entry to use on next boot.
-func (m *EDK2Manager) GetBootNext() (uint16, error) {
-	bootNextVar := m.varList.FindFirst("BootNext")
-	if bootNextVar == nil {
-		return 0, fmt.Errorf("BootNext variable not found")
-	}
-
-	if len(bootNextVar.Data) < 2 {
-		return 0, fmt.Errorf("invalid BootNext data length")
-	}
-
-	return binary.LittleEndian.Uint16(bootNextVar.Data), nil
-}
-
-// GetNetworkSettings retrieves network settings from firmware variables.
+// GetNetworkSettings returns the current network settings
 func (m *EDK2Manager) GetNetworkSettings() (types.NetworkSettings, error) {
-	var settings types.NetworkSettings
+	settings := types.NetworkSettings{
+		EnableDHCP: true, // Default to DHCP enabled
+	}
 
 	// Get MAC address
 	macAddr, err := m.GetMacAddress()
-	if err == nil {
+	if err == nil && macAddr != nil {
 		settings.MacAddress = macAddr.String()
 	}
 
-	// Find UEFI network configuration variables
-	for _, v := range m.varList {
-		name := v.Name.String()
-		if v.Guid == efi.EfiNetworkInterfaceIdGuid {
-			if strings.HasPrefix(name, "IPv4") {
-				// Parse IPv4 settings
-				if strings.Contains(name, "DHCPEnabled") && len(v.Data) >= 1 {
-					settings.EnableDHCP = v.Data[0] != 0
-				} else if strings.Contains(name, "Address") && len(v.Data) >= 4 {
-					settings.IPAddress = fmt.Sprintf("%d.%d.%d.%d",
-						v.Data[0], v.Data[1], v.Data[2], v.Data[3])
-				} else if strings.Contains(name, "SubnetMask") && len(v.Data) >= 4 {
-					settings.SubnetMask = fmt.Sprintf("%d.%d.%d.%d",
-						v.Data[0], v.Data[1], v.Data[2], v.Data[3])
-				} else if strings.Contains(name, "Gateway") && len(v.Data) >= 4 {
-					settings.Gateway = fmt.Sprintf("%d.%d.%d.%d",
-						v.Data[0], v.Data[1], v.Data[2], v.Data[3])
-				} else if strings.Contains(name, "DNSServers") && len(v.Data) >= 4 {
-					// Each DNS server is 4 bytes
-					for i := 0; i < len(v.Data); i += 4 {
-						if i+3 < len(v.Data) {
-							dns := fmt.Sprintf("%d.%d.%d.%d",
-								v.Data[i], v.Data[i+1], v.Data[i+2], v.Data[i+3])
-							settings.DNSServers = append(settings.DNSServers, dns)
-						}
-					}
-				}
-			} else if strings.HasPrefix(name, "IPv6") {
-				// Basic IPv6 support for now
-				settings.EnableIPv6 = true
-			} else if strings.Contains(name, "VLAN") {
-				// Parse VLAN settings
-				if strings.Contains(name, "Enabled") && len(v.Data) >= 1 {
-					settings.VLANEnabled = v.Data[0] != 0
-				} else if strings.Contains(name, "ID") && len(v.Data) >= 2 {
-					vlanID := binary.LittleEndian.Uint16(v.Data)
-					settings.VLANID = fmt.Sprintf("%d", vlanID)
-				}
-			}
+	// Get IPv6 enabled setting
+	ipv6Var, found := m.varList["IPv6Support"]
+	if found {
+		ipv6Enabled, err := ipv6Var.GetUint32()
+		if err == nil {
+			settings.EnableIPv6 = ipv6Enabled != 0
+		}
+	}
+
+	// Get VLAN settings
+	vlanVar, found := m.varList["VLANEnable"]
+	if found {
+		vlanEnabled, err := vlanVar.GetUint32()
+		if err == nil {
+			settings.VLANEnabled = vlanEnabled != 0
+		}
+	}
+
+	vlanIDVar, found := m.varList["VLANID"]
+	if found {
+		vlanID, err := vlanIDVar.GetUint32()
+		if err == nil {
+			settings.VLANID = fmt.Sprintf("%d", vlanID)
 		}
 	}
 
 	return settings, nil
 }
 
-// SetNetworkSettings applies network settings to firmware variables.
+// SetNetworkSettings sets the network settings
 func (m *EDK2Manager) SetNetworkSettings(settings types.NetworkSettings) error {
 	// Set MAC address if provided
 	if settings.MacAddress != "" {
@@ -592,606 +438,553 @@ func (m *EDK2Manager) SetNetworkSettings(settings types.NetworkSettings) error {
 		}
 	}
 
-	// Set IPv4 DHCP flag
-	if err := m.setOrCreateVariable("IPv4DHCPEnabled", efi.EfiNetworkInterfaceIdGuid,
-		[]byte{boolToByte(settings.EnableDHCP)}); err != nil {
-		return fmt.Errorf("failed to set DHCP flag: %w", err)
-	}
-
-	// If static IP is being used, set IP address values
-	if !settings.EnableDHCP {
-		// Set IP address
-		if settings.IPAddress != "" {
-			ipBytes, err := parseIPv4String(settings.IPAddress)
-			if err != nil {
-				return fmt.Errorf("invalid IP address: %w", err)
-			}
-			if err := m.setOrCreateVariable("IPv4Address", efi.EfiNetworkInterfaceIdGuid, ipBytes); err != nil {
-				return fmt.Errorf("failed to set IP address: %w", err)
-			}
-		}
-
-		// Set subnet mask
-		if settings.SubnetMask != "" {
-			maskBytes, err := parseIPv4String(settings.SubnetMask)
-			if err != nil {
-				return fmt.Errorf("invalid subnet mask: %w", err)
-			}
-			if err := m.setOrCreateVariable("IPv4SubnetMask", efi.EfiNetworkInterfaceIdGuid, maskBytes); err != nil {
-				return fmt.Errorf("failed to set subnet mask: %w", err)
-			}
-		}
-
-		// Set gateway
-		if settings.Gateway != "" {
-			gatewayBytes, err := parseIPv4String(settings.Gateway)
-			if err != nil {
-				return fmt.Errorf("invalid gateway: %w", err)
-			}
-			if err := m.setOrCreateVariable("IPv4Gateway", efi.EfiNetworkInterfaceIdGuid, gatewayBytes); err != nil {
-				return fmt.Errorf("failed to set gateway: %w", err)
-			}
-		}
-	}
-
-	// Set DNS servers
-	if len(settings.DNSServers) > 0 {
-		dnsBytes := make([]byte, len(settings.DNSServers)*4)
-		for i, dnsServer := range settings.DNSServers {
-			ipBytes, err := parseIPv4String(dnsServer)
-			if err != nil {
-				return fmt.Errorf("invalid DNS server address: %w", err)
-			}
-			copy(dnsBytes[i*4:], ipBytes)
-		}
-		if err := m.setOrCreateVariable("IPv4DNSServers", efi.EfiNetworkInterfaceIdGuid, dnsBytes); err != nil {
-			return fmt.Errorf("failed to set DNS servers: %w", err)
-		}
-	}
-
-	// Set IPv6 flag
-	if err := m.setOrCreateVariable("IPv6Enabled", efi.EfiNetworkInterfaceIdGuid,
-		[]byte{boolToByte(settings.EnableIPv6)}); err != nil {
-		return fmt.Errorf("failed to set IPv6 flag: %w", err)
-	}
+	// Set IPv6 support
+	ipv6Var := m.getOrCreateVar("IPv6Support", efi.EFI_GLOBAL_VARIABLE)
+	ipv6Var.SetUint32(boolToUint32(settings.EnableIPv6))
 
 	// Set VLAN settings
-	if err := m.setOrCreateVariable("VLANEnabled", efi.EfiNetworkInterfaceIdGuid,
-		[]byte{boolToByte(settings.VLANEnabled)}); err != nil {
-		return fmt.Errorf("failed to set VLAN flag: %w", err)
-	}
+	vlanVar := m.getOrCreateVar("VLANEnable", efi.EFI_GLOBAL_VARIABLE)
+	vlanVar.SetUint32(boolToUint32(settings.VLANEnabled))
 
 	if settings.VLANEnabled && settings.VLANID != "" {
-		vlanID, err := strconv.ParseUint(settings.VLANID, 10, 16)
+		vlanID, err := strconv.ParseUint(settings.VLANID, 10, 32)
 		if err != nil {
 			return fmt.Errorf("invalid VLAN ID: %w", err)
 		}
 
-		vlanBytes := make([]byte, 2)
-		binary.LittleEndian.PutUint16(vlanBytes, uint16(vlanID))
+		vlanIDVar := m.getOrCreateVar("VLANID", efi.EFI_GLOBAL_VARIABLE)
+		vlanIDVar.SetUint32(uint32(vlanID))
+	}
 
-		if err := m.setOrCreateVariable("VLANID", efi.EfiNetworkInterfaceIdGuid, vlanBytes); err != nil {
-			return fmt.Errorf("failed to set VLAN ID: %w", err)
+	return nil
+}
+
+// GetMacAddress retrieves the MAC address from the firmware
+func (m *EDK2Manager) GetMacAddress() (net.HardwareAddr, error) {
+	// Check for dedicated MAC address variable first
+	macVar, found := m.varList["MacAddress"]
+	if found {
+		macStr := macVar.Name.String()
+		return net.ParseMAC(macStr)
+	}
+
+	// Look for MAC address in boot entries
+	entries, err := m.GetBootEntries()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get boot entries: %w", err)
+	}
+
+	for _, entry := range entries {
+		if strings.Contains(entry.Name, "MAC:") {
+			macIndex := strings.Index(entry.Name, "MAC:")
+			if macIndex >= 0 {
+				macStr := entry.Name[macIndex+4:]
+				macEnd := strings.Index(macStr, ")")
+				if macEnd >= 0 {
+					macStr = macStr[:macEnd]
+				}
+
+				// Try to parse the MAC address
+				mac, err := net.ParseMAC(strings.ReplaceAll(macStr, ":", ""))
+				if err == nil {
+					return mac, nil
+				}
+			}
+		}
+	}
+
+	return nil, fmt.Errorf("MAC address not found")
+}
+
+func (m *EDK2Manager) SetDefaultBootEntries() error {
+	entries, err := m.GetBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to get boot entries: %w", err)
+	}
+	if len(entries) > 0 {
+		return nil
+	}
+
+	defaultBootEntries := []types.BootEntry{
+
+		{
+			Name: "UiApp",
+			// DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)",
+			DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)", // string(efi.NewDevicePath(nil).FvName("9a15aa37-d555-4a4e-b541-86391ff68164").FVFileName("462caa21-7614-4503-836e-8ab6f4662331").Bytes()),
+		},
+		{
+			Name:    "SD/MMC on Arasan SDHCI",
+			DevPath: "VendorHW(100c2cfa-b586-4198-9b4c-1683d195b1da)", // string(efi.NewDevicePath(nil).VendorHW(efi.StringToGUID("100c2cfa-b586-4198-9b4c-1683d195b1da")).Bytes()),
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI SupTronics X862 202101000087",
+			DevPath: "ACPI(hid=0xa0841d0,uid=0x0)/PCI(dev=00:0)/PCI(dev=00:0)/USB(port=2)", // string(efi.NewDevicePath(nil).ACPI(1934496, 0).Bytes()), // "ACPI(hid=0xa0841d0,uid=0x0)/PCI(dev=00:0)/PCI(dev=00:0)/USB(port=2)",
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI PXEv4 (MAC:000000000000)",
+			DevPath: "MAC()/IPv4()", // string(efi.NewDevicePath(nil).Mac().IPv4().Bytes()),
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI PXEv6 (MAC:000000000000)",
+			DevPath: "MAC()/IPv6()", // string(efi.NewDevicePath(nil).Mac().IPv6().Bytes()),
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI HTTPv4 (MAC:000000000000)",
+			DevPath: "MAC()/IPv4()/URI()", // string(efi.NewDevicePath(nil).Mac().IPv4().URI("").Bytes()),
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI HTTPv6 (MAC:000000000000)",
+			DevPath: "MAC()/IPv6()/URI()", // string(efi.NewDevicePath(nil).Mac().IPv6().URI("").Bytes()),
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		},
+		{
+			Name:    "UEFI Shell",
+			DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)",
+		},
+	}
+
+	for _, entry := range defaultBootEntries {
+		if err := m.AddBootEntry(entry); err != nil {
+			return fmt.Errorf("failed to add default boot entry: %w", err)
+		}
+	}
+	return nil
+}
+
+// SetMacAddress sets the MAC address in the firmware
+func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
+	if mac == nil {
+		return fmt.Errorf("MAC address is nil")
+	}
+
+	// Format MAC address without colons
+	macStr := strings.ToUpper(strings.ReplaceAll(mac.String(), ":", ""))
+
+	clientId := m.getOrCreateVar("ClientId", efi.EfiDhcp6ServiceBindingProtocol)
+	clientIdStr := fmt.Sprintf("120000041531c000000000000000%s", strings.ToLower(macStr))
+	clientId.SetString(clientIdStr)
+
+	ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
+	ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
+	uniqueID := macStr[len(macStr)/2:]
+	ndl.SetString(fmt.Sprintf("030b2500d83add%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(uniqueID)))
+
+	// Set the dedicated MAC address variable
+	_ = m.getOrCreateVar(macStr, efi.EfiIp6ConfigProtocol)
+
+	err := m.SetDefaultBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to set default boot entries: %w", err)
+	}
+
+	// Update MAC address in boot entries
+	entries, err := m.GetBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to get boot entries: %w", err)
+	}
+
+	for _, entry := range entries {
+		if strings.Contains(entry.Name, "MAC:") {
+			// Replace the MAC address in the entry name
+			newName := replaceMAC(entry.Name, macStr)
+			if newName != entry.Name {
+				entry.Name = newName
+				if err := m.UpdateBootEntry(entry.ID, entry); err != nil {
+					return fmt.Errorf("failed to update boot entry %s: %w", entry.ID, err)
+				}
+			}
 		}
 	}
 
 	return nil
 }
 
-// boolToByte converts a boolean to a byte (0 or 1).
-func boolToByte(b bool) byte {
+// GetVariable retrieves a variable by name
+func (m *EDK2Manager) GetVariable(name string) (*efi.EfiVar, error) {
+	v, found := m.varList[name]
+	if !found {
+		return nil, fmt.Errorf("variable not found: %s", name)
+	}
+	return v, nil
+}
+
+// SetVariable sets a variable
+func (m *EDK2Manager) SetVariable(name string, value *efi.EfiVar) error {
+	if value == nil {
+		return fmt.Errorf("variable is nil")
+	}
+	m.varList[name] = value
+	return nil
+}
+
+// ListVariables returns all variables in the firmware
+func (m *EDK2Manager) ListVariables() (map[string]*efi.EfiVar, error) {
+	return m.varList, nil
+}
+
+// EnablePXEBoot enables or disables PXE boot
+func (m *EDK2Manager) EnablePXEBoot(enable bool) error {
+	// Get all boot entries
+	entries, err := m.GetBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to get boot entries: %w", err)
+	}
+
+	// Find PXE boot entries
+	pxeEntries := make([]types.BootEntry, 0)
+	for _, entry := range entries {
+		if strings.Contains(entry.Name, "PXE") {
+			entry.Enabled = enable
+			pxeEntries = append(pxeEntries, entry)
+		}
+	}
+
+	// Update PXE boot entries
+	for _, entry := range pxeEntries {
+		if err := m.UpdateBootEntry(entry.ID, entry); err != nil {
+			return fmt.Errorf("failed to update PXE boot entry %s: %w", entry.ID, err)
+		}
+	}
+
+	// If we need to enable PXE and no entries were found, create one
+	if enable && len(pxeEntries) == 0 {
+		mac, err := m.GetMacAddress()
+		if err != nil {
+			mac = net.HardwareAddr{0, 0, 0, 0, 0, 0}
+		}
+
+		macStr := strings.ToUpper(strings.ReplaceAll(mac.String(), ":", ""))
+
+		// Create IPv4 PXE entry
+		pxeEntry := types.BootEntry{
+			Name:     fmt.Sprintf("UEFI PXEv4 (MAC:%s)", macStr),
+			DevPath:  "MAC()/IPv4()",
+			Enabled:  true,
+			Position: 0, // Set as first boot option
+		}
+
+		if err := m.AddBootEntry(pxeEntry); err != nil {
+			return fmt.Errorf("failed to add PXE boot entry: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// EnableHTTPBoot enables or disables HTTP boot
+func (m *EDK2Manager) EnableHTTPBoot(enable bool) error {
+	// Get all boot entries
+	entries, err := m.GetBootEntries()
+	if err != nil {
+		return fmt.Errorf("failed to get boot entries: %w", err)
+	}
+
+	// Find HTTP boot entries
+	httpEntries := make([]types.BootEntry, 0)
+	for _, entry := range entries {
+		if strings.Contains(entry.Name, "HTTP") {
+			entry.Enabled = enable
+			httpEntries = append(httpEntries, entry)
+		}
+	}
+
+	// Update HTTP boot entries
+	for _, entry := range httpEntries {
+		if err := m.UpdateBootEntry(entry.ID, entry); err != nil {
+			return fmt.Errorf("failed to update HTTP boot entry %s: %w", entry.ID, err)
+		}
+	}
+
+	// If we need to enable HTTP boot and no entries were found, create one
+	if enable && len(httpEntries) == 0 {
+		mac, err := m.GetMacAddress()
+		if err != nil {
+			mac = net.HardwareAddr{0, 0, 0, 0, 0, 0}
+		}
+
+		macStr := strings.ToUpper(strings.ReplaceAll(mac.String(), ":", ""))
+
+		// Create IPv4 HTTP entry
+		httpEntry := types.BootEntry{
+			Name:     fmt.Sprintf("UEFI HTTPv4 (MAC:%s)", macStr),
+			DevPath:  "MAC()/IPv4()/URI()",
+			Enabled:  true,
+			Position: 1, // Set as second boot option
+		}
+
+		if err := m.AddBootEntry(httpEntry); err != nil {
+			return fmt.Errorf("failed to add HTTP boot entry: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// SetFirmwareTimeoutSeconds sets the boot menu timeout in seconds
+func (m *EDK2Manager) SetFirmwareTimeoutSeconds(seconds int) error {
+	// The timeout is stored as a 16-bit value in the Timeout variable
+	timeoutVar := m.getOrCreateVar("Timeout", efi.EFI_GLOBAL_VARIABLE)
+
+	// Convert seconds to the format expected by the firmware
+	data := []byte{byte(seconds & 0xFF), byte((seconds >> 8) & 0xFF)}
+	timeoutVar.Data = data
+
+	return nil
+}
+
+// SetConsoleConfig sets the console configuration
+func (m *EDK2Manager) SetConsoleConfig(consoleName string, baudRate int) error {
+	// Update the console preference variable
+	consoleVar := m.getOrCreateVar("ConsolePref", "2d2358b4-e96c-484d-b2dd-7c2edfc7d56f")
+
+	// Set console preference based on name
+	var prefValue uint32
+	switch strings.ToLower(consoleName) {
+	case "serial":
+		prefValue = 1
+	case "graphics":
+		prefValue = 2
+	default:
+		prefValue = 0 // Auto
+	}
+
+	consoleVar.SetUint32(prefValue)
+
+	// Update baud rate if serial console is selected
+	if prefValue == 1 && baudRate > 0 {
+		baudVar := m.getOrCreateVar("SerialBaudRate", "cd7cc258-31db-22e6-9f22-63b0b8eed6b5")
+		baudVar.SetUint32(uint32(baudRate))
+	}
+
+	return nil
+}
+
+// GetSystemInfo returns information about the system
+func (m *EDK2Manager) GetSystemInfo() (map[string]string, error) {
+	info := make(map[string]string)
+
+	// Add firmware version
+	version, err := m.GetFirmwareVersion()
+	if err == nil {
+		info["FirmwareVersion"] = version
+	}
+
+	// Try to get asset tag
+	assetVar, found := m.varList["AssetTag"]
+	if found {
+		info["AssetTag"] = string(assetVar.Data)
+	}
+
+	// Get CPU settings
+	cpuVar, found := m.varList["CpuClock"]
+	if found {
+		cpuVal, err := cpuVar.GetUint32()
+		if err == nil {
+			info["CpuClock"] = fmt.Sprintf("%d", cpuVal)
+		}
+	}
+
+	// Add RAM information
+	ramVar, found := m.varList["RamMoreThan3GB"]
+	if found {
+		ramVal, err := ramVar.GetUint32()
+		if err == nil {
+			if ramVal != 0 {
+				info["RAM"] = "More than 3GB"
+			} else {
+				info["RAM"] = "3GB or less"
+			}
+		}
+	}
+
+	// Add system table mode
+	sysTableVar, found := m.varList["SystemTableMode"]
+	if found {
+		sysTableVal, err := sysTableVar.GetUint32()
+		if err == nil {
+			info["SystemTableMode"] = fmt.Sprintf("%d", sysTableVal)
+		}
+	}
+
+	return info, nil
+}
+
+// UpdateFirmware updates the firmware with the provided data
+func (m *EDK2Manager) UpdateFirmware(firmwareData []byte) error {
+	// Backup the original firmware
+	backupPath := m.firmwarePath + ".backup"
+	if err := copyFile(m.firmwarePath, backupPath); err != nil {
+		return fmt.Errorf("failed to backup firmware: %w", err)
+	}
+
+	defer removeFile(backupPath)
+
+	err := m.varStore.WriteVarStore(m.firmwarePath, m.varList)
+	if err != nil {
+		// Restore from backup if write fails
+		if restoreErr := copyFile(backupPath, m.firmwarePath); restoreErr != nil {
+			m.logger.Error(restoreErr, "failed to restore firmware from backup")
+		}
+		return fmt.Errorf("failed to write variable store: %w", err)
+	}
+
+	m.logger.Info("firmware updated successfully", "path", m.firmwarePath)
+
+	return nil
+}
+
+// GetFirmwareVersion returns the firmware version
+func (m *EDK2Manager) GetFirmwareVersion() (string, error) {
+	// Try to extract version from embedded firmware info
+	var version string
+
+	// Get the data from the FirmwareRevision variable if it exists
+	revVar, found := m.varList["FirmwareRevision"]
+	if found {
+		version = string(revVar.Data)
+	}
+
+	// If no version found, use the firmware file modification time
+	if version == "" {
+		fileInfo, err := getFileInfo(m.firmwarePath)
+		if err == nil {
+			modTime := fileInfo.ModTime()
+			version = fmt.Sprintf("Unknown (Modified: %s)", modTime.Format(time.RFC3339))
+		} else {
+			version = "Unknown"
+		}
+	}
+
+	return version, nil
+}
+
+// SaveChanges writes the modified variables back to the firmware file
+func (m *EDK2Manager) SaveChanges() error {
+
+	if err := m.varStore.WriteVarStore(m.firmwarePath, m.varList); err != nil {
+		return fmt.Errorf("failed to write variable store: %w", err)
+	}
+
+	m.logger.Info("firmware saved successfully", "path", m.firmwarePath)
+
+	return nil
+}
+
+// RevertChanges discards all changes
+func (m *EDK2Manager) RevertChanges() error {
+	// Reload the variables from the file
+	var err error
+	m.varList, err = m.varStore.GetVarList()
+	if err != nil {
+		return fmt.Errorf("failed to reload variable list: %w", err)
+	}
+
+	return nil
+}
+
+// ResetToDefaults resets the firmware to default settings
+func (m *EDK2Manager) ResetToDefaults() error {
+	// Reset the boot timeout
+	timeoutVar := m.getOrCreateVar("Timeout", efi.EFI_GLOBAL_VARIABLE)
+	timeoutVar.Data = []byte{0x05, 0x00} // 5 seconds
+
+	// Reset console preference
+	consoleVar := m.getOrCreateVar("ConsolePref", "2d2358b4-e96c-484d-b2dd-7c2edfc7d56f")
+	consoleVar.SetUint32(0) // Auto
+
+	// Reset the boot order to defaults
+	defaultBootOrder := []string{"0000", "0001"} // UiApp, SD/MMC
+	if err := m.SetBootOrder(defaultBootOrder); err != nil {
+		return fmt.Errorf("failed to reset boot order: %w", err)
+	}
+
+	// Reset network settings
+	ipv6Var := m.getOrCreateVar("IPv6Support", efi.EFI_GLOBAL_VARIABLE)
+	ipv6Var.SetUint32(0) // Disable IPv6
+
+	vlanVar := m.getOrCreateVar("VLANEnable", efi.EFI_GLOBAL_VARIABLE)
+	vlanVar.SetUint32(0) // Disable VLAN
+
+	return nil
+}
+
+// Helper functions
+
+// getOrCreateVar gets an existing variable or creates a new one with the specified name and GUID
+func (m *EDK2Manager) getOrCreateVar(name, guidStr string) *efi.EfiVar {
+	v, found := m.varList[name]
+	if found {
+		return v
+	}
+
+	// Create a new variable
+	v = &efi.EfiVar{
+		Name: efi.NewUCS16String(name),
+		Guid: efi.StringToGUID(guidStr),
+		Attr: efi.EFI_VARIABLE_NON_VOLATILE |
+			efi.EFI_VARIABLE_BOOTSERVICE_ACCESS |
+			efi.EFI_VARIABLE_RUNTIME_ACCESS,
+	}
+	m.varList[name] = v
+
+	return v
+}
+
+// boolToUint32 converts a boolean to a uint32 (0 or 1)
+func boolToUint32(b bool) uint32 {
 	if b {
 		return 1
 	}
 	return 0
 }
 
-// parseIPv4String converts an IPv4 address string to a 4-byte array.
-func parseIPv4String(ipStr string) ([]byte, error) {
-	ip := net.ParseIP(ipStr)
-	if ip == nil {
-		return nil, fmt.Errorf("invalid IP address")
+// replaceMAC replaces a MAC address in a string
+func replaceMAC(s, newMAC string) string {
+	// Find the MAC address in the string
+	macIndex := strings.Index(s, "MAC:")
+	if macIndex < 0 {
+		return s
 	}
 
-	ip = ip.To4()
-	if ip == nil {
-		return nil, fmt.Errorf("not an IPv4 address")
+	// Extract the MAC portion
+	macStart := macIndex + 4
+	macEnd := strings.Index(s[macStart:], ")")
+	if macEnd < 0 {
+		return s
 	}
 
-	return []byte(ip), nil
+	macEnd += macStart
+
+	// Replace the MAC address
+	return s[:macStart] + newMAC + s[macEnd:]
 }
 
-// setOrCreateVariable sets an existing variable or creates a new one if it doesn't exist.
-func (m *EDK2Manager) setOrCreateVariable(name string, guid efi.Guid, data []byte) error {
-	v := m.varList.FindVar(name, guid)
-	if v != nil {
-		v.Data = data
-	} else {
-		newVar := &efi.EfiVar{
-			Name:       name,
-			Guid:       guid,
-			Attributes: efi.EfiAttrBootserviceAccess | efi.EfiAttrRuntimeAccess | efi.EfiAttrNonVolatile,
-			Data:       data,
-		}
-		m.varList = append(m.varList, newVar)
-	}
-	return nil
-}
-
-// GetMacAddress retrieves the MAC address from firmware variables.
-func (m *EDK2Manager) GetMacAddress() (net.HardwareAddr, error) {
-	macVar := m.varList.FindFirst("MacAddress")
-	if macVar == nil {
-		// Check for alternate variable names
-		macVar = m.varList.FindFirst("PermanentMacAddress")
-		if macVar == nil {
-			return nil, fmt.Errorf("MAC address variable not found")
-		}
-	}
-
-	// MAC should be at least 6 bytes
-	if len(macVar.Data) < 6 {
-		return nil, fmt.Errorf("invalid MAC address data length")
-	}
-
-	return net.HardwareAddr(macVar.Data[:6]), nil
-}
-
-// SetMacAddress sets the MAC address in firmware variables.
-func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
-	if len(mac) < 6 {
-		return fmt.Errorf("invalid MAC address length")
-	}
-
-	// Standard variable name for MAC address
-	if err := m.setOrCreateVariable("MacAddress", efi.EfiGlobalVariable, mac); err != nil {
-		return fmt.Errorf("failed to set MAC address: %w", err)
-	}
-
-	// Also set the permanent MAC address variable which some firmware may use
-	if err := m.setOrCreateVariable("PermanentMacAddress", efi.EfiGlobalVariable, mac); err != nil {
-		return fmt.Errorf("failed to set permanent MAC address: %w", err)
-	}
-
-	return nil
-}
-
-// GetVariable retrieves a firmware variable by name.
-func (m *EDK2Manager) GetVariable(name string) (*efi.EfiVar, error) {
-	// Try to find in common GUIDs
-	v := m.varList.FindFirst(name)
-	if v == nil {
-		return nil, fmt.Errorf("variable %s not found", name)
-	}
-	return v, nil
-}
-
-// SetVariable sets a firmware variable.
-func (m *EDK2Manager) SetVariable(name string, value *efi.EfiVar) error {
-	if value == nil {
-		return fmt.Errorf("variable value cannot be nil")
-	}
-
-	// Find existing variable
-	existingVar := m.varList.FindVar(name, value.Guid)
-	if existingVar != nil {
-		// Update existing variable
-		existingVar.Data = value.Data
-		existingVar.Attributes = value.Attributes
-	} else {
-		// Add new variable
-		m.varList = append(m.varList, value)
-	}
-
-	return nil
-}
-
-// ListVariables lists all firmware variables.
-func (m *EDK2Manager) ListVariables() (map[string]*efi.EfiVar, error) {
-	variables := make(map[string]*efi.EfiVar)
-
-	for _, v := range m.varList {
-		name := v.Name.String()
-		variables[name] = v
-	}
-
-	return variables, nil
-}
-
-// EnablePXEBoot enables or disables PXE boot.
-func (m *EDK2Manager) EnablePXEBoot(enable bool) error {
-	// This is firmware-specific - for Raspberry Pi EDK2, we typically
-	// need to check and possibly add a PXE boot entry
-
-	// Search for existing PXE boot entries
-	bootEntries, err := m.GetBootEntries()
+// File utility functions
+func copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
 	if err != nil {
-		return fmt.Errorf("failed to get boot entries: %w", err)
+		return fmt.Errorf("failed to read file %s: %w", src, err)
 	}
-
-	pxeBootFound := false
-	var pxeBootID string
-
-	for _, entry := range bootEntries {
-		// Check if the description or device path indicates a PXE boot entry
-		if strings.Contains(strings.ToLower(entry.Name), "pxe") ||
-			strings.Contains(strings.ToLower(entry.DevPath), "pxe") {
-			pxeBootFound = true
-			pxeBootID = entry.ID
-			break
-		}
-	}
-
-	if enable {
-		if !pxeBootFound {
-			// Create a new PXE boot entry
-			// This is a simplified example - actual PXE path may need to be built
-			// based on specific network controller info
-			newEntry := types.BootEntry{
-				ID:       getNextAvailableBootID(bootEntries),
-				Name:     "Network PXE Boot",
-				DevPath:  "PciRoot(0)/Pci(2,0)/MAC()/IPv4()/Pxe()",
-				Enabled:  true,
-				Position: 0, // Add to the beginning of boot order
-			}
-
-			if err := m.AddBootEntry(newEntry); err != nil {
-				return fmt.Errorf("failed to add PXE boot entry: %w", err)
-			}
-		} else {
-			// Make sure the PXE entry is enabled
-			for _, entry := range bootEntries {
-				if entry.ID == pxeBootID && !entry.Enabled {
-					entry.Enabled = true
-					if err := m.UpdateBootEntry(pxeBootID, entry); err != nil {
-						return fmt.Errorf("failed to enable PXE boot entry: %w", err)
-					}
-					break
-				}
-			}
-		}
-	} else if pxeBootFound {
-		// Disable the PXE boot entry
-		for _, entry := range bootEntries {
-			if entry.ID == pxeBootID && entry.Enabled {
-				entry.Enabled = false
-				if err := m.UpdateBootEntry(pxeBootID, entry); err != nil {
-					return fmt.Errorf("failed to disable PXE boot entry: %w", err)
-				}
-				break
-			}
-		}
-	}
-
-	return nil
+	return os.WriteFile(dst, data, 0644)
 }
 
-// getNextAvailableBootID finds the next available boot ID.
-func getNextAvailableBootID(entries []types.BootEntry) string {
-	// Find the highest existing ID
-	maxID := uint16(0)
-	for _, entry := range entries {
-		id, err := strconv.ParseUint(entry.ID, 16, 16)
-		if err == nil && uint16(id) > maxID {
-			maxID = uint16(id)
-		}
-	}
-
-	// Return the next ID as a 4-digit hex string
-	return fmt.Sprintf("%04X", maxID+1)
+func readFile(path string) ([]byte, error) {
+	return os.ReadFile(path)
 }
 
-// EnableHTTPBoot enables or disables HTTP boot.
-func (m *EDK2Manager) EnableHTTPBoot(enable bool) error {
-	// Similar to PXE boot, check for and manage HTTP boot entries
-	bootEntries, err := m.GetBootEntries()
-	if err != nil {
-		return fmt.Errorf("failed to get boot entries: %w", err)
-	}
-
-	httpBootFound := false
-	var httpBootID string
-
-	for _, entry := range bootEntries {
-		// Check if the description or device path indicates an HTTP boot entry
-		if strings.Contains(strings.ToLower(entry.Name), "http") ||
-			strings.Contains(strings.ToLower(entry.DevPath), "http") {
-			httpBootFound = true
-			httpBootID = entry.ID
-			break
-		}
-	}
-
-	if enable {
-		if !httpBootFound {
-			// Create a new HTTP boot entry
-			newEntry := types.BootEntry{
-				ID:       getNextAvailableBootID(bootEntries),
-				Name:     "Network HTTP Boot",
-				DevPath:  "PciRoot(0)/Pci(2,0)/MAC()/IPv4()/URI()",
-				Enabled:  true,
-				Position: 0, // Add to the beginning of boot order
-			}
-
-			if err := m.AddBootEntry(newEntry); err != nil {
-				return fmt.Errorf("failed to add HTTP boot entry: %w", err)
-			}
-		} else {
-			// Make sure the HTTP entry is enabled
-			for _, entry := range bootEntries {
-				if entry.ID == httpBootID && !entry.Enabled {
-					entry.Enabled = true
-					if err := m.UpdateBootEntry(httpBootID, entry); err != nil {
-						return fmt.Errorf("failed to enable HTTP boot entry: %w", err)
-					}
-					break
-				}
-			}
-		}
-	} else if httpBootFound {
-		// Disable the HTTP boot entry
-		for _, entry := range bootEntries {
-			if entry.ID == httpBootID && entry.Enabled {
-				entry.Enabled = false
-				if err := m.UpdateBootEntry(httpBootID, entry); err != nil {
-					return fmt.Errorf("failed to disable HTTP boot entry: %w", err)
-				}
-				break
-			}
-		}
-	}
-
-	return nil
+func writeFile(path string, data []byte) error {
+	return os.WriteFile(path, data, 0644)
 }
 
-// SetFirmwareTimeoutSeconds sets the boot menu timeout in seconds.
-func (m *EDK2Manager) SetFirmwareTimeoutSeconds(seconds int) error {
-	if seconds < 0 {
-		return fmt.Errorf("timeout value cannot be negative")
-	}
-
-	// Convert seconds to platform timer ticks
-	// UEFI spec uses 100ns units
-	ticks := uint64(seconds) * 10000000
-
-	data := make([]byte, 8)
-	binary.LittleEndian.PutUint64(data, ticks)
-
-	return m.setOrCreateVariable("Timeout", efi.EfiGlobalVariable, data)
+func removeFile(path string) error {
+	return os.Remove(path)
 }
 
-// SetConsoleConfig sets the console device and baud rate.
-func (m *EDK2Manager) SetConsoleConfig(consoleName string, baudRate int) error {
-	if consoleName == "" {
-		return fmt.Errorf("console name cannot be empty")
-	}
-
-	if baudRate <= 0 {
-		return fmt.Errorf("baud rate must be positive")
-	}
-
-	// Convert console name to UCS-16
-	consoleData := efi.StringToUcs16(consoleName)
-
-	if err := m.setOrCreateVariable("ConsoleName", efi.EfiGlobalVariable, consoleData); err != nil {
-		return fmt.Errorf("failed to set console name: %w", err)
-	}
-
-	// Set baud rate as a 32-bit value
-	baudData := make([]byte, 4)
-	binary.LittleEndian.PutUint32(baudData, uint32(baudRate))
-
-	if err := m.setOrCreateVariable("ConsoleBaudRate", efi.EfiGlobalVariable, baudData); err != nil {
-		return fmt.Errorf("failed to set console baud rate: %w", err)
-	}
-
-	return nil
-}
-
-// GetSystemInfo retrieves system information.
-func (m *EDK2Manager) GetSystemInfo() (types.SystemInfo, error) {
-	info := make(types.SystemInfo)
-
-	// Add firmware path
-	info["FirmwarePath"] = m.firmwarePath
-
-	// Extract firmware version from EFI variables
-	fwVersion, err := m.GetFirmwareVersion()
-	if err == nil {
-		info["FirmwareVersion"] = fwVersion
-	} else {
-		info["FirmwareVersion"] = "Unknown"
-	}
-
-	// Extract system UUID if available
-	systemUUIDVar := m.varList.FindFirst("SystemUUID")
-	if systemUUIDVar != nil && len(systemUUIDVar.Data) >= 16 {
-		uuid, err := efi.FormatGuid(systemUUIDVar.Data)
-		if err == nil {
-			info["SystemUUID"] = uuid
-		}
-	}
-
-	// Get firmware timestamp
-	if fwStat, err := os.Stat(m.firmwarePath); err == nil {
-		info["LastModified"] = fwStat.ModTime().Format(time.RFC3339)
-	}
-
-	// Get firmware size
-	fwSize := int64(0)
-	if fwStat, err := os.Stat(m.firmwarePath); err == nil {
-		fwSize = fwStat.Size()
-		info["Size"] = fmt.Sprintf("%d", fwSize)
-	}
-
-	// Platform information from variables if available
-	platformNameVar := m.varList.FindFirst("PlatformName")
-	if platformNameVar != nil {
-		info["PlatformName"] = efi.Ucs16ToString(platformNameVar.Data)
-	}
-
-	return info, nil
-}
-
-// GetFirmwareVersion retrieves the firmware version.
-func (m *EDK2Manager) GetFirmwareVersion() (string, error) {
-	// Try to find the version from a variable first
-	versionVar := m.varList.FindFirst("FirmwareVersion")
-	if versionVar != nil {
-		if len(versionVar.Data) > 0 {
-			// If the data is UCS-16 encoded
-			if len(versionVar.Data) >= 2 {
-				return efi.Ucs16ToString(versionVar.Data), nil
-			}
-			// Else assume it's a string
-			return string(versionVar.Data), nil
-		}
-	}
-
-	// If not found in variables, check if it's embedded in the firmware file name
-	base := filepath.Base(m.firmwarePath)
-	parts := strings.Split(base, "-")
-	if len(parts) > 1 {
-		// Attempt to extract version if filename follows pattern like "firmware-v1.2.3.bin"
-		for _, part := range parts {
-			if strings.HasPrefix(part, "v") && len(part) > 1 {
-				return part, nil
-			}
-		}
-	}
-
-	// If we still can't determine version, return an error
-	return "", fmt.Errorf("firmware version not found")
-}
-
-// UpdateFirmware updates the firmware with new data.
-func (m *EDK2Manager) UpdateFirmware(firmwareData []byte) error {
-	if len(firmwareData) == 0 {
-		return fmt.Errorf("firmware data is empty")
-	}
-
-	// Create backup of the current firmware
-	backupPath := m.firmwarePath + ".bak." + time.Now().Format("20060102150405")
-	if err := func() error {
-		srcFile, err := os.Open(m.firmwarePath)
-		if err != nil {
-			return fmt.Errorf("failed to open source firmware: %w", err)
-		}
-		defer srcFile.Close()
-
-		dstFile, err := os.Create(backupPath)
-		if err != nil {
-			return fmt.Errorf("failed to create backup: %w", err)
-		}
-		defer dstFile.Close()
-
-		_, err = io.Copy(dstFile, srcFile)
-		return err
-	}(); err != nil {
-		return fmt.Errorf("failed to create backup: %w", err)
-	}
-
-	// Write the new firmware
-	if err := os.WriteFile(m.firmwarePath+".new", firmwareData, 0644); err != nil {
-		return fmt.Errorf("failed to write new firmware: %w", err)
-	}
-
-	// Validate the new firmware before applying it
-	testVarStore := varstore.NewEdk2VarStore(m.firmwarePath + ".new")
-	if testVarStore == nil {
-		os.Remove(m.firmwarePath + ".new")
-		return fmt.Errorf("new firmware is invalid")
-	}
-
-	_, err := testVarStore.GetVarList()
-	if err != nil {
-		os.Remove(m.firmwarePath + ".new")
-		return fmt.Errorf("new firmware has invalid variable store: %w", err)
-	}
-
-	// Save the changes we've made to the variable store before replacing the firmware
-	if err := m.SaveChanges(); err != nil {
-		return fmt.Errorf("failed to save current changes: %w", err)
-	}
-
-	// Replace the existing firmware with the new one
-	if err := os.Rename(m.firmwarePath+".new", m.firmwarePath); err != nil {
-		return fmt.Errorf("failed to replace firmware: %w", err)
-	}
-
-	// Reload the firmware
-	m.varStore = varstore.NewEdk2VarStore(m.firmwarePath)
-	if m.varStore == nil {
-		// Try to restore from backup if the new firmware is problematic
-		os.Rename(backupPath, m.firmwarePath)
-		return fmt.Errorf("failed to load new firmware")
-	}
-
-	varList, err := m.varStore.GetVarList()
-	if err != nil {
-		// Try to restore from backup if the new firmware is problematic
-		os.Rename(backupPath, m.firmwarePath)
-		return fmt.Errorf("failed to get variable list from new firmware: %w", err)
-	}
-
-	m.varList = varList
-	return nil
-}
-
-// SaveChanges writes the firmware variables back to the firmware file.
-func (m *EDK2Manager) SaveChanges() error {
-	if m.varStore == nil {
-		return fmt.Errorf("varstore is not initialized")
-	}
-
-	if err := m.varStore.WriteVarStore(m.firmwarePath, m.varList); err != nil {
-		return fmt.Errorf("failed to write variable store: %w", err)
-	}
-
-	return nil
-}
-
-// RevertChanges discards any changes made to the firmware variables.
-func (m *EDK2Manager) RevertChanges() error {
-	// Reload the variables from the firmware file
-	if m.varStore == nil {
-		return fmt.Errorf("varstore is not initialized")
-	}
-
-	varList, err := m.varStore.GetVarList()
-	if err != nil {
-		return fmt.Errorf("failed to reload variable list: %w", err)
-	}
-
-	m.varList = varList
-	return nil
-}
-
-// ResetToDefaults resets the firmware to default settings.
-func (m *EDK2Manager) ResetToDefaults() error {
-	// For EDK2, we'll reset specific variables to defaults
-
-	// Reset boot order to empty
-	bootOrderVar := m.varList.FindFirst("BootOrder")
-	if bootOrderVar != nil {
-		bootOrderVar.Data = []byte{}
-	}
-
-	// Reset timeout to default
-	timeoutVar := m.varList.FindFirst("Timeout")
-	if timeoutVar != nil {
-		// Default timeout: 3 seconds (30 million 100ns units)
-		data := make([]byte, 8)
-		binary.LittleEndian.PutUint64(data, 30000000)
-		timeoutVar.Data = data
-	}
-
-	// Reset network settings: enable DHCP by default
-	dhcpVar := m.varList.FindVar("IPv4DHCPEnabled", efi.EfiNetworkInterfaceIdGuid)
-	if dhcpVar != nil {
-		dhcpVar.Data = []byte{1} // Enable DHCP
-	}
-
-	// Save the changes
-	return m.SaveChanges()
+func getFileInfo(path string) (os.FileInfo, error) {
+	return os.Stat(path)
 }

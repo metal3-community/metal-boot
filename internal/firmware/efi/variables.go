@@ -239,7 +239,18 @@ func (v *EfiVar) GetBootEntry() (*BootEntry, error) {
 // SetBootEntry sets a boot entry
 func (v *EfiVar) SetBootEntry(attr uint32, title string, path string, optdata []byte) error {
 	t := NewUCS16String(title)
-	p := NewDevicePath([]byte(path))
+
+	p := NewDevicePath([]byte{})
+
+	if strings.Contains(path, "(") {
+		var err error
+		p, err = ParseDevicePathFromString(path)
+		if err != nil {
+			return fmt.Errorf("failed to parse device path from string: %s", path)
+		}
+	} else {
+		p = NewDevicePath([]byte(path))
+	}
 
 	entry := NewBootEntry(nil, attr, t, p, &optdata)
 

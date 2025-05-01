@@ -143,13 +143,12 @@ func ParseGUID(s string) (GUID, error) {
 }
 
 // ParseGuid parses a GUID string into a Guid struct
-func ParseGuid(s string) Guid {
+func ParseGuid(s string) GUID {
 	guid, err := ParseGUID(s)
 	if err != nil {
-		// Return a default GUID in case of error
-		return Guid{BytesLe: make([]byte, 16)}
+		return GUID{}
 	}
-	return Guid{BytesLe: guid.BytesLE()}
+	return guid
 }
 
 // NewGUID creates a new GUID from its components

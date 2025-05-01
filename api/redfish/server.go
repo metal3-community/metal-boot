@@ -115,9 +115,11 @@ func (f *RedfishServer) GetEdk2FirmwareManager(
 		f.firmwarePath = filepath.Join(f.Config.Tftp.RootDirectory, edk2.FirmwareFileName)
 	}
 
+	macDir := strings.ReplaceAll(macAddress.String(), ":", "-")
+
 	firmwarePath := filepath.Join(
 		f.Config.Tftp.RootDirectory,
-		macAddress.String(),
+		macDir,
 		edk2.FirmwareFileName,
 	)
 
@@ -1103,7 +1105,7 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		switch *req.Boot.BootSourceOverrideTarget {
 		case Pxe:
 			s.Log.Info("setting boot source override to PXE", "system", systemId)
-			nextBootIndex = 1
+			nextBootIndex = 3
 		case Hdd:
 			s.Log.Info("setting boot source override to HDD", "system", systemId)
 			nextBootIndex = 2
