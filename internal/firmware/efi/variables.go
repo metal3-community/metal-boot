@@ -217,6 +217,16 @@ func (v *EfiVar) SetString(value string) {
 	v.updateTime(nil)
 }
 
+func (v *EfiVar) SetHexString(value string) error {
+	data, err := hex.DecodeString(value)
+	if err != nil {
+		return err
+	}
+	v.Data = data
+	v.updateTime(nil)
+	return nil
+}
+
 // SetUint32 sets a 32-bit unsigned integer value
 func (v *EfiVar) SetUint32(value uint32) {
 	buf := make([]byte, 4)

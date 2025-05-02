@@ -558,6 +558,8 @@ func (m *EDK2Manager) SetDefaultBootEntries() error {
 
 // SetMacAddress sets the MAC address in the firmware
 func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
+	var err error
+
 	if mac == nil {
 		return fmt.Errorf("MAC address is nil")
 	}
@@ -568,27 +570,43 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	clientId := m.getOrCreateVar("ClientId", efi.EfiDhcp6ServiceBindingProtocol)
 	clientId.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
 	clientIdStr := fmt.Sprintf("120000041531c000000000000000%s", strings.ToLower(macStr))
-	clientId.SetString(clientIdStr)
+	err = clientId.SetHexString(clientIdStr)
+	if err != nil {
+		return fmt.Errorf("failed to set ClientId variable: %w", err)
+	}
 
 	ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
 	ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
-	ndl.SetString(fmt.Sprintf("030b2500%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(macStr)))
+	ndlStr := fmt.Sprintf("030b2500%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(macStr))
+	err = ndl.SetHexString(ndlStr)
+	if err != nil {
+		return fmt.Errorf("failed to set _NDL variable: %w", err)
+	}
 
 	vkNv := m.getOrCreateVar("VendorKeysNv", "9073e4e0-60ec-4b6e-9903-4c223c260f3c")
 	vkNv.Attr = uint32(35)
-	vkNv.SetString("01")
+	err = vkNv.SetHexString("01")
+	if err != nil {
+		return fmt.Errorf("failed to set VendorKeysNv variable: %w", err)
+	}
 
 	systemTableMode := m.getOrCreateVar("SystemTableMode", efi.EFI_GLOBAL_VARIABLE)
 	systemTableMode.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS | efi.EFI_VARIABLE_RUNTIME_ACCESS
-	systemTableMode.SetString("00000000")
+	err = systemTableMode.SetHexString("02000000")
+	if err != nil {
+		return fmt.Errorf("failed to set SystemTableMode variable: %w", err)
+	}
 
 	// Set the dedicated MAC address variable
 	uniqueID := macStr[len(macStr)/2:]
 	efiIp6 := m.getOrCreateVar(macStr, efi.EfiIp6ConfigProtocol)
 	efiIp6.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
-	efiIp6.SetString(fmt.Sprintf("dd7ffde3fde803003400440008000000010000003000350004000000020000002c00000004000000030000000100000000000000da3addfffe%s", uniqueID))
+	err = efiIp6.SetHexString(fmt.Sprintf("dd7ffde3fde803003400440008000000010000003000350004000000020000002c00000004000000030000000100000000000000da3addfffe%s", uniqueID))
+	if err != nil {
+		return fmt.Errorf("failed to set MAC address variable: %w", err)
+	}
 
-	err := m.SetDefaultBootEntries()
+	err = m.SetDefaultBootEntries()
 	if err != nil {
 		return fmt.Errorf("failed to set default boot entries: %w", err)
 	}

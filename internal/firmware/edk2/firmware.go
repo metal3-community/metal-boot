@@ -21,6 +21,9 @@ dtoverlay=upstream-pi4
 tftp_prefix=2
 `
 
+const bootConf = `tftp_prefix=2
+`
+
 // RpiEfi returns the RPI_EFI.fd file.
 //
 //go:embed RPI_EFI.fd
@@ -94,4 +97,5 @@ var Files = map[string][]byte{
 	"firmware/brcm/brcmfmac43455-sdio.Raspberry": FirmwareBrcmBrcmfmac43455SdioRaspberry,
 	"config.txt":                                 ConfigTxt,
 	"cmdline.txt":                                []byte(""),
+	"bootcfg.txt":                                []byte(bootConf),
 }
