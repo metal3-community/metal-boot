@@ -1191,7 +1191,7 @@ func (s *RedfishServer) UpdateService(w http.ResponseWriter, r *http.Request) {
 		Description:    util.Ptr("Service enables updating firmware"),
 		ServiceEnabled: util.Ptr(true),
 		HttpPushUri:    util.Ptr("/redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate"),
-		FirmwareInventory: &IdRef{
+		FirmwareInventory: &FirmwareInventory{
 			OdataId: util.Ptr("/redfish/v1/UpdateService/FirmwareInventory"),
 		},
 		Actions: &UpdateServiceActions{

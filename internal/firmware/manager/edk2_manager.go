@@ -565,14 +565,14 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	// Format MAC address without colons
 	macStr := strings.ToUpper(strings.ReplaceAll(mac.String(), ":", ""))
 
-	clientId := m.getOrCreateVar("ClientId", efi.EfiDhcp6ServiceBindingProtocol)
-	clientIdStr := fmt.Sprintf("120000041531c000000000000000%s", strings.ToLower(macStr))
-	clientId.SetString(clientIdStr)
+	// clientId := m.getOrCreateVar("ClientId", efi.EfiDhcp6ServiceBindingProtocol)
+	// clientIdStr := fmt.Sprintf("120000041531c000000000000000%s", strings.ToLower(macStr))
+	// clientId.SetString(clientIdStr)
 
-	ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
-	ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
-	uniqueID := macStr[len(macStr)/2:]
-	ndl.SetString(fmt.Sprintf("030b2500d83add%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(uniqueID)))
+	// ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
+	// ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
+	// uniqueID := macStr[len(macStr)/2:]
+	// ndl.SetString(fmt.Sprintf("030b2500d83add%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(uniqueID)))
 
 	// Set the dedicated MAC address variable
 	_ = m.getOrCreateVar(macStr, efi.EfiIp6ConfigProtocol)

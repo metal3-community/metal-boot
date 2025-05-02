@@ -447,8 +447,10 @@ type Root struct {
 
 	// Systems A reference to a resource.
 	Systems *IdRef  `json:"Systems,omitempty"`
-	UpdateService *IdRef  `json:"UpdateService,omitempty"`
 	UUID    *string `json:"UUID,omitempty"`
+
+	// UpdateService A reference to a resource.
+	UpdateService *IdRef `json:"UpdateService,omitempty"`
 }
 
 // SimpleUpdateRequestBody defines model for SimpleUpdateRequestBody.
@@ -565,7 +567,7 @@ type UpdateService struct {
 
 	// Description description
 	Description       *string            `json:"Description"`
-	FirmwareInventory *IdRef `json:"FirmwareInventory,omitempty"`
+	FirmwareInventory *FirmwareInventory `json:"FirmwareInventory,omitempty"`
 	HttpPushUri       *string            `json:"HttpPushUri,omitempty"`
 
 	// Id The name of the resource.
@@ -652,14 +654,14 @@ type EjectVirtualMediaJSONRequestBody = EjectMediaRequestBody
 // InsertVirtualMediaJSONRequestBody defines body for InsertVirtualMedia for application/json ContentType.
 type InsertVirtualMediaJSONRequestBody = InsertMediaRequestBody
 
+// SetSystemJSONRequestBody defines body for SetSystem for application/json ContentType.
+type SetSystemJSONRequestBody = ComputerSystem
+
 // ResetSystemJSONRequestBody defines body for ResetSystem for application/json ContentType.
 type ResetSystemJSONRequestBody = ResetRequestBody
 
 // CreateVirtualDiskJSONRequestBody defines body for CreateVirtualDisk for application/json ContentType.
 type CreateVirtualDiskJSONRequestBody = CreateVirtualDiskRequestBody
-
-// SetSystemJSONRequestBody defines body for SetSystem for application/json ContentType.
-type SetSystemJSONRequestBody = ComputerSystem
 
 // UpdateServiceSimpleUpdateJSONRequestBody defines body for UpdateServiceSimpleUpdate for application/json ContentType.
 type UpdateServiceSimpleUpdateJSONRequestBody = SimpleUpdateRequestBody
@@ -670,10 +672,10 @@ type FirmwareInventoryDownloadImageMultipartRequestBody FirmwareInventoryDownloa
 // ServerInterface represents all server handlers.
 type ServerInterface interface {
 
-	// (GET /redfish/v1)
+	// (GET /redfish/v1/)
 	GetRoot(w http.ResponseWriter, r *http.Request)
 
-	// (GET /redfish/v1/Managers)
+	// (GET /redfish/v1/Managers/)
 	ListManagers(w http.ResponseWriter, r *http.Request)
 
 	// (POST /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Manager.Reset)
@@ -682,7 +684,7 @@ type ServerInterface interface {
 	// (GET /redfish/v1/Managers/{managerId})
 	GetManager(w http.ResponseWriter, r *http.Request, managerId string)
 
-	// (GET /redfish/v1/Managers/{managerId}/VirtualMedia)
+	// (GET /redfish/v1/Managers/{managerId}/VirtualMedia/)
 	ListManagerVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string)
 
 	// (GET /redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId})
@@ -694,43 +696,43 @@ type ServerInterface interface {
 	// (POST /redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}/Actions/VirtualMedia.InsertMedia)
 	InsertVirtualMedia(w http.ResponseWriter, r *http.Request, managerId string, virtualMediaId string)
 
-	// (GET /redfish/v1/Systems)
+	// (GET /redfish/v1/Systems/)
 	ListSystems(w http.ResponseWriter, r *http.Request)
 
-	// (POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset)
-	ResetSystem(w http.ResponseWriter, r *http.Request, computerSystemId string)
+	// (GET /redfish/v1/Systems/{systemId})
+	GetSystem(w http.ResponseWriter, r *http.Request, systemId string)
 
-	// (DELETE /redfish/v1/Systems/{ComputerSystemId}/Storage/Volumes/{StorageId})
-	DeleteVirtualdisk(w http.ResponseWriter, r *http.Request, computerSystemId string, storageId string)
+	// (PATCH /redfish/v1/Systems/{systemId})
+	SetSystem(w http.ResponseWriter, r *http.Request, systemId string)
 
-	// (GET /redfish/v1/Systems/{ComputerSystemId}/Storage/{StorageControllerId}/Volumes)
-	GetVolumes(w http.ResponseWriter, r *http.Request, computerSystemId string, storageControllerId string)
+	// (POST /redfish/v1/Systems/{systemId}/Actions/ComputerSystem.Reset)
+	ResetSystem(w http.ResponseWriter, r *http.Request, systemId string)
 
-	// (POST /redfish/v1/Systems/{ComputerSystemId}/Storage/{StorageControllerId}/Volumes)
-	CreateVirtualDisk(w http.ResponseWriter, r *http.Request, computerSystemId string, storageControllerId string)
+	// (DELETE /redfish/v1/Systems/{systemId}/Storage/Volumes/{StorageId})
+	DeleteVirtualdisk(w http.ResponseWriter, r *http.Request, systemId string, storageId string)
 
-	// (GET /redfish/v1/Systems/{ComputerSystemId})
-	GetSystem(w http.ResponseWriter, r *http.Request, ComputerSystemId string)
+	// (GET /redfish/v1/Systems/{systemId}/Storage/{StorageControllerId}/Volumes/)
+	GetVolumes(w http.ResponseWriter, r *http.Request, systemId string, storageControllerId string)
 
-	// (PATCH /redfish/v1/Systems/{ComputerSystemId})
-	SetSystem(w http.ResponseWriter, r *http.Request, ComputerSystemId string)
+	// (POST /redfish/v1/Systems/{systemId}/Storage/{StorageControllerId}/Volumes/)
+	CreateVirtualDisk(w http.ResponseWriter, r *http.Request, systemId string, storageControllerId string)
 
-	// (GET /redfish/v1/TaskService/Tasks)
+	// (GET /redfish/v1/TaskService/Tasks/)
 	GetTaskList(w http.ResponseWriter, r *http.Request)
 
 	// (GET /redfish/v1/TaskService/Tasks/{taskId})
 	GetTask(w http.ResponseWriter, r *http.Request, taskId string)
 
-	// (GET /redfish/v1/UpdateService)
+	// (GET /redfish/v1/UpdateService/)
 	UpdateService(w http.ResponseWriter, r *http.Request)
 
 	// (POST /redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate)
 	UpdateServiceSimpleUpdate(w http.ResponseWriter, r *http.Request)
 
-	// (GET /redfish/v1/UpdateService/FirmwareInventory)
+	// (GET /redfish/v1/UpdateService/FirmwareInventory/)
 	FirmwareInventory(w http.ResponseWriter, r *http.Request)
 
-	// (POST /redfish/v1/UpdateService/FirmwareInventory)
+	// (POST /redfish/v1/UpdateService/FirmwareInventory/)
 	FirmwareInventoryDownloadImage(w http.ResponseWriter, r *http.Request)
 
 	// (GET /redfish/v1/UpdateService/FirmwareInventory/{softwareId})
@@ -954,149 +956,22 @@ func (siw *ServerInterfaceWrapper) ListSystems(w http.ResponseWriter, r *http.Re
 	handler.ServeHTTP(w, r)
 }
 
-// ResetSystem operation middleware
-func (siw *ServerInterfaceWrapper) ResetSystem(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "ComputerSystemId" -------------
-	var computerSystemId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", r.PathValue("ComputerSystemId"), &computerSystemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ComputerSystemId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.ResetSystem(w, r, computerSystemId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// DeleteVirtualdisk operation middleware
-func (siw *ServerInterfaceWrapper) DeleteVirtualdisk(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "ComputerSystemId" -------------
-	var computerSystemId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", r.PathValue("ComputerSystemId"), &computerSystemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ComputerSystemId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "StorageId" -------------
-	var storageId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "StorageId", r.PathValue("StorageId"), &storageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "StorageId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.DeleteVirtualdisk(w, r, computerSystemId, storageId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// GetVolumes operation middleware
-func (siw *ServerInterfaceWrapper) GetVolumes(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "ComputerSystemId" -------------
-	var computerSystemId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", r.PathValue("ComputerSystemId"), &computerSystemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ComputerSystemId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "StorageControllerId" -------------
-	var storageControllerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "StorageControllerId", r.PathValue("StorageControllerId"), &storageControllerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "StorageControllerId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetVolumes(w, r, computerSystemId, storageControllerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
-// CreateVirtualDisk operation middleware
-func (siw *ServerInterfaceWrapper) CreateVirtualDisk(w http.ResponseWriter, r *http.Request) {
-
-	var err error
-
-	// ------------- Path parameter "ComputerSystemId" -------------
-	var computerSystemId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", r.PathValue("ComputerSystemId"), &computerSystemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ComputerSystemId", Err: err})
-		return
-	}
-
-	// ------------- Path parameter "StorageControllerId" -------------
-	var storageControllerId string
-
-	err = runtime.BindStyledParameterWithOptions("simple", "StorageControllerId", r.PathValue("StorageControllerId"), &storageControllerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
-	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "StorageControllerId", Err: err})
-		return
-	}
-
-	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.CreateVirtualDisk(w, r, computerSystemId, storageControllerId)
-	}))
-
-	for _, middleware := range siw.HandlerMiddlewares {
-		handler = middleware(handler)
-	}
-
-	handler.ServeHTTP(w, r)
-}
-
 // GetSystem operation middleware
 func (siw *ServerInterfaceWrapper) GetSystem(w http.ResponseWriter, r *http.Request) {
 
 	var err error
 
-	// ------------- Path parameter "ComputerSystemId" -------------
-	var ComputerSystemId string
+	// ------------- Path parameter "systemId" -------------
+	var systemId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", r.PathValue("ComputerSystemId"), &ComputerSystemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "systemId", r.PathValue("systemId"), &systemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ComputerSystemId", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "systemId", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.GetSystem(w, r, ComputerSystemId)
+		siw.Handler.GetSystem(w, r, systemId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1111,17 +986,144 @@ func (siw *ServerInterfaceWrapper) SetSystem(w http.ResponseWriter, r *http.Requ
 
 	var err error
 
-	// ------------- Path parameter "ComputerSystemId" -------------
-	var ComputerSystemId string
+	// ------------- Path parameter "systemId" -------------
+	var systemId string
 
-	err = runtime.BindStyledParameterWithOptions("simple", "ComputerSystemId", r.PathValue("ComputerSystemId"), &ComputerSystemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	err = runtime.BindStyledParameterWithOptions("simple", "systemId", r.PathValue("systemId"), &systemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
 	if err != nil {
-		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "ComputerSystemId", Err: err})
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "systemId", Err: err})
 		return
 	}
 
 	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		siw.Handler.SetSystem(w, r, ComputerSystemId)
+		siw.Handler.SetSystem(w, r, systemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// ResetSystem operation middleware
+func (siw *ServerInterfaceWrapper) ResetSystem(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "systemId" -------------
+	var systemId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "systemId", r.PathValue("systemId"), &systemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "systemId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.ResetSystem(w, r, systemId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// DeleteVirtualdisk operation middleware
+func (siw *ServerInterfaceWrapper) DeleteVirtualdisk(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "systemId" -------------
+	var systemId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "systemId", r.PathValue("systemId"), &systemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "systemId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "StorageId" -------------
+	var storageId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "StorageId", r.PathValue("StorageId"), &storageId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "StorageId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.DeleteVirtualdisk(w, r, systemId, storageId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// GetVolumes operation middleware
+func (siw *ServerInterfaceWrapper) GetVolumes(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "systemId" -------------
+	var systemId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "systemId", r.PathValue("systemId"), &systemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "systemId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "StorageControllerId" -------------
+	var storageControllerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "StorageControllerId", r.PathValue("StorageControllerId"), &storageControllerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "StorageControllerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.GetVolumes(w, r, systemId, storageControllerId)
+	}))
+
+	for _, middleware := range siw.HandlerMiddlewares {
+		handler = middleware(handler)
+	}
+
+	handler.ServeHTTP(w, r)
+}
+
+// CreateVirtualDisk operation middleware
+func (siw *ServerInterfaceWrapper) CreateVirtualDisk(w http.ResponseWriter, r *http.Request) {
+
+	var err error
+
+	// ------------- Path parameter "systemId" -------------
+	var systemId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "systemId", r.PathValue("systemId"), &systemId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "systemId", Err: err})
+		return
+	}
+
+	// ------------- Path parameter "StorageControllerId" -------------
+	var storageControllerId string
+
+	err = runtime.BindStyledParameterWithOptions("simple", "StorageControllerId", r.PathValue("StorageControllerId"), &storageControllerId, runtime.BindStyledParameterOptions{ParamLocation: runtime.ParamLocationPath, Explode: false, Required: true})
+	if err != nil {
+		siw.ErrorHandlerFunc(w, r, &InvalidParamFormatError{ParamName: "StorageControllerId", Err: err})
+		return
+	}
+
+	handler := http.Handler(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		siw.Handler.CreateVirtualDisk(w, r, systemId, storageControllerId)
 	}))
 
 	for _, middleware := range siw.HandlerMiddlewares {
@@ -1371,28 +1373,28 @@ func HandlerWithOptions(si ServerInterface, options StdHTTPServerOptions) http.H
 		ErrorHandlerFunc:   options.ErrorHandlerFunc,
 	}
 
-	m.HandleFunc("GET /redfish/v1", wrapper.GetRoot)
-	m.HandleFunc("GET /redfish/v1/Managers", wrapper.ListManagers)
-	m.HandleFunc("POST /redfish/v1/Managers/iDRAC.Embedded.1/Actions/Manager.Reset", wrapper.ResetIdrac)
-	m.HandleFunc("GET /redfish/v1/Managers/{managerId}", wrapper.GetManager)
-	m.HandleFunc("GET /redfish/v1/Managers/{managerId}/VirtualMedia", wrapper.ListManagerVirtualMedia)
-	m.HandleFunc("GET /redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}", wrapper.GetManagerVirtualMedia)
-	m.HandleFunc("POST /redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}/Actions/VirtualMedia.EjectMedia", wrapper.EjectVirtualMedia)
-	m.HandleFunc("POST /redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}/Actions/VirtualMedia.InsertMedia", wrapper.InsertVirtualMedia)
-	m.HandleFunc("GET /redfish/v1/Systems", wrapper.ListSystems)
-	m.HandleFunc("POST /redfish/v1/Systems/{ComputerSystemId}/Actions/ComputerSystem.Reset", wrapper.ResetSystem)
-	m.HandleFunc("DELETE /redfish/v1/Systems/{ComputerSystemId}/Storage/Volumes/{StorageId}", wrapper.DeleteVirtualdisk)
-	m.HandleFunc("GET /redfish/v1/Systems/{ComputerSystemId}/Storage/{StorageControllerId}/Volumes", wrapper.GetVolumes)
-	m.HandleFunc("POST /redfish/v1/Systems/{ComputerSystemId}/Storage/{StorageControllerId}/Volumes", wrapper.CreateVirtualDisk)
-	m.HandleFunc("GET /redfish/v1/Systems/{ComputerSystemId}", wrapper.GetSystem)
-	m.HandleFunc("PATCH /redfish/v1/Systems/{ComputerSystemId}", wrapper.SetSystem)
-	m.HandleFunc("GET /redfish/v1/TaskService/Tasks", wrapper.GetTaskList)
-	m.HandleFunc("GET /redfish/v1/TaskService/Tasks/{taskId}", wrapper.GetTask)
-	m.HandleFunc("GET /redfish/v1/UpdateService", wrapper.UpdateService)
-	m.HandleFunc("POST /redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate", wrapper.UpdateServiceSimpleUpdate)
-	m.HandleFunc("GET /redfish/v1/UpdateService/FirmwareInventory", wrapper.FirmwareInventory)
-	m.HandleFunc("POST /redfish/v1/UpdateService/FirmwareInventory", wrapper.FirmwareInventoryDownloadImage)
-	m.HandleFunc("GET /redfish/v1/UpdateService/FirmwareInventory/{softwareId}", wrapper.GetSoftwareInventory)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/", wrapper.GetRoot)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Managers/", wrapper.ListManagers)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/Managers/iDRAC.Embedded.1/Actions/Manager.Reset", wrapper.ResetIdrac)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Managers/{managerId}", wrapper.GetManager)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Managers/{managerId}/VirtualMedia/", wrapper.ListManagerVirtualMedia)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}", wrapper.GetManagerVirtualMedia)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}/Actions/VirtualMedia.EjectMedia", wrapper.EjectVirtualMedia)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}/Actions/VirtualMedia.InsertMedia", wrapper.InsertVirtualMedia)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Systems/", wrapper.ListSystems)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Systems/{systemId}", wrapper.GetSystem)
+	m.HandleFunc("PATCH "+options.BaseURL+"/redfish/v1/Systems/{systemId}", wrapper.SetSystem)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/Systems/{systemId}/Actions/ComputerSystem.Reset", wrapper.ResetSystem)
+	m.HandleFunc("DELETE "+options.BaseURL+"/redfish/v1/Systems/{systemId}/Storage/Volumes/{StorageId}", wrapper.DeleteVirtualdisk)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/Systems/{systemId}/Storage/{StorageControllerId}/Volumes/", wrapper.GetVolumes)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/Systems/{systemId}/Storage/{StorageControllerId}/Volumes/", wrapper.CreateVirtualDisk)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/TaskService/Tasks/", wrapper.GetTaskList)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/TaskService/Tasks/{taskId}", wrapper.GetTask)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/UpdateService/", wrapper.UpdateService)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/UpdateService/Actions/UpdateService.SimpleUpdate", wrapper.UpdateServiceSimpleUpdate)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/UpdateService/FirmwareInventory/", wrapper.FirmwareInventory)
+	m.HandleFunc("POST "+options.BaseURL+"/redfish/v1/UpdateService/FirmwareInventory/", wrapper.FirmwareInventoryDownloadImage)
+	m.HandleFunc("GET "+options.BaseURL+"/redfish/v1/UpdateService/FirmwareInventory/{softwareId}", wrapper.GetSoftwareInventory)
 
 	return m
 }
