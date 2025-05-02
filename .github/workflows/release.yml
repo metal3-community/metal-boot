@@ -30,7 +30,10 @@ jobs:
       with:
         # list of Docker images to use as base name for tags
         images: ghcr.io/${{ github.repository }}
-        # generate Docker tags based on the following events/attributes
+        flavor: |
+          latest=true
+          prefix=
+          suffix=
         tags: |
           type=schedule
           type=ref,event=branch
@@ -39,7 +42,6 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
           type=sha
-          type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
 
     - name: 'Login to GitHub Container Registry'
       if: github.event_name != 'pull_request'
