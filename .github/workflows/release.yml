@@ -39,6 +39,7 @@ jobs:
           type=semver,pattern={{major}}.{{minor}}
           type=semver,pattern={{major}}
           type=sha
+          type=raw,value=latest,enable=${{ github.ref == format('refs/heads/{0}', 'main') }}
 
     - name: 'Login to GitHub Container Registry'
       if: github.event_name != 'pull_request'
