@@ -595,13 +595,16 @@ func (w *Remote) Put(
 			return fmt.Errorf("no port %d found", pwr.Port)
 		}
 
-		if portOverrides[i].PoeMode != pwr.State {
-			portOverrides[i].PoeMode = pwr.State
-			portOverrides[i].PortPoe = util.Ptr(pwr.State == "auto")
+		portOverride := portOverrides[i]
+
+		if portOverride.PoeMode != pwr.State {
+			portOverride.PoeMode = pwr.State
+			portOverride.PortPoe = util.Ptr(pwr.State == "auto")
+			portOverride.QOSProfile = nil
 
 			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, &unifi.Device{
 				ID:            device.ID,
-				PortOverrides: portOverrides,
+				PortOverrides: []unifi.DevicePortOverrides{portOverride},
 			}); err != nil {
 				return err
 			}

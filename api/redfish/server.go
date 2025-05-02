@@ -972,7 +972,7 @@ func (s *RedfishServer) ResetIdrac(w http.ResponseWriter, r *http.Request) {
 func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, systemId string) {
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
-	_, span := tracer.Start(ctx, "redfish.RedfishServer.ListManagerVirtualMedia")
+	_, span := tracer.Start(ctx, "redfish.RedfishServer.ResetSystem")
 	defer span.End()
 
 	req := ResetSystemJSONRequestBody{}

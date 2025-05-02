@@ -2,1255 +2,1255 @@
 package main
 
 import (
-    "archive/zip"
-    "fmt"
-    "io"
-    "log"
-    "net/http"
-    "os"
-    "path/filepath"
-    "regexp"
-    "sort"
-    "strings"
-    "time"
-    "strconv"
-    "net/url"
-    "encoding/json"
+	"archive/zip"
+	"encoding/json"
+	"fmt"
+	"io"
+	"log"
+	"net/http"
+	"net/url"
+	"os"
+	"path/filepath"
+	"regexp"
+	"sort"
+	"strconv"
+	"strings"
+	"time"
 
-    "gopkg.in/yaml.v3"
+	"gopkg.in/yaml.v3"
 )
 
 const (
-    redfishSchemaZip = "https://www.dmtf.org/sites/default/files/standards/documents/DSP8010_2025.1.zip"
-    openAPIDir       = "openapi"
-    tmpDir           = "redfish-schema-tmp"
-    outputFileName   = "redfish-consolidated.yaml"
-    defaultTimeout   = 60 * time.Second
-    versionPattern   = `^(.+?)\.v(\d+)_(\d+)_(\d+)\.yaml$`
-    refPattern       = `\$ref: (https?:\/\/[^\s]+\/([^/\s]+\.yaml)(#[^\s]*)?)`
+	redfishSchemaZip = "https://www.dmtf.org/sites/default/files/standards/documents/DSP8010_2025.1.zip"
+	openAPIDir       = "openapi"
+	tmpDir           = "redfish-schema-tmp"
+	outputFileName   = "redfish-consolidated.yaml"
+	defaultTimeout   = 60 * time.Second
+	versionPattern   = `^(.+?)\.v(\d+)_(\d+)_(\d+)\.yaml$`
+	refPattern       = `\$ref: (https?:\/\/[^\s]+\/([^/\s]+\.yaml)(#[^\s]*)?)`
 )
 
 type SchemaFile struct {
-    Name    string
-    Version string
-    Path    string
+	Name    string
+	Version string
+	Path    string
 }
 
 type Version struct {
-    Major int
-    Minor int
-    Patch int
+	Major int
+	Minor int
+	Patch int
 }
 
 type ConsolidationState struct {
-    Schemas       map[string]*yaml.Node
-    ExternalRefs  map[string]bool
-    ProcessedRefs map[string]bool
-    SchemaDir     string
+	Schemas       map[string]*yaml.Node
+	ExternalRefs  map[string]bool
+	ProcessedRefs map[string]bool
+	SchemaDir     string
 }
 
 // Update the main function to use a specific known input YAML file
 func main() {
-    log.Println("Starting Redfish OpenAPI consolidator using direct schema ZIP")
+	log.Println("Starting Redfish OpenAPI consolidator using direct schema ZIP")
 
-    // Create temp directory and download/extract schema
-    schemaDir := downloadAndExtractSchema()
-    defer os.RemoveAll(tmpDir)
+	// Create temp directory and download/extract schema
+	schemaDir := downloadAndExtractSchema()
+	defer os.RemoveAll(tmpDir)
 
-    // Find the main openapi.yaml file
-    openAPIPath := filepath.Join(schemaDir, openAPIDir)
-    openApiYamlPath := filepath.Join(openAPIPath, "openapi.yaml")
-    log.Printf("Using main OpenAPI file: %s", openApiYamlPath)
+	// Find the main openapi.yaml file
+	openAPIPath := filepath.Join(schemaDir, openAPIDir)
+	openApiYamlPath := filepath.Join(openAPIPath, "openapi.yaml")
+	log.Printf("Using main OpenAPI file: %s", openApiYamlPath)
 
-    // Load the main OpenAPI file
-    state := &ConsolidationState{
-        Schemas:       make(map[string]*yaml.Node),
-        ExternalRefs:  make(map[string]bool),
-        ProcessedRefs: make(map[string]bool),
-        SchemaDir:     openAPIPath,
-    }
+	// Load the main OpenAPI file
+	state := &ConsolidationState{
+		Schemas:       make(map[string]*yaml.Node),
+		ExternalRefs:  make(map[string]bool),
+		ProcessedRefs: make(map[string]bool),
+		SchemaDir:     openAPIPath,
+	}
 
-    // Load the main OpenAPI file
-    mainNode, err := loadYAMLFile(openApiYamlPath, state)
-    if err != nil {
-        log.Fatalf("Failed to load main OpenAPI file: %v", err)
-    }
+	// Load the main OpenAPI file
+	mainNode, err := loadYAMLFile(openApiYamlPath, state)
+	if err != nil {
+		log.Fatalf("Failed to load main OpenAPI file: %v", err)
+	}
 
-    // Store it with a special key
-    state.Schemas["openapi.yaml"] = mainNode
+	// Store it with a special key
+	state.Schemas["openapi.yaml"] = mainNode
 
-    // Find all OpenAPI files for reference resolution
-    log.Printf("Looking for additional OpenAPI schema files in: %s", openAPIPath)
-    files, err := findOpenAPIFiles(openAPIPath)
-    if err != nil {
-        log.Fatalf("Failed to find OpenAPI files: %v", err)
-    }
-    log.Printf("Found %d OpenAPI schema files", len(files))
+	// Find all OpenAPI files for reference resolution
+	log.Printf("Looking for additional OpenAPI schema files in: %s", openAPIPath)
+	files, err := findOpenAPIFiles(openAPIPath)
+	if err != nil {
+		log.Fatalf("Failed to find OpenAPI files: %v", err)
+	}
+	log.Printf("Found %d OpenAPI schema files", len(files))
 
-    // Load latest versions of all referenced schemas
-    latestSchemas := selectLatestSchemaVersions(files)
-    log.Printf("Selected %d latest schema versions", len(latestSchemas))
+	// Load latest versions of all referenced schemas
+	latestSchemas := selectLatestSchemaVersions(files)
+	log.Printf("Selected %d latest schema versions", len(latestSchemas))
 
-    // Preload these schemas for reference resolution
-    for _, schemaFile := range latestSchemas {
-        // Skip if we already loaded it
-        if _, exists := state.Schemas[filepath.Base(schemaFile.Path)]; exists {
-            continue
-        }
-        
-        node, err := loadYAMLFile(schemaFile.Path, state)
-        if err != nil {
-            log.Printf("Warning: Failed to load schema %s: %v", schemaFile.Path, err)
-            continue
-        }
-        state.Schemas[filepath.Base(schemaFile.Path)] = node
-    }
+	// Preload these schemas for reference resolution
+	for _, schemaFile := range latestSchemas {
+		// Skip if we already loaded it
+		if _, exists := state.Schemas[filepath.Base(schemaFile.Path)]; exists {
+			continue
+		}
 
-    // Process and resolve references until we have no more external refs to process
-    for {
-        newRefs := make(map[string]bool)
-        for ref := range state.ExternalRefs {
-            if !state.ProcessedRefs[ref] {
-                log.Printf("Resolving external reference: %s", ref)
-                if resolveExternalRef(ref, state) {
-                    state.ProcessedRefs[ref] = true
-                } else {
-                    newRefs[ref] = true
-                }
-            }
-        }
+		node, err := loadYAMLFile(schemaFile.Path, state)
+		if err != nil {
+			log.Printf("Warning: Failed to load schema %s: %v", schemaFile.Path, err)
+			continue
+		}
+		state.Schemas[filepath.Base(schemaFile.Path)] = node
+	}
 
-        if len(newRefs) == 0 {
-            break
-        }
-        state.ExternalRefs = newRefs
-    }
-    
-    // Collect all schema definitions from referenced files
-    log.Println("Collecting schema definitions from references...")
-    additionalSchemas := collectAllSchemaDefinitions(state)
-    log.Printf("Collected %d additional schema definitions", len(additionalSchemas))
-    
-    // Merge schema definitions into the main document
-    mergeSchemaDefinitions(mainNode, additionalSchemas)
+	// Process and resolve references until we have no more external refs to process
+	for {
+		newRefs := make(map[string]bool)
+		for ref := range state.ExternalRefs {
+			if !state.ProcessedRefs[ref] {
+				log.Printf("Resolving external reference: %s", ref)
+				if resolveExternalRef(ref, state) {
+					state.ProcessedRefs[ref] = true
+				} else {
+					newRefs[ref] = true
+				}
+			}
+		}
 
-    // Process anyOf to remove duplicates
-    processAnyOf(mainNode)
-    
-    // Now inline references directly in the main document
-    inlineAllReferences(mainNode, state)
+		if len(newRefs) == 0 {
+			break
+		}
+		state.ExternalRefs = newRefs
+	}
 
-    // Write to file
-    writeConsolidatedSchema(mainNode, outputFileName)
-    log.Printf("Consolidation complete. Output written to: %s", outputFileName)
+	// Collect all schema definitions from referenced files
+	log.Println("Collecting schema definitions from references...")
+	additionalSchemas := collectAllSchemaDefinitions(state)
+	log.Printf("Collected %d additional schema definitions", len(additionalSchemas))
+
+	// Merge schema definitions into the main document
+	mergeSchemaDefinitions(mainNode, additionalSchemas)
+
+	// Process anyOf to remove duplicates
+	processAnyOf(mainNode)
+
+	// Now inline references directly in the main document
+	inlineAllReferences(mainNode, state)
+
+	// Write to file
+	writeConsolidatedSchema(mainNode, outputFileName)
+	log.Printf("Consolidation complete. Output written to: %s", outputFileName)
 }
 
 func downloadAndExtractSchema() string {
-    // Create temp directory if it doesn't exist
-    if err := os.MkdirAll(tmpDir, 0755); err != nil {
-        log.Fatalf("Failed to create temp directory: %v", err)
-    }
+	// Create temp directory if it doesn't exist
+	if err := os.MkdirAll(tmpDir, 0755); err != nil {
+		log.Fatalf("Failed to create temp directory: %v", err)
+	}
 
-    zipPath := filepath.Join(tmpDir, "schema.zip")
+	zipPath := filepath.Join(tmpDir, "schema.zip")
 
-    // Download the ZIP file
-    log.Printf("Downloading schema from %s", redfishSchemaZip)
-    client := &http.Client{Timeout: defaultTimeout}
-    resp, err := client.Get(redfishSchemaZip)
-    if err != nil {
-        log.Fatalf("Failed to download schema: %v", err)
-    }
-    defer resp.Body.Close()
+	// Download the ZIP file
+	log.Printf("Downloading schema from %s", redfishSchemaZip)
+	client := &http.Client{Timeout: defaultTimeout}
+	resp, err := client.Get(redfishSchemaZip)
+	if err != nil {
+		log.Fatalf("Failed to download schema: %v", err)
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        log.Fatalf("Failed to download schema: status %d", resp.StatusCode)
-    }
+	if resp.StatusCode != http.StatusOK {
+		log.Fatalf("Failed to download schema: status %d", resp.StatusCode)
+	}
 
-    // Create the zip file
-    zipFile, err := os.Create(zipPath)
-    if err != nil {
-        log.Fatalf("Failed to create zip file: %v", err)
-    }
+	// Create the zip file
+	zipFile, err := os.Create(zipPath)
+	if err != nil {
+		log.Fatalf("Failed to create zip file: %v", err)
+	}
 
-    // Copy the content
-    if _, err := io.Copy(zipFile, resp.Body); err != nil {
-        zipFile.Close()
-        log.Fatalf("Failed to save zip file: %v", err)
-    }
-    zipFile.Close()
+	// Copy the content
+	if _, err := io.Copy(zipFile, resp.Body); err != nil {
+		zipFile.Close()
+		log.Fatalf("Failed to save zip file: %v", err)
+	}
+	zipFile.Close()
 
-    // Extract the zip file
-    log.Println("Extracting schema ZIP file")
-    extractDir := filepath.Join(tmpDir, "extracted")
-    if err := os.MkdirAll(extractDir, 0755); err != nil {
-        log.Fatalf("Failed to create extraction directory: %v", err)
-    }
+	// Extract the zip file
+	log.Println("Extracting schema ZIP file")
+	extractDir := filepath.Join(tmpDir, "extracted")
+	if err := os.MkdirAll(extractDir, 0755); err != nil {
+		log.Fatalf("Failed to create extraction directory: %v", err)
+	}
 
-    zipReader, err := zip.OpenReader(zipPath)
-    if err != nil {
-        log.Fatalf("Failed to open zip file: %v", err)
-    }
-    defer zipReader.Close()
+	zipReader, err := zip.OpenReader(zipPath)
+	if err != nil {
+		log.Fatalf("Failed to open zip file: %v", err)
+	}
+	defer zipReader.Close()
 
-    for _, file := range zipReader.File {
-        if err := extractZipFile(file, extractDir); err != nil {
-            log.Printf("Warning: Failed to extract file %s: %v", file.Name, err)
-        }
-    }
+	for _, file := range zipReader.File {
+		if err := extractZipFile(file, extractDir); err != nil {
+			log.Printf("Warning: Failed to extract file %s: %v", file.Name, err)
+		}
+	}
 
-    // Find the actual schema directory (may be in a subdirectory)
-    entries, err := os.ReadDir(extractDir)
-    if err != nil {
-        log.Fatalf("Failed to read extracted directory: %v", err)
-    }
+	// Find the actual schema directory (may be in a subdirectory)
+	entries, err := os.ReadDir(extractDir)
+	if err != nil {
+		log.Fatalf("Failed to read extracted directory: %v", err)
+	}
 
-    // If there's a single directory, use that as the schema root
-    if len(entries) == 1 && entries[0].IsDir() {
-        extractDir = filepath.Join(extractDir, entries[0].Name())
-    }
+	// If there's a single directory, use that as the schema root
+	if len(entries) == 1 && entries[0].IsDir() {
+		extractDir = filepath.Join(extractDir, entries[0].Name())
+	}
 
-    return extractDir
+	return extractDir
 }
 
 func extractZipFile(file *zip.File, destDir string) error {
-    // Create destination path
-    destPath := filepath.Join(destDir, file.Name)
+	// Create destination path
+	destPath := filepath.Join(destDir, file.Name)
 
-    // If it's a directory, just create it
-    if file.FileInfo().IsDir() {
-        return os.MkdirAll(destPath, file.Mode())
-    }
+	// If it's a directory, just create it
+	if file.FileInfo().IsDir() {
+		return os.MkdirAll(destPath, file.Mode())
+	}
 
-    // Ensure the directory exists
-    if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
-        return err
-    }
+	// Ensure the directory exists
+	if err := os.MkdirAll(filepath.Dir(destPath), 0755); err != nil {
+		return err
+	}
 
-    // Create the file
-    destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
-    if err != nil {
-        return err
-    }
-    defer destFile.Close()
+	// Create the file
+	destFile, err := os.OpenFile(destPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, file.Mode())
+	if err != nil {
+		return err
+	}
+	defer destFile.Close()
 
-    // Open the source file
-    srcFile, err := file.Open()
-    if err != nil {
-        return err
-    }
-    defer srcFile.Close()
+	// Open the source file
+	srcFile, err := file.Open()
+	if err != nil {
+		return err
+	}
+	defer srcFile.Close()
 
-    // Copy contents
-    _, err = io.Copy(destFile, srcFile)
-    return err
+	// Copy contents
+	_, err = io.Copy(destFile, srcFile)
+	return err
 }
 
 func findOpenAPIFiles(dir string) ([]SchemaFile, error) {
-    var files []SchemaFile
-    re := regexp.MustCompile(versionPattern)
+	var files []SchemaFile
+	re := regexp.MustCompile(versionPattern)
 
-    err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
-        if err != nil {
-            return err
-        }
+	err := filepath.Walk(dir, func(path string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
 
-        if info.IsDir() {
-            return nil
-        }
+		if info.IsDir() {
+			return nil
+		}
 
-        filename := info.Name()
-        if !strings.HasSuffix(filename, ".yaml") {
-            return nil
-        }
+		filename := info.Name()
+		if !strings.HasSuffix(filename, ".yaml") {
+			return nil
+		}
 
-        matches := re.FindStringSubmatch(filename)
-        if matches == nil {
-            return nil
-        }
+		matches := re.FindStringSubmatch(filename)
+		if matches == nil {
+			return nil
+		}
 
-        schemaFile := SchemaFile{
-            Name:    matches[1],
-            Version: fmt.Sprintf("%s.%s.%s", matches[2], matches[3], matches[4]),
-            Path:    path,
-        }
-        files = append(files, schemaFile)
-        return nil
-    })
+		schemaFile := SchemaFile{
+			Name:    matches[1],
+			Version: fmt.Sprintf("%s.%s.%s", matches[2], matches[3], matches[4]),
+			Path:    path,
+		}
+		files = append(files, schemaFile)
+		return nil
+	})
 
-    return files, err
+	return files, err
 }
 
 func selectLatestSchemaVersions(files []SchemaFile) []SchemaFile {
-    schemaGroups := make(map[string][]SchemaFile)
-    for _, file := range files {
-        schemaGroups[file.Name] = append(schemaGroups[file.Name], file)
-    }
+	schemaGroups := make(map[string][]SchemaFile)
+	for _, file := range files {
+		schemaGroups[file.Name] = append(schemaGroups[file.Name], file)
+	}
 
-    var latestSchemas []SchemaFile
-    for _, group := range schemaGroups {
-        sort.Slice(group, func(i, j int) bool {
-            return compareVersions(group[i].Version, group[j].Version) > 0
-        })
-        latestSchemas = append(latestSchemas, group[0])
-    }
+	var latestSchemas []SchemaFile
+	for _, group := range schemaGroups {
+		sort.Slice(group, func(i, j int) bool {
+			return compareVersions(group[i].Version, group[j].Version) > 0
+		})
+		latestSchemas = append(latestSchemas, group[0])
+	}
 
-    return latestSchemas
+	return latestSchemas
 }
 
 func compareVersions(versionA, versionB string) int {
-    var verA, verB Version
-    fmt.Sscanf(versionA, "%d.%d.%d", &verA.Major, &verA.Minor, &verA.Patch)
-    fmt.Sscanf(versionB, "%d.%d.%d", &verB.Major, &verB.Minor, &verB.Patch)
+	var verA, verB Version
+	fmt.Sscanf(versionA, "%d.%d.%d", &verA.Major, &verA.Minor, &verA.Patch)
+	fmt.Sscanf(versionB, "%d.%d.%d", &verB.Major, &verB.Minor, &verB.Patch)
 
-    if verA.Major != verB.Major {
-        return verA.Major - verB.Major
-    }
-    if verA.Minor != verB.Minor {
-        return verA.Minor - verB.Minor
-    }
-    return verA.Patch - verB.Patch
+	if verA.Major != verB.Major {
+		return verA.Major - verB.Major
+	}
+	if verA.Minor != verB.Minor {
+		return verA.Minor - verB.Minor
+	}
+	return verA.Patch - verB.Patch
 }
 
 func loadYAMLFile(path string, state *ConsolidationState) (*yaml.Node, error) {
-    file, err := os.ReadFile(path)
-    if err != nil {
-        return nil, err
-    }
+	file, err := os.ReadFile(path)
+	if err != nil {
+		return nil, err
+	}
 
-    var node yaml.Node
-    if err := yaml.Unmarshal(file, &node); err != nil {
-        return nil, err
-    }
+	var node yaml.Node
+	if err := yaml.Unmarshal(file, &node); err != nil {
+		return nil, err
+	}
 
-    // Find and track external references
-    findExternalRefs(&node, state)
-    return &node, nil
+	// Find and track external references
+	findExternalRefs(&node, state)
+	return &node, nil
 }
 
 func findExternalRefs(node *yaml.Node, state *ConsolidationState) {
-    if node == nil {
-        return
-    }
+	if node == nil {
+		return
+	}
 
-    // If node is a mapping node, check for $ref keys
-    if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
-        for i := 0; i < len(node.Content); i += 2 {
-            key := node.Content[i]
-            val := node.Content[i+1]
-            
-            if key.Value == "$ref" && val.Kind == yaml.ScalarNode {
-                ref := val.Value
-                
-                // Check if it's an external reference (URL or file reference)
-                if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-                    state.ExternalRefs[ref] = true
-                    
-                    // Extract the filename part for local reference conversion
-                    urlParts := strings.Split(ref, "/")
-                    if len(urlParts) > 0 {
-                        filename := urlParts[len(urlParts)-1]
-                        fragParts := strings.Split(filename, "#")
-                        baseFilename := fragParts[0]
-                        
-                        // Update reference to local file
-                        if len(fragParts) > 1 {
-                            val.Value = baseFilename + "#" + fragParts[1]
-                        } else {
-                            val.Value = baseFilename
-                        }
-                    }
-                } else if !strings.HasPrefix(ref, "#") {
-                    // It's a local file reference, not an internal fragment
-                    // Track it for resolution
-                    state.ExternalRefs[ref] = true
-                }
-            }
-        }
-    }
+	// If node is a mapping node, check for $ref keys
+	if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i]
+			val := node.Content[i+1]
 
-    // Recursively process all content nodes
-    for _, child := range node.Content {
-        findExternalRefs(child, state)
-    }
+			if key.Value == "$ref" && val.Kind == yaml.ScalarNode {
+				ref := val.Value
+
+				// Check if it's an external reference (URL or file reference)
+				if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+					state.ExternalRefs[ref] = true
+
+					// Extract the filename part for local reference conversion
+					urlParts := strings.Split(ref, "/")
+					if len(urlParts) > 0 {
+						filename := urlParts[len(urlParts)-1]
+						fragParts := strings.Split(filename, "#")
+						baseFilename := fragParts[0]
+
+						// Update reference to local file
+						if len(fragParts) > 1 {
+							val.Value = baseFilename + "#" + fragParts[1]
+						} else {
+							val.Value = baseFilename
+						}
+					}
+				} else if !strings.HasPrefix(ref, "#") {
+					// It's a local file reference, not an internal fragment
+					// Track it for resolution
+					state.ExternalRefs[ref] = true
+				}
+			}
+		}
+	}
+
+	// Recursively process all content nodes
+	for _, child := range node.Content {
+		findExternalRefs(child, state)
+	}
 }
 
 func resolveExternalRef(ref string, state *ConsolidationState) bool {
-    // Handle http/https references
-    if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-        return resolveRemoteRef(ref, state)
-    }
+	// Handle http/https references
+	if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+		return resolveRemoteRef(ref, state)
+	}
 
-    // Handle local file references
-    return resolveLocalRef(ref, state)
+	// Handle local file references
+	return resolveLocalRef(ref, state)
 }
 
 func resolveRemoteRef(ref string, state *ConsolidationState) bool {
-    refParts := strings.SplitN(ref, "#", 2)
-    url := refParts[0]
+	refParts := strings.SplitN(ref, "#", 2)
+	url := refParts[0]
 
-    client := &http.Client{Timeout: defaultTimeout}
-    resp, err := client.Get(url)
-    if err != nil {
-        log.Printf("Failed to download schema from %s: %v", url, err)
-        return false
-    }
-    defer resp.Body.Close()
+	client := &http.Client{Timeout: defaultTimeout}
+	resp, err := client.Get(url)
+	if err != nil {
+		log.Printf("Failed to download schema from %s: %v", url, err)
+		return false
+	}
+	defer resp.Body.Close()
 
-    if resp.StatusCode != http.StatusOK {
-        log.Printf("Failed to download schema from %s: status %d", url, resp.StatusCode)
-        return false
-    }
+	if resp.StatusCode != http.StatusOK {
+		log.Printf("Failed to download schema from %s: status %d", url, resp.StatusCode)
+		return false
+	}
 
-    data, err := io.ReadAll(resp.Body)
-    if err != nil {
-        log.Printf("Failed to read response body from %s: %v", url, err)
-        return false
-    }
+	data, err := io.ReadAll(resp.Body)
+	if err != nil {
+		log.Printf("Failed to read response body from %s: %v", url, err)
+		return false
+	}
 
-    var node yaml.Node
-    if err := yaml.Unmarshal(data, &node); err != nil {
-        log.Printf("Failed to parse YAML from %s: %v", url, err)
-        return false
-    }
+	var node yaml.Node
+	if err := yaml.Unmarshal(data, &node); err != nil {
+		log.Printf("Failed to parse YAML from %s: %v", url, err)
+		return false
+	}
 
-    // Extract filename from URL
-    filename := filepath.Base(url)
-    state.Schemas[filename] = &node
+	// Extract filename from URL
+	filename := filepath.Base(url)
+	state.Schemas[filename] = &node
 
-    // Find more references in this schema
-    findExternalRefs(&node, state)
-    return true
+	// Find more references in this schema
+	findExternalRefs(&node, state)
+	return true
 }
 
 func resolveLocalRef(ref string, state *ConsolidationState) bool {
-    refParts := strings.SplitN(ref, "#", 2)
-    filename := refParts[0]
+	refParts := strings.SplitN(ref, "#", 2)
+	filename := refParts[0]
 
-    // If already loaded, no need to process again
-    if _, exists := state.Schemas[filename]; exists {
-        return true
-    }
+	// If already loaded, no need to process again
+	if _, exists := state.Schemas[filename]; exists {
+		return true
+	}
 
-    // Try to find the file
-    filePath := filepath.Join(state.SchemaDir, filename)
-    if _, err := os.Stat(filePath); os.IsNotExist(err) {
-        // Try adding .yaml extension if missing
-        if !strings.HasSuffix(filename, ".yaml") {
-            filePath = filepath.Join(state.SchemaDir, filename+".yaml")
-        }
-        
-        // If still not found, try a fuzzy match
-        if _, err := os.Stat(filePath); os.IsNotExist(err) {
-            baseName := strings.Split(filename, ".")[0]
-            matches, _ := filepath.Glob(filepath.Join(state.SchemaDir, baseName+"*.yaml"))
-            if len(matches) > 0 {
-                filePath = matches[0]
-            } else {
-                log.Printf("Could not find file for reference: %s", ref)
-                return false
-            }
-        }
-    }
+	// Try to find the file
+	filePath := filepath.Join(state.SchemaDir, filename)
+	if _, err := os.Stat(filePath); os.IsNotExist(err) {
+		// Try adding .yaml extension if missing
+		if !strings.HasSuffix(filename, ".yaml") {
+			filePath = filepath.Join(state.SchemaDir, filename+".yaml")
+		}
 
-    // Load the file
-    node, err := loadYAMLFile(filePath, state)
-    if err != nil {
-        log.Printf("Failed to load schema for reference %s: %v", ref, err)
-        return false
-    }
+		// If still not found, try a fuzzy match
+		if _, err := os.Stat(filePath); os.IsNotExist(err) {
+			baseName := strings.Split(filename, ".")[0]
+			matches, _ := filepath.Glob(filepath.Join(state.SchemaDir, baseName+"*.yaml"))
+			if len(matches) > 0 {
+				filePath = matches[0]
+			} else {
+				log.Printf("Could not find file for reference: %s", ref)
+				return false
+			}
+		}
+	}
 
-    state.Schemas[filename] = node
-    return true
+	// Load the file
+	node, err := loadYAMLFile(filePath, state)
+	if err != nil {
+		log.Printf("Failed to load schema for reference %s: %v", ref, err)
+		return false
+	}
+
+	state.Schemas[filename] = node
+	return true
 }
 
 func createConsolidatedSchema(state *ConsolidationState) *yaml.Node {
-    // Create base OpenAPI structure
-    consolidated := &yaml.Node{
-        Kind: yaml.MappingNode,
-        Tag:  "!!map",
-    }
+	// Create base OpenAPI structure
+	consolidated := &yaml.Node{
+		Kind: yaml.MappingNode,
+		Tag:  "!!map",
+	}
 
-    // Add standard OpenAPI fields
-    addMappingNode(consolidated, "openapi", "3.0.3")
-    
-    // Add info section
-    infoNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-    addMappingNode(infoNode, "title", "Consolidated Redfish API")
-    addMappingNode(infoNode, "description", "Consolidated Redfish API Specification")
-    addMappingNode(infoNode, "version", time.Now().Format("2006.1"))
-    
-    // Add license
-    licenseNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-    addMappingNode(licenseNode, "name", "Apache 2.0")
-    addMappingNode(licenseNode, "url", "https://www.apache.org/licenses/LICENSE-2.0")
-    addNode(infoNode, "license", licenseNode)
-    
-    addNode(consolidated, "info", infoNode)
+	// Add standard OpenAPI fields
+	addMappingNode(consolidated, "openapi", "3.0.3")
 
-    // Add paths (may be empty or copied from a primary schema)
-    addNode(consolidated, "paths", &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+	// Add info section
+	infoNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	addMappingNode(infoNode, "title", "Consolidated Redfish API")
+	addMappingNode(infoNode, "description", "Consolidated Redfish API Specification")
+	addMappingNode(infoNode, "version", time.Now().Format("2006.1"))
 
-    // Add components section with all schemas
-    componentsNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-    schemasNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	// Add license
+	licenseNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	addMappingNode(licenseNode, "name", "Apache 2.0")
+	addMappingNode(licenseNode, "url", "https://www.apache.org/licenses/LICENSE-2.0")
+	addNode(infoNode, "license", licenseNode)
 
-    // Add all schemas to the components section
-    for name, schema := range state.Schemas {
-        extractComponentSchemas(schema, schemasNode, name)
-    }
+	addNode(consolidated, "info", infoNode)
 
-    addNode(componentsNode, "schemas", schemasNode)
-    
-    // Add other component types
-    for _, componentType := range []string{"parameters", "responses", "securitySchemes"} {
-        addNode(componentsNode, componentType, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
-    }
-    
-    addNode(consolidated, "components", componentsNode)
+	// Add paths (may be empty or copied from a primary schema)
+	addNode(consolidated, "paths", &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
 
-    // Process anyOf to remove duplicates
-    processAnyOf(consolidated)
-    
-    // Now resolve all references - this is the key enhancement
-    deepResolveReferences(consolidated, state, make(map[string]bool))
+	// Add components section with all schemas
+	componentsNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+	schemasNode := &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
 
-    return consolidated
+	// Add all schemas to the components section
+	for name, schema := range state.Schemas {
+		extractComponentSchemas(schema, schemasNode, name)
+	}
+
+	addNode(componentsNode, "schemas", schemasNode)
+
+	// Add other component types
+	for _, componentType := range []string{"parameters", "responses", "securitySchemes"} {
+		addNode(componentsNode, componentType, &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"})
+	}
+
+	addNode(consolidated, "components", componentsNode)
+
+	// Process anyOf to remove duplicates
+	processAnyOf(consolidated)
+
+	// Now resolve all references - this is the key enhancement
+	deepResolveReferences(consolidated, state, make(map[string]bool))
+
+	return consolidated
 }
 
 func extractComponentSchemas(schema *yaml.Node, schemasNode *yaml.Node, filename string) {
-    // Find the components/schemas section in the source schema
-    var componentsNode *yaml.Node
-    var schemasSourceNode *yaml.Node
-    
-    // Find components node
-    if schema.Kind == yaml.MappingNode && len(schema.Content) >= 2 {
-        for i := 0; i < len(schema.Content); i += 2 {
-            if schema.Content[i].Value == "components" {
-                componentsNode = schema.Content[i+1]
-                break
-            }
-        }
-    }
-    
-    // Find schemas node
-    if componentsNode != nil && componentsNode.Kind == yaml.MappingNode && len(componentsNode.Content) >= 2 {
-        for i := 0; i < len(componentsNode.Content); i += 2 {
-            if componentsNode.Content[i].Value == "schemas" {
-                schemasSourceNode = componentsNode.Content[i+1]
-                break
-            }
-        }
-    }
-    
-    // If we found schemas, copy them to our consolidated schema
-    if schemasSourceNode != nil && schemasSourceNode.Kind == yaml.MappingNode && len(schemasSourceNode.Content) >= 2 {
-        for i := 0; i < len(schemasSourceNode.Content); i += 2 {
-            schemaName := schemasSourceNode.Content[i].Value
-            schemaNode := schemasSourceNode.Content[i+1]
-            
-            // Use the unmodified schema name to preserve references
-            // This avoids the nested naming problem
-            schemasNode.Content = append(schemasNode.Content, 
-                &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: schemaName},
-                deepCopyNode(schemaNode))
-        }
-    }
+	// Find the components/schemas section in the source schema
+	var componentsNode *yaml.Node
+	var schemasSourceNode *yaml.Node
+
+	// Find components node
+	if schema.Kind == yaml.MappingNode && len(schema.Content) >= 2 {
+		for i := 0; i < len(schema.Content); i += 2 {
+			if schema.Content[i].Value == "components" {
+				componentsNode = schema.Content[i+1]
+				break
+			}
+		}
+	}
+
+	// Find schemas node
+	if componentsNode != nil && componentsNode.Kind == yaml.MappingNode && len(componentsNode.Content) >= 2 {
+		for i := 0; i < len(componentsNode.Content); i += 2 {
+			if componentsNode.Content[i].Value == "schemas" {
+				schemasSourceNode = componentsNode.Content[i+1]
+				break
+			}
+		}
+	}
+
+	// If we found schemas, copy them to our consolidated schema
+	if schemasSourceNode != nil && schemasSourceNode.Kind == yaml.MappingNode && len(schemasSourceNode.Content) >= 2 {
+		for i := 0; i < len(schemasSourceNode.Content); i += 2 {
+			schemaName := schemasSourceNode.Content[i].Value
+			schemaNode := schemasSourceNode.Content[i+1]
+
+			// Use the unmodified schema name to preserve references
+			// This avoids the nested naming problem
+			schemasNode.Content = append(schemasNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: schemaName},
+				deepCopyNode(schemaNode))
+		}
+	}
 }
 
 func processAnyOf(node *yaml.Node) {
-    if node == nil {
-        return
-    }
+	if node == nil {
+		return
+	}
 
-    // If node is a mapping node, check for anyOf arrays
-    if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
-        for i := 0; i < len(node.Content); i += 2 {
-            key := node.Content[i]
-            val := node.Content[i+1]
-            
-            if key.Value == "anyOf" && val.Kind == yaml.SequenceNode {
-                // Group references by base name
-                refGroups := make(map[string][]int)
-                for j, item := range val.Content {
-                    if item.Kind == yaml.MappingNode && len(item.Content) >= 2 {
-                        for k := 0; k < len(item.Content); k += 2 {
-                            if item.Content[k].Value == "$ref" && item.Content[k+1].Kind == yaml.ScalarNode {
-                                ref := item.Content[k+1].Value
-                                if strings.Contains(ref, ".v") {
-                                    baseName := strings.Split(ref, ".v")[0]
-                                    refGroups[baseName] = append(refGroups[baseName], j)
-                                }
-                            }
-                        }
-                    }
-                }
-                
-                // For each group, keep only the latest version
-                for _, indices := range refGroups {
-                    if len(indices) > 1 {
-                        // Find latest version
-                        latestIdx := indices[0]
-                        latestVer := ""
-                        for _, idx := range indices {
-                            for k := 0; k < len(val.Content[idx].Content); k += 2 {
-                                if val.Content[idx].Content[k].Value == "$ref" {
-                                    ref := val.Content[idx].Content[k+1].Value
-                                    ver := extractVersion(ref)
-                                    if ver > latestVer {
-                                        latestVer = ver
-                                        latestIdx = idx
-                                    }
-                                }
-                            }
-                        }
-                        
-                        // Mark for removal all but the latest
-                        for _, idx := range indices {
-                            if idx != latestIdx {
-                                // Null out the node (will be removed later)
-                                val.Content[idx] = nil
-                            }
-                        }
-                    }
-                }
-                
-                // Create a new content list without nil elements
-                newContent := make([]*yaml.Node, 0)
-                for _, item := range val.Content {
-                    if item != nil {
-                        newContent = append(newContent, item)
-                    }
-                }
-                val.Content = newContent
-            }
-        }
-    }
+	// If node is a mapping node, check for anyOf arrays
+	if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i]
+			val := node.Content[i+1]
 
-    // Recursively process all content nodes
-    for _, child := range node.Content {
-        processAnyOf(child)
-    }
+			if key.Value == "anyOf" && val.Kind == yaml.SequenceNode {
+				// Group references by base name
+				refGroups := make(map[string][]int)
+				for j, item := range val.Content {
+					if item.Kind == yaml.MappingNode && len(item.Content) >= 2 {
+						for k := 0; k < len(item.Content); k += 2 {
+							if item.Content[k].Value == "$ref" && item.Content[k+1].Kind == yaml.ScalarNode {
+								ref := item.Content[k+1].Value
+								if strings.Contains(ref, ".v") {
+									baseName := strings.Split(ref, ".v")[0]
+									refGroups[baseName] = append(refGroups[baseName], j)
+								}
+							}
+						}
+					}
+				}
+
+				// For each group, keep only the latest version
+				for _, indices := range refGroups {
+					if len(indices) > 1 {
+						// Find latest version
+						latestIdx := indices[0]
+						latestVer := ""
+						for _, idx := range indices {
+							for k := 0; k < len(val.Content[idx].Content); k += 2 {
+								if val.Content[idx].Content[k].Value == "$ref" {
+									ref := val.Content[idx].Content[k+1].Value
+									ver := extractVersion(ref)
+									if ver > latestVer {
+										latestVer = ver
+										latestIdx = idx
+									}
+								}
+							}
+						}
+
+						// Mark for removal all but the latest
+						for _, idx := range indices {
+							if idx != latestIdx {
+								// Null out the node (will be removed later)
+								val.Content[idx] = nil
+							}
+						}
+					}
+				}
+
+				// Create a new content list without nil elements
+				newContent := make([]*yaml.Node, 0)
+				for _, item := range val.Content {
+					if item != nil {
+						newContent = append(newContent, item)
+					}
+				}
+				val.Content = newContent
+			}
+		}
+	}
+
+	// Recursively process all content nodes
+	for _, child := range node.Content {
+		processAnyOf(child)
+	}
 }
 
 func extractVersion(ref string) string {
-    re := regexp.MustCompile(`\.v(\d+_\d+_\d+)`)
-    matches := re.FindStringSubmatch(ref)
-    if len(matches) > 1 {
-        return matches[1]
-    }
-    return ""
+	re := regexp.MustCompile(`\.v(\d+_\d+_\d+)`)
+	matches := re.FindStringSubmatch(ref)
+	if len(matches) > 1 {
+		return matches[1]
+	}
+	return ""
 }
 
 // Deep resolves a reference by fully inlining all nested references
 func deepResolveReferences(node *yaml.Node, state *ConsolidationState, processedRefs map[string]bool) {
-    if node == nil {
-        return
-    }
+	if node == nil {
+		return
+	}
 
-    // If node is a mapping node, check for $ref keys
-    if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
-        for i := 0; i < len(node.Content); i += 2 {
-            key := node.Content[i]
-            val := node.Content[i+1]
-            
-            if key.Value == "$ref" && val.Kind == yaml.ScalarNode {
-                ref := val.Value
-                
-                // Avoid processing the same reference multiple times
-                if processedRefs[ref] {
-                    continue
-                }
-                processedRefs[ref] = true
-                
-                // Handle external references
-                if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-                    // Parse the URL reference
-                    refParts := strings.SplitN(ref, "#", 2)
-                    url := refParts[0]
-                    var fragment string
-                    if len(refParts) > 1 {
-                        fragment = refParts[1]
-                    }
-                    
-                    // Extract filename from URL
-                    filename := filepath.Base(url)
-                    
-                    // Look up the schema
-                    schema, exists := state.Schemas[filename]
-                    if (!exists) {
-                        // Try to resolve it first
-                        if resolveRemoteRef(ref, state) {
-                            schema = state.Schemas[filename]
-                        } else {
-                            log.Printf("Failed to resolve remote reference: %s", ref)
-                            continue
-                        }
-                    }
-                    
-                    // If there's a fragment, extract the referenced part
-                    if fragment != "" {
-                        referencedNode := resolveFragment(schema, fragment)
-                        if referencedNode != nil {
-                            // Replace the reference with the actual content
-                            parent := node
-                            parentIndex := i-1
-                            if parentIndex < 0 {
-                                parentIndex = 0
-                            }
-                            
-                            // Deep copy the referenced node
-                            replacement := deepCopyNode(referencedNode)
-                            
-                            // Process any references within this node
-                            deepResolveReferences(replacement, state, processedRefs)
-                            
-                            // Replace the reference node with the actual content
-                            parent.Content[i+1] = replacement
-                        }
-                    } else {
-                        // Without fragment, inline the whole schema (rarely needed)
-                        deepResolveReferences(schema, state, processedRefs)
-                    }
-                }
-            }
-        }
-    }
+	// If node is a mapping node, check for $ref keys
+	if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
+		for i := 0; i < len(node.Content); i += 2 {
+			key := node.Content[i]
+			val := node.Content[i+1]
 
-    // Recursively process all content nodes
-    for _, child := range node.Content {
-        deepResolveReferences(child, state, processedRefs)
-    }
+			if key.Value == "$ref" && val.Kind == yaml.ScalarNode {
+				ref := val.Value
+
+				// Avoid processing the same reference multiple times
+				if processedRefs[ref] {
+					continue
+				}
+				processedRefs[ref] = true
+
+				// Handle external references
+				if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+					// Parse the URL reference
+					refParts := strings.SplitN(ref, "#", 2)
+					url := refParts[0]
+					var fragment string
+					if len(refParts) > 1 {
+						fragment = refParts[1]
+					}
+
+					// Extract filename from URL
+					filename := filepath.Base(url)
+
+					// Look up the schema
+					schema, exists := state.Schemas[filename]
+					if !exists {
+						// Try to resolve it first
+						if resolveRemoteRef(ref, state) {
+							schema = state.Schemas[filename]
+						} else {
+							log.Printf("Failed to resolve remote reference: %s", ref)
+							continue
+						}
+					}
+
+					// If there's a fragment, extract the referenced part
+					if fragment != "" {
+						referencedNode := resolveFragment(schema, fragment)
+						if referencedNode != nil {
+							// Replace the reference with the actual content
+							parent := node
+							parentIndex := i - 1
+							if parentIndex < 0 {
+								parentIndex = 0
+							}
+
+							// Deep copy the referenced node
+							replacement := deepCopyNode(referencedNode)
+
+							// Process any references within this node
+							deepResolveReferences(replacement, state, processedRefs)
+
+							// Replace the reference node with the actual content
+							parent.Content[i+1] = replacement
+						}
+					} else {
+						// Without fragment, inline the whole schema (rarely needed)
+						deepResolveReferences(schema, state, processedRefs)
+					}
+				}
+			}
+		}
+	}
+
+	// Recursively process all content nodes
+	for _, child := range node.Content {
+		deepResolveReferences(child, state, processedRefs)
+	}
 }
 
 // resolveFragment finds the node referenced by a JSON pointer fragment
 func resolveFragment(node *yaml.Node, fragment string) *yaml.Node {
-    if !strings.HasPrefix(fragment, "/") {
-        log.Printf("Warning: Invalid fragment format: %s", fragment)
-        return nil
-    }
-    
-    // Decode URL-encoded path components
-    decodedFragment := fragment
-    if strings.Contains(fragment, "%") {
-        decoded, err := url.PathUnescape(fragment)
-        if err == nil {
-            decodedFragment = decoded
-        }
-    }
-    
-    path := strings.Split(decodedFragment[1:], "/")
-    result := traversePath(node, path)
-    if result == nil {
-        log.Printf("Warning: Could not resolve fragment path: %s", fragment)
-    }
-    return result
+	if !strings.HasPrefix(fragment, "/") {
+		log.Printf("Warning: Invalid fragment format: %s", fragment)
+		return nil
+	}
+
+	// Decode URL-encoded path components
+	decodedFragment := fragment
+	if strings.Contains(fragment, "%") {
+		decoded, err := url.PathUnescape(fragment)
+		if err == nil {
+			decodedFragment = decoded
+		}
+	}
+
+	path := strings.Split(decodedFragment[1:], "/")
+	result := traversePath(node, path)
+	if result == nil {
+		log.Printf("Warning: Could not resolve fragment path: %s", fragment)
+	}
+	return result
 }
 
 // traversePath follows a path through the YAML node structure
 func traversePath(node *yaml.Node, path []string) *yaml.Node {
-    if len(path) == 0 || node == nil {
-        return node
-    }
-    
-    currentKey := path[0]
-    remainingPath := path[1:]
-    
-    // Handle URL-encoded keys
-    if strings.Contains(currentKey, "%") {
-        decoded, err := url.PathUnescape(currentKey)
-        if err == nil {
-            currentKey = decoded
-        }
-    }
-    
-    // Handle array indices
-    if idx, err := strconv.Atoi(currentKey); err == nil && node.Kind == yaml.SequenceNode {
-        if idx >= 0 && idx < len(node.Content) {
-            return traversePath(node.Content[idx], remainingPath)
-        }
-        return nil
-    }
-    
-    // Handle object properties
-    if node.Kind == yaml.MappingNode {
-        for i := 0; i < len(node.Content); i += 2 {
-            if i+1 < len(node.Content) && node.Content[i].Value == currentKey {
-                return traversePath(node.Content[i+1], remainingPath)
-            }
-        }
-    }
-    
-    // If we're looking for a component schema
-    if currentKey == "components" && node.Kind == yaml.MappingNode {
-        for i := 0; i < len(node.Content); i += 2 {
-            if node.Content[i].Value == "components" {
-                return traversePath(node.Content[i+1], remainingPath)
-            }
-        }
-    }
-    
-    // Try a case-insensitive match as fallback
-    if node.Kind == yaml.MappingNode {
-        lowerCurrentKey := strings.ToLower(currentKey)
-        for i := 0; i < len(node.Content); i += 2 {
-            if strings.ToLower(node.Content[i].Value) == lowerCurrentKey {
-                return traversePath(node.Content[i+1], remainingPath)
-            }
-        }
-    }
-    
-    return nil
+	if len(path) == 0 || node == nil {
+		return node
+	}
+
+	currentKey := path[0]
+	remainingPath := path[1:]
+
+	// Handle URL-encoded keys
+	if strings.Contains(currentKey, "%") {
+		decoded, err := url.PathUnescape(currentKey)
+		if err == nil {
+			currentKey = decoded
+		}
+	}
+
+	// Handle array indices
+	if idx, err := strconv.Atoi(currentKey); err == nil && node.Kind == yaml.SequenceNode {
+		if idx >= 0 && idx < len(node.Content) {
+			return traversePath(node.Content[idx], remainingPath)
+		}
+		return nil
+	}
+
+	// Handle object properties
+	if node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			if i+1 < len(node.Content) && node.Content[i].Value == currentKey {
+				return traversePath(node.Content[i+1], remainingPath)
+			}
+		}
+	}
+
+	// If we're looking for a component schema
+	if currentKey == "components" && node.Kind == yaml.MappingNode {
+		for i := 0; i < len(node.Content); i += 2 {
+			if node.Content[i].Value == "components" {
+				return traversePath(node.Content[i+1], remainingPath)
+			}
+		}
+	}
+
+	// Try a case-insensitive match as fallback
+	if node.Kind == yaml.MappingNode {
+		lowerCurrentKey := strings.ToLower(currentKey)
+		for i := 0; i < len(node.Content); i += 2 {
+			if strings.ToLower(node.Content[i].Value) == lowerCurrentKey {
+				return traversePath(node.Content[i+1], remainingPath)
+			}
+		}
+	}
+
+	return nil
 }
 
 // deepCopyNode creates a deep copy of a YAML node
 func deepCopyNode(node *yaml.Node) *yaml.Node {
-    if node == nil {
-        return nil
-    }
-    
-    copy := &yaml.Node{
-        Kind:        node.Kind,
-        Style:       node.Style,
-        Tag:         node.Tag,
-        Value:       node.Value,
-        Anchor:      node.Anchor,
-        Alias:       node.Alias,
-        Line:        node.Line,
-        Column:      node.Column,
-        HeadComment: node.HeadComment,
-        LineComment: node.LineComment,
-        FootComment: node.FootComment,
-    }
-    
-    // Copy content recursively
-    if len(node.Content) > 0 {
-        copy.Content = make([]*yaml.Node, len(node.Content))
-        for i, child := range node.Content {
-            copy.Content[i] = deepCopyNode(child)
-        }
-    }
-    
-    return copy
+	if node == nil {
+		return nil
+	}
+
+	copy := &yaml.Node{
+		Kind:        node.Kind,
+		Style:       node.Style,
+		Tag:         node.Tag,
+		Value:       node.Value,
+		Anchor:      node.Anchor,
+		Alias:       node.Alias,
+		Line:        node.Line,
+		Column:      node.Column,
+		HeadComment: node.HeadComment,
+		LineComment: node.LineComment,
+		FootComment: node.FootComment,
+	}
+
+	// Copy content recursively
+	if len(node.Content) > 0 {
+		copy.Content = make([]*yaml.Node, len(node.Content))
+		for i, child := range node.Content {
+			copy.Content[i] = deepCopyNode(child)
+		}
+	}
+
+	return copy
 }
 
 func addMappingNode(parent *yaml.Node, key string, value string) {
-    parent.Content = append(parent.Content, 
-        &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-        &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: value})
 }
 
 func addNode(parent *yaml.Node, key string, child *yaml.Node) {
-    parent.Content = append(parent.Content,
-        &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
-        child)
+	parent.Content = append(parent.Content,
+		&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: key},
+		child)
 }
 
 func writeConsolidatedSchema(node *yaml.Node, filename string) {
-    // Create a map to hold our consolidated schema
-    consolidatedMap := make(map[string]interface{})
-    
-    // Convert the YAML node to a map recursively
-    if err := nodeToMap(node, consolidatedMap); err != nil {
-        log.Fatalf("Failed to convert YAML node to map: %v", err)
-    }
-    
-    // Marshal the map directly to JSON
-    jsonData, err := json.Marshal(consolidatedMap)
-    if err != nil {
-        log.Fatalf("Failed to marshal to JSON: %v", err)
-    }
-    
-    // Change the filename to .json extension
-    jsonFilename := strings.TrimSuffix(filename, filepath.Ext(filename)) + ".json"
-    
-    err = os.WriteFile(jsonFilename, jsonData, 0644)
-    if err != nil {
-        log.Fatalf("Failed to write JSON schema to file: %v", err)
-    }
-    
-    log.Printf("Successfully wrote compact JSON to: %s", jsonFilename)
+	// Create a map to hold our consolidated schema
+	consolidatedMap := make(map[string]interface{})
+
+	// Convert the YAML node to a map recursively
+	if err := nodeToMap(node, consolidatedMap); err != nil {
+		log.Fatalf("Failed to convert YAML node to map: %v", err)
+	}
+
+	// Marshal the map directly to JSON
+	jsonData, err := json.Marshal(consolidatedMap)
+	if err != nil {
+		log.Fatalf("Failed to marshal to JSON: %v", err)
+	}
+
+	// Change the filename to .json extension
+	jsonFilename := strings.TrimSuffix(filename, filepath.Ext(filename)) + ".json"
+
+	err = os.WriteFile(jsonFilename, jsonData, 0644)
+	if err != nil {
+		log.Fatalf("Failed to write JSON schema to file: %v", err)
+	}
+
+	log.Printf("Successfully wrote compact JSON to: %s", jsonFilename)
 }
 
 // Helper function to convert a YAML node to a map structure
 func nodeToMap(node *yaml.Node, result map[string]interface{}) error {
-    // Skip document node and use its content
-    if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
-        return nodeToMap(node.Content[0], result)
-    }
-    
-    // Only process mapping nodes for the root level
-    if node.Kind != yaml.MappingNode {
-        return fmt.Errorf("root node must be a mapping node")
-    }
-    
-    // Process key-value pairs
-    for i := 0; i < len(node.Content); i += 2 {
-        if i+1 >= len(node.Content) {
-            continue // Skip if no value
-        }
-        
-        key := node.Content[i].Value
-        value := node.Content[i+1]
-        
-        // Convert the value based on its kind
-        convertedValue, err := convertNode(value)
-        if err != nil {
-            return fmt.Errorf("failed to convert node for key %s: %v", key, err)
-        }
-        
-        result[key] = convertedValue
-    }
-    
-    return nil
+	// Skip document node and use its content
+	if node.Kind == yaml.DocumentNode && len(node.Content) > 0 {
+		return nodeToMap(node.Content[0], result)
+	}
+
+	// Only process mapping nodes for the root level
+	if node.Kind != yaml.MappingNode {
+		return fmt.Errorf("root node must be a mapping node")
+	}
+
+	// Process key-value pairs
+	for i := 0; i < len(node.Content); i += 2 {
+		if i+1 >= len(node.Content) {
+			continue // Skip if no value
+		}
+
+		key := node.Content[i].Value
+		value := node.Content[i+1]
+
+		// Convert the value based on its kind
+		convertedValue, err := convertNode(value)
+		if err != nil {
+			return fmt.Errorf("failed to convert node for key %s: %v", key, err)
+		}
+
+		result[key] = convertedValue
+	}
+
+	return nil
 }
 
 // Convert a single YAML node to its corresponding Go type
 func convertNode(node *yaml.Node) (interface{}, error) {
-    switch node.Kind {
-    case yaml.ScalarNode:
-        return convertScalar(node)
-    case yaml.SequenceNode:
-        result := make([]interface{}, 0, len(node.Content))
-        for _, item := range node.Content {
-            val, err := convertNode(item)
-            if err != nil {
-                return nil, err
-            }
-            result = append(result, val)
-        }
-        return result, nil
-    case yaml.MappingNode:
-        result := make(map[string]interface{})
-        for i := 0; i < len(node.Content); i += 2 {
-            if i+1 >= len(node.Content) {
-                continue
-            }
-            
-            key := node.Content[i].Value
-            valueNode := node.Content[i+1]
-            
-            val, err := convertNode(valueNode)
-            if err != nil {
-                return nil, err
-            }
-            
-            result[key] = val
-        }
-        return result, nil
-    default:
-        // Handle any other node types if needed
-        return nil, nil
-    }
+	switch node.Kind {
+	case yaml.ScalarNode:
+		return convertScalar(node)
+	case yaml.SequenceNode:
+		result := make([]interface{}, 0, len(node.Content))
+		for _, item := range node.Content {
+			val, err := convertNode(item)
+			if err != nil {
+				return nil, err
+			}
+			result = append(result, val)
+		}
+		return result, nil
+	case yaml.MappingNode:
+		result := make(map[string]interface{})
+		for i := 0; i < len(node.Content); i += 2 {
+			if i+1 >= len(node.Content) {
+				continue
+			}
+
+			key := node.Content[i].Value
+			valueNode := node.Content[i+1]
+
+			val, err := convertNode(valueNode)
+			if err != nil {
+				return nil, err
+			}
+
+			result[key] = val
+		}
+		return result, nil
+	default:
+		// Handle any other node types if needed
+		return nil, nil
+	}
 }
 
 // Convert scalar node to appropriate Go type
 func convertScalar(node *yaml.Node) (interface{}, error) {
-    // Handle different scalar types based on the tag
-    switch node.Tag {
-    case "!!null":
-        return nil, nil
-    case "!!bool":
-        return node.Value == "true", nil
-    case "!!int":
-        val, err := strconv.ParseInt(node.Value, 10, 64)
-        if err != nil {
-            return nil, err
-        }
-        return val, nil
-    case "!!float":
-        val, err := strconv.ParseFloat(node.Value, 64)
-        if err != nil {
-            return nil, err
-        }
-        return val, nil
-    default:
-        // Default to string for any other scalar
-        return node.Value, nil
-    }
+	// Handle different scalar types based on the tag
+	switch node.Tag {
+	case "!!null":
+		return nil, nil
+	case "!!bool":
+		return node.Value == "true", nil
+	case "!!int":
+		val, err := strconv.ParseInt(node.Value, 10, 64)
+		if err != nil {
+			return nil, err
+		}
+		return val, nil
+	case "!!float":
+		val, err := strconv.ParseFloat(node.Value, 64)
+		if err != nil {
+			return nil, err
+		}
+		return val, nil
+	default:
+		// Default to string for any other scalar
+		return node.Value, nil
+	}
 }
 
 // Add this new function to inline all references directly in the document
 func inlineAllReferences(node *yaml.Node, state *ConsolidationState) {
-    // First, collect all $ref nodes
-    refNodes := findAllRefNodes(node)
-    log.Printf("Found %d $ref nodes to inline", len(refNodes))
-    
-    // Then process each ref
-    for _, refNode := range refNodes {
-        inlineReference(refNode, state)
-    }
+	// First, collect all $ref nodes
+	refNodes := findAllRefNodes(node)
+	log.Printf("Found %d $ref nodes to inline", len(refNodes))
+
+	// Then process each ref
+	for _, refNode := range refNodes {
+		inlineReference(refNode, state)
+	}
 }
 
 // Helper to find all ref nodes
 func findAllRefNodes(root *yaml.Node) []*yaml.Node {
-    var results []*yaml.Node
-    
-    var walk func(*yaml.Node)
-    walk = func(node *yaml.Node) {
-        if node == nil {
-            return
-        }
-        
-        // Check if this is a mapping node that might contain a $ref
-        if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
-            for i := 0; i < len(node.Content); i += 2 {
-                key := node.Content[i]
-                if key.Value == "$ref" {
-                    results = append(results, node)
-                    // We found a ref in this node, no need to traverse further
-                    return
-                }
-            }
-        }
-        
-        // Recursively process content
-        for _, child := range node.Content {
-            walk(child)
-        }
-    }
-    
-    walk(root)
-    return results
+	var results []*yaml.Node
+
+	var walk func(*yaml.Node)
+	walk = func(node *yaml.Node) {
+		if node == nil {
+			return
+		}
+
+		// Check if this is a mapping node that might contain a $ref
+		if node.Kind == yaml.MappingNode && len(node.Content) >= 2 {
+			for i := 0; i < len(node.Content); i += 2 {
+				key := node.Content[i]
+				if key.Value == "$ref" {
+					results = append(results, node)
+					// We found a ref in this node, no need to traverse further
+					return
+				}
+			}
+		}
+
+		// Recursively process content
+		for _, child := range node.Content {
+			walk(child)
+		}
+	}
+
+	walk(root)
+	return results
 }
 
 // Helper to inline a single reference
 func inlineReference(refNode *yaml.Node, state *ConsolidationState) {
-    // Extract the $ref value
-    var refValue string
-    var refIndex int
-    for i := 0; i < len(refNode.Content); i += 2 {
-        if refNode.Content[i].Value == "$ref" {
-            refValue = refNode.Content[i+1].Value
-            refIndex = i
-            break
-        }
-    }
-    
-    if refValue == "" {
-        return
-    }
-    
-    // Only process external references
-    if !strings.HasPrefix(refValue, "http://") && !strings.HasPrefix(refValue, "https://") {
-        return
-    }
-    
-    log.Printf("Processing reference: %s", refValue)
-    
-    // Parse the reference
-    refParts := strings.SplitN(refValue, "#", 2)
-    url := refParts[0]
-    var fragment string
-    if len(refParts) > 1 {
-        fragment = refParts[1]
-    }
-    
-    // Extract filename from URL
-    filename := filepath.Base(url)
-    
-    // If this is a reference to a components/schemas item, update to local reference
-    if strings.Contains(fragment, "/components/schemas/") {
-        // Extract the schema name from the fragment
-        parts := strings.Split(fragment, "/")
-        if len(parts) >= 4 {
-            schemaName := parts[len(parts)-1]
-            
-            // Replace with local reference
-            refNode.Content[refIndex+1].Value = "#/components/schemas/" + schemaName
-            log.Printf("Updated reference to: #/components/schemas/%s", schemaName)
-            return
-        }
-    }
-    
-    // For other types of references, try to resolve and inline the content
-    schema, exists := state.Schemas[filename]
-    if !exists {
-        // Try to find the file locally first
-        localPath := filepath.Join(state.SchemaDir, filename)
-        if _, err := os.Stat(localPath); err == nil {
-            node, err := loadYAMLFile(localPath, state)
-            if err != nil {
-                log.Printf("Failed to load schema from local file %s: %v", localPath, err)
-                return
-            }
-            state.Schemas[filename] = node
-            schema = node
-        } else {
-            // If not found locally, try remote resolution
-            if !resolveRemoteRef(refValue, state) {
-                log.Printf("Failed to resolve remote reference: %s", refValue)
-                return
-            }
-            schema = state.Schemas[filename]
-        }
-    }
-    
-    // Now resolve the fragment
-    if fragment != "" {
-        referencedNode := resolveFragment(schema, fragment)
-        if referencedNode != nil {
-            // Replace ref with the schema content
-            // First, clear the existing content
-            refNode.Content = nil
-            
-            // Then copy the content from referenced node
-            if referencedNode.Kind == yaml.MappingNode {
-                // Copy all key-value pairs
-                refNode.Kind = referencedNode.Kind
-                refNode.Tag = referencedNode.Tag
-                refNode.Content = make([]*yaml.Node, len(referencedNode.Content))
-                for i, child := range referencedNode.Content {
-                    refNode.Content[i] = deepCopyNode(child)
-                }
-            } else {
-                // For other node types, just set the value
-                refNode.Kind = referencedNode.Kind
-                refNode.Tag = referencedNode.Tag
-                refNode.Value = referencedNode.Value
-                // Copy content if it exists
-                if len(referencedNode.Content) > 0 {
-                    refNode.Content = make([]*yaml.Node, len(referencedNode.Content))
-                    for i, child := range referencedNode.Content {
-                        refNode.Content[i] = deepCopyNode(child)
-                    }
-                }
-            }
-            
-            // Add source comment
-            refNode.HeadComment = "// Inlined from " + refValue
-        }
-    }
+	// Extract the $ref value
+	var refValue string
+	var refIndex int
+	for i := 0; i < len(refNode.Content); i += 2 {
+		if refNode.Content[i].Value == "$ref" {
+			refValue = refNode.Content[i+1].Value
+			refIndex = i
+			break
+		}
+	}
+
+	if refValue == "" {
+		return
+	}
+
+	// Only process external references
+	if !strings.HasPrefix(refValue, "http://") && !strings.HasPrefix(refValue, "https://") {
+		return
+	}
+
+	log.Printf("Processing reference: %s", refValue)
+
+	// Parse the reference
+	refParts := strings.SplitN(refValue, "#", 2)
+	url := refParts[0]
+	var fragment string
+	if len(refParts) > 1 {
+		fragment = refParts[1]
+	}
+
+	// Extract filename from URL
+	filename := filepath.Base(url)
+
+	// If this is a reference to a components/schemas item, update to local reference
+	if strings.Contains(fragment, "/components/schemas/") {
+		// Extract the schema name from the fragment
+		parts := strings.Split(fragment, "/")
+		if len(parts) >= 4 {
+			schemaName := parts[len(parts)-1]
+
+			// Replace with local reference
+			refNode.Content[refIndex+1].Value = "#/components/schemas/" + schemaName
+			log.Printf("Updated reference to: #/components/schemas/%s", schemaName)
+			return
+		}
+	}
+
+	// For other types of references, try to resolve and inline the content
+	schema, exists := state.Schemas[filename]
+	if !exists {
+		// Try to find the file locally first
+		localPath := filepath.Join(state.SchemaDir, filename)
+		if _, err := os.Stat(localPath); err == nil {
+			node, err := loadYAMLFile(localPath, state)
+			if err != nil {
+				log.Printf("Failed to load schema from local file %s: %v", localPath, err)
+				return
+			}
+			state.Schemas[filename] = node
+			schema = node
+		} else {
+			// If not found locally, try remote resolution
+			if !resolveRemoteRef(refValue, state) {
+				log.Printf("Failed to resolve remote reference: %s", refValue)
+				return
+			}
+			schema = state.Schemas[filename]
+		}
+	}
+
+	// Now resolve the fragment
+	if fragment != "" {
+		referencedNode := resolveFragment(schema, fragment)
+		if referencedNode != nil {
+			// Replace ref with the schema content
+			// First, clear the existing content
+			refNode.Content = nil
+
+			// Then copy the content from referenced node
+			if referencedNode.Kind == yaml.MappingNode {
+				// Copy all key-value pairs
+				refNode.Kind = referencedNode.Kind
+				refNode.Tag = referencedNode.Tag
+				refNode.Content = make([]*yaml.Node, len(referencedNode.Content))
+				for i, child := range referencedNode.Content {
+					refNode.Content[i] = deepCopyNode(child)
+				}
+			} else {
+				// For other node types, just set the value
+				refNode.Kind = referencedNode.Kind
+				refNode.Tag = referencedNode.Tag
+				refNode.Value = referencedNode.Value
+				// Copy content if it exists
+				if len(referencedNode.Content) > 0 {
+					refNode.Content = make([]*yaml.Node, len(referencedNode.Content))
+					for i, child := range referencedNode.Content {
+						refNode.Content[i] = deepCopyNode(child)
+					}
+				}
+			}
+
+			// Add source comment
+			refNode.HeadComment = "// Inlined from " + refValue
+		}
+	}
 }
 
 // Add this function to collect all schema definitions from referenced files
 func collectAllSchemaDefinitions(state *ConsolidationState) map[string]*yaml.Node {
-    allSchemas := make(map[string]*yaml.Node)
-    
-    // First, find all external schemas referenced in our document
-    for ref := range state.ExternalRefs {
-        if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
-            // Parse the URL reference
-            refParts := strings.SplitN(ref, "#", 2)
-            url := refParts[0]
-            var fragment string
-            if len(refParts) > 1 {
-                fragment = refParts[1]
-            }
-            
-            // Extract filename from URL
-            filename := filepath.Base(url)
-            
-            // Check if it's a reference to a schema definition
-            if strings.Contains(fragment, "/components/schemas/") {
-                parts := strings.Split(fragment, "/")
-                if len(parts) >= 4 {
-                    schemaName := parts[len(parts)-1]
-                    
-                    // Check if we already have this schema
-                    if _, exists := allSchemas[schemaName]; exists {
-                        continue
-                    }
-                    
-                    // Try to get the schema from our already loaded schemas
-                    schema, exists := state.Schemas[filename]
-                    if !exists {
-                        // Try to load it from local files first
-                        localPath := filepath.Join(state.SchemaDir, filename)
-                        if _, err := os.Stat(localPath); err == nil {
-                            schema, err = loadYAMLFile(localPath, state)
-                            if err != nil {
-                                log.Printf("Failed to load schema from local file %s: %v", localPath, err)
-                                continue
-                            }
-                            state.Schemas[filename] = schema
-                        } else {
-                            // If not found locally, try to download
-                            if !resolveRemoteRef(ref, state) {
-                                log.Printf("Failed to resolve remote reference: %s", ref)
-                                continue
-                            }
-                            schema = state.Schemas[filename]
-                        }
-                    }
-                    
-                    // Extract the schema definition
-                    schemaNode := extractSchemaFromFragment(schema, fragment)
-                    if schemaNode != nil {
-                        allSchemas[schemaName] = schemaNode
-                        
-                        // Look for more references within this schema
-                        findExternalRefs(schemaNode, state)
-                    }
-                }
-            }
-        }
-    }
-    
-    return allSchemas
+	allSchemas := make(map[string]*yaml.Node)
+
+	// First, find all external schemas referenced in our document
+	for ref := range state.ExternalRefs {
+		if strings.HasPrefix(ref, "http://") || strings.HasPrefix(ref, "https://") {
+			// Parse the URL reference
+			refParts := strings.SplitN(ref, "#", 2)
+			url := refParts[0]
+			var fragment string
+			if len(refParts) > 1 {
+				fragment = refParts[1]
+			}
+
+			// Extract filename from URL
+			filename := filepath.Base(url)
+
+			// Check if it's a reference to a schema definition
+			if strings.Contains(fragment, "/components/schemas/") {
+				parts := strings.Split(fragment, "/")
+				if len(parts) >= 4 {
+					schemaName := parts[len(parts)-1]
+
+					// Check if we already have this schema
+					if _, exists := allSchemas[schemaName]; exists {
+						continue
+					}
+
+					// Try to get the schema from our already loaded schemas
+					schema, exists := state.Schemas[filename]
+					if !exists {
+						// Try to load it from local files first
+						localPath := filepath.Join(state.SchemaDir, filename)
+						if _, err := os.Stat(localPath); err == nil {
+							schema, err = loadYAMLFile(localPath, state)
+							if err != nil {
+								log.Printf("Failed to load schema from local file %s: %v", localPath, err)
+								continue
+							}
+							state.Schemas[filename] = schema
+						} else {
+							// If not found locally, try to download
+							if !resolveRemoteRef(ref, state) {
+								log.Printf("Failed to resolve remote reference: %s", ref)
+								continue
+							}
+							schema = state.Schemas[filename]
+						}
+					}
+
+					// Extract the schema definition
+					schemaNode := extractSchemaFromFragment(schema, fragment)
+					if schemaNode != nil {
+						allSchemas[schemaName] = schemaNode
+
+						// Look for more references within this schema
+						findExternalRefs(schemaNode, state)
+					}
+				}
+			}
+		}
+	}
+
+	return allSchemas
 }
 
 // Function to extract a schema from a fragment path
 func extractSchemaFromFragment(node *yaml.Node, fragment string) *yaml.Node {
-    return resolveFragment(node, fragment)
+	return resolveFragment(node, fragment)
 }
 
 // Function to merge schema definitions into the main document
 func mergeSchemaDefinitions(mainNode *yaml.Node, schemas map[string]*yaml.Node) {
-    // Find the components/schemas section in the main document
-    var componentsNode *yaml.Node
-    var schemasNode *yaml.Node
-    
-    // Find components node
-    if mainNode.Kind == yaml.MappingNode && len(mainNode.Content) >= 2 {
-        for i := 0; i < len(mainNode.Content); i += 2 {
-            if mainNode.Content[i].Value == "components" {
-                componentsNode = mainNode.Content[i+1]
-                break
-            }
-        }
-    }
-    
-    // If components node not found, create it
-    if componentsNode == nil {
-        componentsNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-        mainNode.Content = append(mainNode.Content,
-            &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "components"},
-            componentsNode)
-    }
-    
-    // Find schemas node
-    if componentsNode.Kind == yaml.MappingNode && len(componentsNode.Content) >= 2 {
-        for i := 0; i < len(componentsNode.Content); i += 2 {
-            if componentsNode.Content[i].Value == "schemas" {
-                schemasNode = componentsNode.Content[i+1]
-                break
-            }
-        }
-    }
-    
-    // If schemas node not found, create it
-    if schemasNode == nil {
-        schemasNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
-        componentsNode.Content = append(componentsNode.Content,
-            &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "schemas"},
-            schemasNode)
-    }
-    
-    // Add all schema definitions to the schemas node
-    for name, schema := range schemas {
-        // Check if schema already exists
-        exists := false
-        for i := 0; i < len(schemasNode.Content); i += 2 {
-            if schemasNode.Content[i].Value == name {
-                exists = true
-                break
-            }
-        }
-        
-        if !exists {
-            schemasNode.Content = append(schemasNode.Content,
-                &yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
-                deepCopyNode(schema))
-        }
-    }
+	// Find the components/schemas section in the main document
+	var componentsNode *yaml.Node
+	var schemasNode *yaml.Node
+
+	// Find components node
+	if mainNode.Kind == yaml.MappingNode && len(mainNode.Content) >= 2 {
+		for i := 0; i < len(mainNode.Content); i += 2 {
+			if mainNode.Content[i].Value == "components" {
+				componentsNode = mainNode.Content[i+1]
+				break
+			}
+		}
+	}
+
+	// If components node not found, create it
+	if componentsNode == nil {
+		componentsNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		mainNode.Content = append(mainNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "components"},
+			componentsNode)
+	}
+
+	// Find schemas node
+	if componentsNode.Kind == yaml.MappingNode && len(componentsNode.Content) >= 2 {
+		for i := 0; i < len(componentsNode.Content); i += 2 {
+			if componentsNode.Content[i].Value == "schemas" {
+				schemasNode = componentsNode.Content[i+1]
+				break
+			}
+		}
+	}
+
+	// If schemas node not found, create it
+	if schemasNode == nil {
+		schemasNode = &yaml.Node{Kind: yaml.MappingNode, Tag: "!!map"}
+		componentsNode.Content = append(componentsNode.Content,
+			&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: "schemas"},
+			schemasNode)
+	}
+
+	// Add all schema definitions to the schemas node
+	for name, schema := range schemas {
+		// Check if schema already exists
+		exists := false
+		for i := 0; i < len(schemasNode.Content); i += 2 {
+			if schemasNode.Content[i].Value == name {
+				exists = true
+				break
+			}
+		}
+
+		if !exists {
+			schemasNode.Content = append(schemasNode.Content,
+				&yaml.Node{Kind: yaml.ScalarNode, Tag: "!!str", Value: name},
+				deepCopyNode(schema))
+		}
+	}
 }
