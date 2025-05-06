@@ -223,7 +223,6 @@ func (v *EfiVar) SetHexString(value string) error {
 		return err
 	}
 	v.Data = data
-	v.updateTime(nil)
 	return nil
 }
 

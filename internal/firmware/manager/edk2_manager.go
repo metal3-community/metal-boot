@@ -592,7 +592,7 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 
 	systemTableMode := m.getOrCreateVar("SystemTableMode", efi.EFI_GLOBAL_VARIABLE)
 	systemTableMode.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS | efi.EFI_VARIABLE_RUNTIME_ACCESS
-	err = systemTableMode.SetHexString("02000000")
+	err = systemTableMode.SetHexString("00000000")
 	if err != nil {
 		return fmt.Errorf("failed to set SystemTableMode variable: %w", err)
 	}
