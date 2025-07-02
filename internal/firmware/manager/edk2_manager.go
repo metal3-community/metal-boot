@@ -533,16 +533,6 @@ func (m *EDK2Manager) SetDefaultBootEntries() error {
 			OptData: "4eac0881119f594d850ee21a522c59b2",
 		},
 		{
-			Name:    "UEFI HTTPv4 (MAC:000000000000)",
-			DevPath: "MAC()/IPv4()/URI()", // string(efi.NewDevicePath(nil).Mac().IPv4().URI("").Bytes()),
-			OptData: "4eac0881119f594d850ee21a522c59b2",
-		},
-		{
-			Name:    "UEFI HTTPv6 (MAC:000000000000)",
-			DevPath: "MAC()/IPv6()/URI()", // string(efi.NewDevicePath(nil).Mac().IPv6().URI("").Bytes()),
-			OptData: "4eac0881119f594d850ee21a522c59b2",
-		},
-		{
 			Name:    "UEFI Shell",
 			DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)",
 		},

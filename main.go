@@ -240,7 +240,7 @@ func defaultBackend(
 }
 
 func parseTrustedProxies(trustedProxies string) (result []string) {
-	for _, cidr := range strings.Split(trustedProxies, ",") {
+	for cidr := range strings.SplitSeq(trustedProxies, ",") {
 		cidr = strings.TrimSpace(cidr)
 		if cidr == "" {
 			continue
