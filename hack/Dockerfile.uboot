@@ -1,0 +1,52 @@
+# Use minimal Alpine Linux base image
+FROM alpine:3.19
+
+# Install required packages for U-Boot build
+RUN apk add --no-cache \
+    build-base \
+    git \
+    python3 \
+    py3-setuptools \
+    bison \
+    flex \
+    bc \
+    openssl-dev \
+    gnutls-dev \
+    libgcrypt-dev \
+    zlib-dev \
+    curl-dev \
+    gcc-aarch64-none-elf \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /build
+
+# Clone U-Boot source code
+RUN git clone --depth 1 --branch v2025.04 https://github.com/u-boot/u-boot.git
+
+# Set working directory to u-boot
+WORKDIR /build/u-boot
+
+# Configure and build U-Boot for Raspberry Pi 4 (arm64)
+RUN make CROSS_COMPILE=aarch64-none-elf- rpi_arm64_defconfig
+
+# Add custom boot command to load env file from TFTP using MAC address
+RUN echo 'CONFIG_BOOTCOMMAND="dhcp \$loadaddr; bootefi \$loadaddr \$fdtcontroladdr"' >> .config \
+    && echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+#    && echo 'CONFIG_BOOTARGS="console=tty1 console=ttyS1,115200"' >> .config
+
+# Add default bootcmd_custom for PXE boot
+# RUN echo 'CONFIG_EXTRA_ENV_SETTINGS="bootcmd_custom=echo Starting PXE boot...; pxe get; pxe boot"' >> .config
+
+# Build U-Boot
+RUN make CROSS_COMPILE=aarch64-none-elf- -j$(nproc)
+
+# Create output directory and copy only u-boot.bin
+RUN mkdir -p /output \
+    && cp u-boot.bin /output/ \
+    && ls -la /output/
+
+# Set the output directory as volume
+VOLUME ["/output"]
+
+ENTRYPOINT ["/bin/sh"]

@@ -1,0 +1,77 @@
+# Use minimal Alpine Linux base image
+FROM alpine:3.19
+
+# Install required packages for iPXE build
+RUN apk add --no-cache \
+    build-base \
+    git \
+    musl-dev \
+    perl \
+    mtools \
+    xorriso \
+    gcc-aarch64-none-elf \
+    binutils-aarch64-none-elf \
+    zlib-dev \
+    openssl-dev \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /build
+
+# Clone iPXE source code
+RUN git clone https://github.com/ipxe/ipxe.git
+
+# Set working directory to ipxe/src
+WORKDIR /build/ipxe/src
+
+# Create local configuration directory
+RUN mkdir -p config/local
+
+# Create custom nap.h configuration
+COPY <<-"EOF" config/local/nap.h
+#ifndef CONFIG_NAP_H
+#define CONFIG_NAP_H
+#undef NAP_EFIX86
+#undef NAP_EFIARM
+#define NAP_NULL
+#endif /* CONFIG_NAP_H */
+EOF
+
+# Create custom general.h configuration
+COPY <<-"EOT" config/local/general.h
+/* general.h */
+#define NSLOOKUP_CMD            /* Name resolution command */
+#define PING_CMD                /* Ping command */
+#define NTP_CMD                 /* NTP commands */
+#define VLAN_CMD                /* VLAN commands */
+#define IMAGE_EFI               /* EFI image support */
+#define DOWNLOAD_PROTO_HTTPS    /* Secure Hypertext Transfer Protocol */
+#define DOWNLOAD_PROTO_FTP      /* File Transfer Protocol */
+#define DOWNLOAD_PROTO_NFS      /* Network File System Protocol */
+#define DOWNLOAD_PROTO_FILE     /* Local file system access */
+EOT
+
+COPY <<-"EOT" ipxescript
+#!ipxe
+
+:retry_dhcp
+echo Acquiring an IP
+dhcp || goto retry_dhcp
+
+:retry_boot
+echo Booting from DHCP...
+autoboot || goto retry_boot
+EOT
+
+# Build iPXE with ARM64 EFI target
+RUN make bin-arm64-efi/snp.efi -j4 EMBED=ipxescript
+
+# Create output directory and copy the built EFI file
+RUN mkdir -p /output \
+    && cp bin-arm64-efi/snp.efi /output/ \
+    && ls -la /output/
+
+# Set the output directory as volume
+VOLUME ["/output"]
+
+ENTRYPOINT ["/bin/sh"]

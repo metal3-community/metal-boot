@@ -21,6 +21,22 @@ dtoverlay=upstream-pi4
 tftp_prefix=2
 `
 
+const ubootConf = `arm_64bit=1
+arm_boost=1
+uart_2ndstage=1
+
+[pi4]
+dtoverlay=miniuart-bt
+dtoverlay=upstream-pi4
+
+[cm4]
+otg_mode=1
+
+[all]
+enable_uart=1
+kernel=u-boot.bin
+`
+
 const bootConf = `tftp_prefix=2
 `
 
