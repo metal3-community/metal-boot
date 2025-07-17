@@ -30,10 +30,28 @@ WORKDIR /build/u-boot
 # Configure and build U-Boot for Raspberry Pi 4 (arm64)
 RUN make CROSS_COMPILE=aarch64-none-elf- rpi_arm64_defconfig
 
-# Add custom boot command to load env file from TFTP using MAC address
-RUN echo 'CONFIG_BOOTCOMMAND="dhcp \$loadaddr; bootefi \$loadaddr \$fdtcontroladdr"' >> .config \
-    && echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
-#    && echo 'CONFIG_BOOTARGS="console=tty1 console=ttyS1,115200"' >> .config
+# Add custom boot command to load EFI binary from DHCP/TFTP and execute it
+# Use explicit memory addresses to avoid MMC dependencies in diskless boot
+# Set image size to 2GB to provide ample memory space for iPXE operations
+RUN echo 'CONFIG_BOOTCOMMAND="fdt addr \$fdtcontroladdr; fdt resize 16384; fdt set /memory@0 reg <0x0 0x0 0x0 0x80000000>; dhcp \$pxefile_addr_r; bootefi \$pxefile_addr_r \$fdtcontroladdr"' >> .config \
+    && echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config \
+    && echo 'CONFIG_EFI_LOADER_BOUNCE_BUFFER=y' >> .config
+    # && echo 'CONFIG_LMB_MAX_REGIONS=64' >> .config \
+    # && echo 'CONFIG_EFI_LOADER_HII=y' >> .config \
+    # && echo 'CONFIG_EFI_UNICODE_COLLATION_PROTOCOL2=y' >> .config
+    # && echo 'CONFIG_SYS_MALLOC_LEN=0x2000000' >> .config \
+    # && echo 'CONFIG_SYS_BOOTMAPSZ=0x8000000' >> .config \
+    # && echo 'CONFIG_SYS_BOOTM_LEN=0x8000000' >> .config
+
+# Add memory configuration for large file support
+# RUN echo 'CONFIG_SYS_LOAD_ADDR=0x02000000' >> .config \
+#     && echo 'CONFIG_LOADADDR=0x82000000' >> .config \
+#     && echo 'CONFIG_SYS_SDRAM_SIZE=0x40000000' >> .config
+
+# Disable MMC support for diskless boot to avoid SD card timeouts
+# RUN echo '# CONFIG_MMC is not set' >> .config \
+#     && echo '# CONFIG_MMC_SDHCI is not set' >> .config \
+#     && echo '# CONFIG_MMC_SDHCI_BCM2835 is not set' >> .config
 
 # Add default bootcmd_custom for PXE boot
 # RUN echo 'CONFIG_EXTRA_ENV_SETTINGS="bootcmd_custom=echo Starting PXE boot...; pxe get; pxe boot"' >> .config
