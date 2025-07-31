@@ -22,6 +22,7 @@ const (
 )
 
 type UnifiConfig struct {
+	APIKey   string `yaml:"api_key"  mapstructure:"api_key"`
 	Username string `yaml:"username" mapstructure:"username"`
 	Password string `yaml:"password" mapstructure:"password"`
 	Endpoint string `yaml:"endpoint" mapstructure:"endpoint"`

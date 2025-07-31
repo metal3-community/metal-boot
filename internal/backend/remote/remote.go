@@ -56,6 +56,8 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 		panic(fmt.Sprintf("failed to set base url: %s", err))
 	}
 
+	client.SetAPIKey(config.Unifi.APIKey)
+
 	httpClient := &http.Client{}
 	httpClient.Transport = &http.Transport{
 		DialContext: (&net.Dialer{

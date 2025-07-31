@@ -31,6 +31,7 @@ RUN mkdir -p config/local
 COPY <<-"EOF" config/local/nap.h
 #ifndef CONFIG_NAP_H
 #define CONFIG_NAP_H
+#undef NAP_PCBIOS
 #undef NAP_EFIX86
 #undef NAP_EFIARM
 #define NAP_NULL
@@ -42,6 +43,12 @@ COPY <<-"EOT" config/local/general.h
 /* general.h */
 #define NSLOOKUP_CMD            /* Name resolution command */
 #define PING_CMD                /* Ping command */
+#define IPSTAT_CMD              /* IP statistics command */
+#define NSLOOKUP_CMD            /* Name resolution command */
+#define TIME_CMD                /* Time command */
+#define REBOOT_CMD              /* Reboot command */
+#define POWEROFF_CMD            /* Power off command */
+#define CONSOLE_CMD             /* Console command */
 #define NTP_CMD                 /* NTP commands */
 #define VLAN_CMD                /* VLAN commands */
 #define IMAGE_EFI               /* EFI image support */
@@ -49,8 +56,6 @@ COPY <<-"EOT" config/local/general.h
 #define DOWNLOAD_PROTO_FTP      /* File Transfer Protocol */
 #define DOWNLOAD_PROTO_NFS      /* Network File System Protocol */
 #define DOWNLOAD_PROTO_FILE     /* Local file system access */
-#undef HEAP_SIZE
-#define HEAP_SIZE 0x40000000    /* 1GB heap for large downloads */
 EOT
 
 COPY <<-"EOT" ipxescript
@@ -62,11 +67,12 @@ dhcp || goto retry_dhcp
 
 :retry_boot
 echo Booting from DHCP...
-autoboot || goto retry_boot
+imgfree
+autoboot net0 || goto retry_boot
 EOT
 
 # Build iPXE with ARM64 EFI target and increased heap size for large downloads
-RUN make bin-arm64-efi/snp.efi -j4 EMBED=ipxescript CONFIG=rpi HEAP_SIZE=0x40000000
+RUN make bin-arm64-efi/snp.efi -j4 EMBED=ipxescript
 
 # Create output directory and copy the built EFI file
 RUN mkdir -p /output \
