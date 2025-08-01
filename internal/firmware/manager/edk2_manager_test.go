@@ -175,32 +175,6 @@ func TestEDK2Manager_AddBootEntry(t *testing.T) {
 	}
 }
 
-func Test_parseHexString(t *testing.T) {
-	type args struct {
-		hexStr string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []byte
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseHexString(tt.args.hexStr)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseHexString() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseHexString() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestEDK2Manager_UpdateBootEntry(t *testing.T) {
 	type fields struct {
 		firmwarePath string
@@ -399,87 +373,6 @@ func TestEDK2Manager_SetNetworkSettings(t *testing.T) {
 			}
 			if err := m.SetNetworkSettings(tt.args.settings); (err != nil) != tt.wantErr {
 				t.Errorf("EDK2Manager.SetNetworkSettings() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
-}
-
-func Test_boolToByte(t *testing.T) {
-	type args struct {
-		b bool
-	}
-	tests := []struct {
-		name string
-		args args
-		want byte
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := boolToByte(tt.args.b); got != tt.want {
-				t.Errorf("boolToByte() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func Test_parseIPv4String(t *testing.T) {
-	type args struct {
-		ipStr string
-	}
-	tests := []struct {
-		name    string
-		args    args
-		want    []byte
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			got, err := parseIPv4String(tt.args.ipStr)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("parseIPv4String() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("parseIPv4String() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
-func TestEDK2Manager_setOrCreateVariable(t *testing.T) {
-	type fields struct {
-		firmwarePath string
-		varStore     *varstore.Edk2VarStore
-		varList      efi.EfiVarList
-		logger       logr.Logger
-	}
-	type args struct {
-		name string
-		guid efi.Guid
-		data []byte
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			m := &EDK2Manager{
-				firmwarePath: tt.fields.firmwarePath,
-				varStore:     tt.fields.varStore,
-				varList:      tt.fields.varList,
-				logger:       tt.fields.logger,
-			}
-			if err := m.setOrCreateVariable(tt.args.name, tt.args.guid, tt.args.data); (err != nil) != tt.wantErr {
-				t.Errorf("EDK2Manager.setOrCreateVariable() error = %v, wantErr %v", err, tt.wantErr)
 			}
 		})
 	}
@@ -694,26 +587,6 @@ func TestEDK2Manager_EnablePXEBoot(t *testing.T) {
 	}
 }
 
-func Test_getNextAvailableBootID(t *testing.T) {
-	type args struct {
-		entries []types.BootEntry
-	}
-	tests := []struct {
-		name string
-		args args
-		want string
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if got := getNextAvailableBootID(tt.args.entries); got != tt.want {
-				t.Errorf("getNextAvailableBootID() = %v, want %v", got, tt.want)
-			}
-		})
-	}
-}
-
 func TestEDK2Manager_EnableHTTPBoot(t *testing.T) {
 	type fields struct {
 		firmwarePath string
@@ -774,7 +647,11 @@ func TestEDK2Manager_SetFirmwareTimeoutSeconds(t *testing.T) {
 				logger:       tt.fields.logger,
 			}
 			if err := m.SetFirmwareTimeoutSeconds(tt.args.seconds); (err != nil) != tt.wantErr {
-				t.Errorf("EDK2Manager.SetFirmwareTimeoutSeconds() error = %v, wantErr %v", err, tt.wantErr)
+				t.Errorf(
+					"EDK2Manager.SetFirmwareTimeoutSeconds() error = %v, wantErr %v",
+					err,
+					tt.wantErr,
+				)
 			}
 		})
 	}

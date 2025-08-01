@@ -7,15 +7,27 @@ import (
 	"strings"
 )
 
-// EfiVarList is a map of variable names to EfiVar objects
+// EfiVarList is a map of variable names to EfiVar objects.
 type EfiVarList map[string]*EfiVar
 
-// NewEfiVarList creates a new empty EfiVarList
+// NewEfiVarList creates a new empty EfiVarList.
 func NewEfiVarList() EfiVarList {
 	return make(EfiVarList)
 }
 
-// Create creates a new variable in the list
+func (l EfiVarList) Add(v *EfiVar) error {
+	if v == nil {
+		return errors.New("cannot add nil EfiVar")
+	}
+	if _, exists := l[v.Name.String()]; exists {
+		return fmt.Errorf("variable %s already exists", v.Name)
+	}
+	l[v.Name.String()] = v
+	log.Printf("added variable: %s", v.Name)
+	return nil
+}
+
+// Create creates a new variable in the list.
 func (l EfiVarList) Create(name string) (*EfiVar, error) {
 	log.Printf("create variable %s", name)
 
@@ -28,7 +40,7 @@ func (l EfiVarList) Create(name string) (*EfiVar, error) {
 	return v, nil
 }
 
-// Delete deletes a variable from the list
+// Delete deletes a variable from the list.
 func (l EfiVarList) Delete(name string) {
 	if _, ok := l[name]; ok {
 		log.Printf("delete variable: %s", name)
@@ -38,7 +50,7 @@ func (l EfiVarList) Delete(name string) {
 	}
 }
 
-// SetBool sets a boolean variable
+// SetBool sets a boolean variable.
 func (l EfiVarList) SetBool(name string, value bool) error {
 	v, ok := l[name]
 	if !ok {
@@ -54,7 +66,7 @@ func (l EfiVarList) SetBool(name string, value bool) error {
 	return nil
 }
 
-// SetUint32 sets a 32-bit unsigned integer variable
+// SetUint32 sets a 32-bit unsigned integer variable.
 func (l EfiVarList) SetUint32(name string, value uint32) error {
 	v, ok := l[name]
 	if !ok {
@@ -70,7 +82,7 @@ func (l EfiVarList) SetUint32(name string, value uint32) error {
 	return nil
 }
 
-// SetBootEntry sets a boot entry variable
+// SetBootEntry sets a boot entry variable.
 func (l EfiVarList) SetBootEntry(index uint16, title string, path string, optdata []byte) error {
 	name := fmt.Sprintf("Boot%04X", index)
 	v, ok := l[name]
@@ -86,7 +98,7 @@ func (l EfiVarList) SetBootEntry(index uint16, title string, path string, optdat
 	return v.SetBootEntry(LOAD_OPTION_ACTIVE, title, path, optdata)
 }
 
-// AddBootEntry adds a new boot entry and returns its index
+// AddBootEntry adds a new boot entry and returns its index.
 func (l EfiVarList) AddBootEntry(title string, path string, optdata []byte) (uint16, error) {
 	for index := uint16(0); index < 0xffff; index++ {
 		name := fmt.Sprintf("Boot%04X", index)
@@ -110,7 +122,7 @@ func (l EfiVarList) GetBootNext() (uint16, error) {
 	return v.GetBootNext()
 }
 
-// SetBootNext sets the BootNext variable
+// SetBootNext sets the BootNext variable.
 func (l EfiVarList) SetBootNext(index uint16) error {
 	v, ok := l[BootNext]
 	if !ok {
@@ -126,7 +138,7 @@ func (l EfiVarList) SetBootNext(index uint16) error {
 	return nil
 }
 
-// SetBootOrder sets the BootOrder variable
+// SetBootOrder sets the BootOrder variable.
 func (l EfiVarList) SetBootOrder(order []uint16) error {
 	v, ok := l["BootOrder"]
 	if !ok {
@@ -142,7 +154,7 @@ func (l EfiVarList) SetBootOrder(order []uint16) error {
 	return nil
 }
 
-// AppendBootOrder appends to the BootOrder variable
+// AppendBootOrder appends to the BootOrder variable.
 func (l EfiVarList) AppendBootOrder(index uint16) error {
 	v, ok := l["BootOrder"]
 	if !ok {
@@ -158,7 +170,7 @@ func (l EfiVarList) AppendBootOrder(index uint16) error {
 	return nil
 }
 
-// GetBootOrder retrieves the BootOrder variable
+// GetBootOrder retrieves the BootOrder variable.
 func (l EfiVarList) GetBootOrder() ([]uint16, error) {
 	v, ok := l["BootOrder"]
 	if !ok {
@@ -168,7 +180,7 @@ func (l EfiVarList) GetBootOrder() ([]uint16, error) {
 	return v.GetBootOrder()
 }
 
-// SetFromFile sets a variable's data from a file
+// SetFromFile sets a variable's data from a file.
 func (l EfiVarList) SetFromFile(name string, filename string) error {
 	v, ok := l[name]
 	if !ok {
@@ -183,7 +195,7 @@ func (l EfiVarList) SetFromFile(name string, filename string) error {
 	return v.SetFromFile(filename)
 }
 
-// GetBootEntry retrieves a boot entry
+// GetBootEntry retrieves a boot entry.
 func (l EfiVarList) GetBootEntry(index uint16) (*BootEntry, error) {
 	name := fmt.Sprintf("Boot%04X", index)
 	v, ok := l[name]
@@ -194,7 +206,7 @@ func (l EfiVarList) GetBootEntry(index uint16) (*BootEntry, error) {
 	return v.GetBootEntry()
 }
 
-// ListBootEntries lists all boot entries
+// ListBootEntries lists all boot entries.
 func (l EfiVarList) ListBootEntries() (map[uint16]*BootEntry, error) {
 	entries := make(map[uint16]*BootEntry)
 
@@ -216,7 +228,7 @@ func (l EfiVarList) ListBootEntries() (map[uint16]*BootEntry, error) {
 	return entries, nil
 }
 
-// DeleteBootEntry deletes a boot entry
+// DeleteBootEntry deletes a boot entry.
 func (l EfiVarList) DeleteBootEntry(index uint16) error {
 	name := fmt.Sprintf("Boot%04X", index)
 	_, ok := l[name]
@@ -229,7 +241,7 @@ func (l EfiVarList) DeleteBootEntry(index uint16) error {
 	return nil
 }
 
-// FindFirst returns the first variable that matches the criteria
+// FindFirst returns the first variable that matches the criteria.
 func (l EfiVarList) FindFirst(predicate func(name string, efiVar *EfiVar) bool) (*EfiVar, string) {
 	for name, v := range l {
 		if predicate(name, v) {
@@ -239,7 +251,7 @@ func (l EfiVarList) FindFirst(predicate func(name string, efiVar *EfiVar) bool) 
 	return nil, ""
 }
 
-// Variables returns the variables in the list
+// Variables returns the variables in the list.
 func (l EfiVarList) Variables() []*EfiVar {
 	vars := make([]*EfiVar, 0, len(l))
 	for _, v := range l {
@@ -248,7 +260,7 @@ func (l EfiVarList) Variables() []*EfiVar {
 	return vars
 }
 
-// FindByPrefix returns all variables that have names starting with the given prefix
+// FindByPrefix returns all variables that have names starting with the given prefix.
 func (l EfiVarList) FindByPrefix(prefix string) []*EfiVar {
 	vars := make([]*EfiVar, 0)
 	for k, v := range l {

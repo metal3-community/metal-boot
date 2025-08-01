@@ -18,8 +18,10 @@ func TestGuid_String(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			g := Guid{
-				BytesLe: tt.fields.BytesLe,
+			g, err := GUIDFromBytes(tt.fields.BytesLe)
+			if err != nil {
+				t.Errorf("GUIDFromBytes() error = %v", err)
+				return
 			}
 			if got := g.String(); got != tt.want {
 				t.Errorf("Guid.String() = %v, want %v", got, tt.want)
@@ -35,14 +37,14 @@ func Test_guidsParseStr(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    Guid
+		want    GUID
 		wantErr bool
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := guidsParseStr(tt.args.guidStr)
+			got, err := ParseGUID(tt.args.guidStr)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("guidsParseStr() error = %v, wantErr %v", err, tt.wantErr)
 				return
@@ -62,18 +64,14 @@ func Test_guidsParseBin(t *testing.T) {
 	tests := []struct {
 		name    string
 		args    args
-		want    Guid
+		want    GUID
 		wantErr bool
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := guidsParseBin(tt.args.data, tt.args.offset)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("guidsParseBin() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
+			got := ParseBinGUID(tt.args.data, tt.args.offset)
 			if !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("guidsParseBin() = %v, want %v", got, tt.want)
 			}
@@ -952,7 +950,10 @@ func TestDevicePath_GptPartition(t *testing.T) {
 			dp := &DevicePath{
 				elems: tt.fields.elems,
 			}
-			if got := dp.GptPartition(tt.args.pnr, tt.args.poff, tt.args.plen, tt.args.guid); !reflect.DeepEqual(got, tt.want) {
+			if got := dp.GptPartition(tt.args.pnr, tt.args.poff, tt.args.plen, tt.args.guid); !reflect.DeepEqual(
+				got,
+				tt.want,
+			) {
 				t.Errorf("DevicePath.GptPartition() = %v, want %v", got, tt.want)
 			}
 		})

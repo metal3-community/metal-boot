@@ -6,11 +6,11 @@ import (
 	"fmt"
 )
 
-// JSONEncoder handles serializing EFI data types to JSON
-type JSONEncoder struct{}
+// jsonEncoder handles serializing EFI data types to JSON.
+type jsonEncoder struct{}
 
-// EfiVarJSON represents the JSON structure for an EFI variable
-type EfiVarJSON struct {
+// efiVarJSON represents the JSON structure for an EFI variable.
+type efiVarJSON struct {
 	Name string `json:"name"`
 	GUID string `json:"guid"`
 	Attr int    `json:"attr"`
@@ -18,15 +18,15 @@ type EfiVarJSON struct {
 	Time string `json:"time,omitempty"` // hex encoded
 }
 
-// EfiVarListJSON represents the JSON structure for a list of EFI variables
-type EfiVarListJSON struct {
+// efiVarListJSON represents the JSON structure for a list of EFI variables.
+type efiVarListJSON struct {
 	Version   int          `json:"version"`
-	Variables []EfiVarJSON `json:"variables"`
+	Variables []efiVarJSON `json:"variables"`
 }
 
-// MarshalEfiVar converts an EfiVar to its JSON representation
-func (e *JSONEncoder) MarshalEfiVar(v *EfiVar) EfiVarJSON {
-	result := EfiVarJSON{
+// MarshalEfiVar converts an EfiVar to its JSON representation.
+func (e *jsonEncoder) MarshalEfiVar(v *EfiVar) efiVarJSON {
+	result := efiVarJSON{
 		Name: v.Name.String(),
 		GUID: v.Guid.String(),
 		Attr: int(v.Attr),
@@ -40,35 +40,35 @@ func (e *JSONEncoder) MarshalEfiVar(v *EfiVar) EfiVarJSON {
 	return result
 }
 
-// MarshalEfiVarList converts an EfiVarList to its JSON representation
-func (e *JSONEncoder) MarshalEfiVarList(list EfiVarList) EfiVarListJSON {
-	variables := make([]EfiVarJSON, 0, len(list))
+// MarshalEfiVarList converts an EfiVarList to its JSON representation.
+func (e *jsonEncoder) MarshalEfiVarList(list EfiVarList) efiVarListJSON {
+	variables := make([]efiVarJSON, 0, len(list))
 
 	for _, item := range list {
 		variables = append(variables, e.MarshalEfiVar(item))
 	}
 
-	return EfiVarListJSON{
+	return efiVarListJSON{
 		Version:   2,
 		Variables: variables,
 	}
 }
 
-// MarshalJSON implements the json.Marshaler interface for EfiVar
+// MarshalJSON implements the json.Marshaler interface for EfiVar.
 func (v *EfiVar) MarshalJSON() ([]byte, error) {
-	encoder := JSONEncoder{}
+	encoder := jsonEncoder{}
 	return json.Marshal(encoder.MarshalEfiVar(v))
 }
 
-// MarshalJSON implements the json.Marshaler interface for EfiVarList
+// MarshalJSON implements the json.Marshaler interface for EfiVarList.
 func (list EfiVarList) MarshalJSON() ([]byte, error) {
-	encoder := JSONEncoder{}
+	encoder := jsonEncoder{}
 	return json.Marshal(encoder.MarshalEfiVarList(list))
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface for EfiVar
+// UnmarshalJSON implements the json.Unmarshaler interface for EfiVar.
 func (v *EfiVar) UnmarshalJSON(data []byte) error {
-	var jsonVar EfiVarJSON
+	var jsonVar efiVarJSON
 	if err := json.Unmarshal(data, &jsonVar); err != nil {
 		return err
 	}
@@ -103,7 +103,7 @@ func (v *EfiVar) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// UnmarshalJSON implements the json.Unmarshaler interface for EfiVarList
+// UnmarshalJSON implements the json.Unmarshaler interface for EfiVarList.
 func (list *EfiVarList) UnmarshalJSON(data []byte) error {
 	var jsonList struct {
 		Version   int               `json:"version"`
@@ -131,7 +131,7 @@ func (list *EfiVarList) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// Custom JSON decoder function for use with json.Unmarshal
-func DecodeEfiJSON(data []byte, v *EfiVarJSON) error {
+// Custom JSON decoder function for use with json.Unmarshal.
+func DecodeEfiJSON(data []byte, v *efiVarJSON) error {
 	return json.Unmarshal(data, v)
 }

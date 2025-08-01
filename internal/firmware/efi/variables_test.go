@@ -24,7 +24,13 @@ func TestNewEfiVar(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			got, err := NewEfiVar(tt.args.name, tt.args.guid, tt.args.attr, tt.args.data, tt.args.count)
+			got, err := NewEfiVar(
+				tt.args.name,
+				tt.args.guid,
+				tt.args.attr,
+				tt.args.data,
+				tt.args.count,
+			)
 			if (err != nil) != tt.wantErr {
 				t.Errorf("NewEfiVar() error = %v, wantErr %v", err, tt.wantErr)
 				return

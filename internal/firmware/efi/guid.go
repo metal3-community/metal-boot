@@ -78,7 +78,7 @@ var GuidNameTable = map[string]string{
 	NotValid:                               "NotValid",
 }
 
-// GUID represents an EFI GUID (Globally Unique Identifier)
+// GUID represents an EFI GUID (Globally Unique Identifier).
 type GUID struct {
 	Data1 uint32
 	Data2 uint16
@@ -95,7 +95,7 @@ func (g GUID) BytesLE() []byte {
 	return buf.Bytes()
 }
 
-// ParseGUID parses a GUID from its string representation
+// ParseGUID parses a GUID from its string representation.
 func ParseGUID(s string) (GUID, error) {
 	var guid GUID
 
@@ -142,7 +142,7 @@ func ParseGUID(s string) (GUID, error) {
 	return guid, nil
 }
 
-// ParseGuid parses a GUID string into a Guid struct
+// ParseGuid parses a GUID string into a Guid struct.
 func ParseGuid(s string) GUID {
 	guid, err := ParseGUID(s)
 	if err != nil {
@@ -151,7 +151,7 @@ func ParseGuid(s string) GUID {
 	return guid
 }
 
-// NewGUID creates a new GUID from its components
+// NewGUID creates a new GUID from its components.
 func NewGUID(data1 uint32, data2, data3 uint16, data4 [8]byte) GUID {
 	return GUID{
 		Data1: data1,
@@ -161,7 +161,7 @@ func NewGUID(data1 uint32, data2, data3 uint16, data4 [8]byte) GUID {
 	}
 }
 
-// GUIDFromString creates a new GUID from its string representation
+// GUIDFromString creates a new GUID from its string representation.
 func GUIDFromString(s string) (GUID, error) {
 	return ParseGUID(s)
 }
@@ -174,7 +174,7 @@ func StringToGUID(s string) GUID {
 	return guid
 }
 
-// FromBytes parses a GUID from its binary representation
+// FromBytes parses a GUID from its binary representation.
 func GUIDFromBytes(data []byte) (GUID, error) {
 	if len(data) < 16 {
 		return GUID{}, fmt.Errorf("data too short for GUID, need 16 bytes")
@@ -189,7 +189,7 @@ func GUIDFromBytes(data []byte) (GUID, error) {
 	return guid, nil
 }
 
-// Bytes returns the binary representation of the GUID
+// Bytes returns the binary representation of the GUID.
 func (g GUID) Bytes() []byte {
 	data := make([]byte, 16)
 	binary.LittleEndian.PutUint32(data[0:4], g.Data1)
@@ -199,7 +199,7 @@ func (g GUID) Bytes() []byte {
 	return data
 }
 
-// String returns the standard string representation of the GUID
+// String returns the standard string representation of the GUID.
 func (g GUID) String() string {
 	return fmt.Sprintf("%08x-%04x-%04x-%02x%02x-%02x%02x%02x%02x%02x%02x",
 		g.Data1, g.Data2, g.Data3,
@@ -207,7 +207,7 @@ func (g GUID) String() string {
 		g.Data4[4], g.Data4[5], g.Data4[6], g.Data4[7])
 }
 
-// ParseBinGUID parses a binary GUID from data at offset
+// ParseBinGUID parses a binary GUID from data at offset.
 func ParseBinGUID(data []byte, offset int) GUID {
 	var guid GUID
 
@@ -227,7 +227,7 @@ func ParseBinGUID(data []byte, offset int) GUID {
 	return guid
 }
 
-// Equal compares two GUIDs for equality
+// Equal compares two GUIDs for equality.
 func (g GUID) Equal(other GUID) bool {
 	return g.Data1 == other.Data1 &&
 		g.Data2 == other.Data2 &&
@@ -235,7 +235,7 @@ func (g GUID) Equal(other GUID) bool {
 		g.Data4 == other.Data4
 }
 
-// Common EFI GUIDs
+// Common EFI GUIDs.
 var (
 	EFI_GLOBAL_VARIABLE_GUID = GUID{
 		0x8BE4DF61,

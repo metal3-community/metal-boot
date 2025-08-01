@@ -2,6 +2,7 @@ redfish.yaml
 # Added by goreleaser init:
 dist/
 tftpboot/
+data/
 .DS_Store
 gofish
 bin/*

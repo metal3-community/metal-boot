@@ -13,6 +13,9 @@ func CreateManager(firmwarePath string, logger logr.Logger) (manager.FirmwareMan
 }
 
 // CreateNetworkManager creates a firmware manager optimized for network booting.
-func CreateNetworkManager(firmwarePath string, logger logr.Logger) (manager.FirmwareManager, error) {
+func CreateNetworkManager(
+	firmwarePath string,
+	logger logr.Logger,
+) (manager.FirmwareManager, error) {
 	return util.CreateBootNetworkManager(firmwarePath, logger)
 }

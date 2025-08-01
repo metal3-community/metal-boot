@@ -1,7 +1,6 @@
 package update_test
 
 import (
-	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
@@ -48,15 +47,15 @@ func createTestArchive(t *testing.T, fileName string) string {
 	}
 
 	// Create test files
-	err := os.MkdirAll(filepath.Join(srcDir, "subdir"), 0755)
+	err := os.MkdirAll(filepath.Join(srcDir, "subdir"), 0o755)
 	require.NoError(t, err)
 
 	for i, path := range testFiles {
-		err := os.MkdirAll(filepath.Dir(path), 0755)
+		err := os.MkdirAll(filepath.Dir(path), 0o755)
 		require.NoError(t, err)
 
 		content := []byte("test content " + string(rune('A'+i)))
-		err = os.WriteFile(path, content, 0644)
+		err = os.WriteFile(path, content, 0o644)
 		require.NoError(t, err)
 	}
 
@@ -71,7 +70,7 @@ func createTestArchive(t *testing.T, fileName string) string {
 func createZipArchive(t *testing.T, files []string, baseDir, archivePath string) {
 	// This is a simplified implementation just for testing
 	// In a real test, you should use archive/zip to create a proper zip file
-	require.NoError(t, os.MkdirAll(filepath.Dir(archivePath), 0755))
+	require.NoError(t, os.MkdirAll(filepath.Dir(archivePath), 0o755))
 
 	// Create a dummy zip file for testing
 	f, err := os.Create(archivePath)
@@ -122,7 +121,7 @@ func TestDownloadAndExtract(t *testing.T) {
 
 	// Create test files
 	singleFilePath := filepath.Join(setupTestDir(t), "firmware.bin")
-	err := os.WriteFile(singleFilePath, []byte("firmware content"), 0644)
+	err := os.WriteFile(singleFilePath, []byte("firmware content"), 0o644)
 	require.NoError(t, err)
 
 	// Create test archive
@@ -140,7 +139,7 @@ func TestDownloadAndExtract(t *testing.T) {
 	// Test downloading single file
 	t.Run("DownloadSingleFile", func(t *testing.T) {
 		destPath := filepath.Join(rootPath, "single-file")
-		require.NoError(t, os.MkdirAll(destPath, 0755))
+		require.NoError(t, os.MkdirAll(destPath, 0o755))
 
 		updater := update.NewFirmwareUpdater(rootPath, "v1.0.0")
 		updater.AddSource(destPath, singleFileServer.URL)
@@ -160,7 +159,7 @@ func TestDownloadAndExtract(t *testing.T) {
 	// Test downloading and extracting archive
 	t.Run("DownloadAndExtractArchive", func(t *testing.T) {
 		destPath := filepath.Join(rootPath, "archive")
-		require.NoError(t, os.MkdirAll(destPath, 0755))
+		require.NoError(t, os.MkdirAll(destPath, 0o755))
 
 		updater := update.NewFirmwareUpdater(rootPath, "v1.0.0")
 		updater.AddSource(destPath, archiveServer.URL)
@@ -177,7 +176,7 @@ func TestDownloadAndExtract(t *testing.T) {
 	// Test with invalid URL
 	t.Run("InvalidURL", func(t *testing.T) {
 		destPath := filepath.Join(rootPath, "invalid")
-		require.NoError(t, os.MkdirAll(destPath, 0755))
+		require.NoError(t, os.MkdirAll(destPath, 0o755))
 
 		updater := update.NewFirmwareUpdater(rootPath, "v1.0.0")
 		updater.AddSource(destPath, "http://invalid.example.com/nonexistent")
@@ -189,7 +188,7 @@ func TestDownloadAndExtract(t *testing.T) {
 	// Test with empty URL (should be skipped)
 	t.Run("EmptyURL", func(t *testing.T) {
 		destPath := filepath.Join(rootPath, "empty")
-		require.NoError(t, os.MkdirAll(destPath, 0755))
+		require.NoError(t, os.MkdirAll(destPath, 0o755))
 
 		updater := update.NewFirmwareUpdater(rootPath, "v1.0.0")
 		updater.AddSource(destPath, "")
@@ -205,12 +204,12 @@ func TestUpdateFirmware(t *testing.T) {
 
 	// Create test firmware file
 	firmwarePath := filepath.Join(rootPath, "firmware.bin")
-	err := os.WriteFile(firmwarePath, []byte("firmware content"), 0644)
+	err := os.WriteFile(firmwarePath, []byte("firmware content"), 0o644)
 	require.NoError(t, err)
 
 	// Create test manager destination
 	managerPath := filepath.Join(rootPath, "manager")
-	require.NoError(t, os.MkdirAll(managerPath, 0755))
+	require.NoError(t, os.MkdirAll(managerPath, 0o755))
 
 	// Test updating firmware from file
 	t.Run("UpdateFromFile", func(t *testing.T) {

@@ -39,7 +39,7 @@ type FirmwareManager interface {
 
 	// Device Specific Settings
 	SetConsoleConfig(consoleName string, baudRate int) error
-	GetSystemInfo() (map[string]string, error)
+	GetSystemInfo() (types.SystemInfo, error)
 
 	// Firmware Updates
 	UpdateFirmware(firmwareData []byte) error

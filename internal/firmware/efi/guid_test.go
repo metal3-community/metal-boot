@@ -87,7 +87,7 @@ func TestParseGuid(t *testing.T) {
 	tests := []struct {
 		name string
 		args args
-		want Guid
+		want GUID
 	}{
 		// TODO: Add test cases.
 	}
@@ -116,7 +116,10 @@ func TestNewGUID(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			if got := NewGUID(tt.args.data1, tt.args.data2, tt.args.data3, tt.args.data4); !reflect.DeepEqual(got, tt.want) {
+			if got := NewGUID(tt.args.data1, tt.args.data2, tt.args.data3, tt.args.data4); !reflect.DeepEqual(
+				got,
+				tt.want,
+			) {
 				t.Errorf("NewGUID() = %v, want %v", got, tt.want)
 			}
 		})

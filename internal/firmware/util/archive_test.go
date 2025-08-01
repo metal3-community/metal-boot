@@ -3,9 +3,7 @@ package util_test
 import (
 	"archive/tar"
 	"archive/zip"
-	"bytes"
 	"compress/gzip"
-	"io"
 	"os"
 	"path/filepath"
 	"testing"
@@ -39,15 +37,15 @@ func createTestFiles(t *testing.T, dir string) []string {
 		filepath.Join(dir, "subdir", "file3.txt"),
 	}
 
-	err := os.MkdirAll(filepath.Join(dir, "subdir"), 0755)
+	err := os.MkdirAll(filepath.Join(dir, "subdir"), 0o755)
 	require.NoError(t, err)
 
 	for i, path := range filePaths {
-		err := os.MkdirAll(filepath.Dir(path), 0755)
+		err := os.MkdirAll(filepath.Dir(path), 0o755)
 		require.NoError(t, err)
 
 		content := []byte("test content " + string(rune('A'+i)))
-		err = os.WriteFile(path, content, 0644)
+		err = os.WriteFile(path, content, 0o644)
 		require.NoError(t, err)
 	}
 
@@ -99,7 +97,7 @@ func createTarGzArchive(t *testing.T, testFiles []string, baseDir, archivePath s
 
 		header := &tar.Header{
 			Name: relPath,
-			Mode: 0644,
+			Mode: 0o644,
 			Size: int64(len(data)),
 		}
 
@@ -205,7 +203,7 @@ func TestExtractUnsupportedFormat(t *testing.T) {
 
 	// Create a test file that's not an archive
 	binPath := filepath.Join(srcDir, "test.bin")
-	err := os.WriteFile(binPath, []byte("test content"), 0644)
+	err := os.WriteFile(binPath, []byte("test content"), 0o644)
 	require.NoError(t, err)
 
 	// Try to extract it
@@ -219,7 +217,7 @@ func TestCopyFile(t *testing.T) {
 	// Create a test file
 	srcFile := filepath.Join(srcDir, "testfile.txt")
 	testContent := []byte("test file content")
-	err := os.WriteFile(srcFile, testContent, 0644)
+	err := os.WriteFile(srcFile, testContent, 0o644)
 	require.NoError(t, err)
 
 	// Copy the file

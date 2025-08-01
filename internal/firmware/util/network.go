@@ -11,7 +11,10 @@ import (
 )
 
 // CreateBootNetworkManager creates a firmware manager configured specifically for network booting.
-func CreateBootNetworkManager(firmwarePath string, logger logr.Logger) (manager.FirmwareManager, error) {
+func CreateBootNetworkManager(
+	firmwarePath string,
+	logger logr.Logger,
+) (manager.FirmwareManager, error) {
 	// Create the manager with the specified firmware file
 	mgr, err := manager.NewEDK2Manager(firmwarePath, logger)
 	if err != nil {

@@ -293,7 +293,7 @@ func TestCopyFirmwareFile(t *testing.T) {
 	// Create source file
 	srcFile := filepath.Join(srcDir, "firmware.bin")
 	testContent := []byte("firmware content")
-	err = os.WriteFile(srcFile, testContent, 0644)
+	err = os.WriteFile(srcFile, testContent, 0o644)
 	require.NoError(t, err)
 
 	// Test copying

@@ -12,15 +12,15 @@ func TestJSONEncoder_MarshalEfiVar(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		e    *JSONEncoder
+		e    *jsonEncoder
 		args args
-		want EfiVarJSON
+		want efiVarJSON
 	}{
 		// TODO: Add test cases.
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := &JSONEncoder{}
+			e := &jsonEncoder{}
 			if got := e.MarshalEfiVar(tt.args.v); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("JSONEncoder.MarshalEfiVar() = %v, want %v", got, tt.want)
 			}
@@ -34,13 +34,13 @@ func TestJSONEncoder_MarshalEfiVarList(t *testing.T) {
 	}
 	tests := []struct {
 		name string
-		e    *JSONEncoder
+		e    *jsonEncoder
 		args args
-		want EfiVarListJSON
+		want efiVarListJSON
 	}{
 		{
 			name: "MarshalEfiVarList",
-			e:    &JSONEncoder{},
+			e:    &jsonEncoder{},
 			args: args{
 				list: EfiVarList{
 					"test": &EfiVar{
@@ -53,9 +53,9 @@ func TestJSONEncoder_MarshalEfiVarList(t *testing.T) {
 					},
 				},
 			},
-			want: EfiVarListJSON{
+			want: efiVarListJSON{
 				Version: 2,
-				Variables: []EfiVarJSON{
+				Variables: []efiVarJSON{
 					{
 						Name: "test",
 						GUID: EFI_GLOBAL_VARIABLE,
@@ -69,7 +69,7 @@ func TestJSONEncoder_MarshalEfiVarList(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			e := &JSONEncoder{}
+			e := &jsonEncoder{}
 			if got := e.MarshalEfiVarList(tt.args.list); !reflect.DeepEqual(got, tt.want) {
 				t.Errorf("JSONEncoder.MarshalEfiVarList() = %v, want %v", got, tt.want)
 			}
@@ -210,7 +210,7 @@ func TestEfiVarList_UnmarshalJSON(t *testing.T) {
 func TestDecodeEfiJSON(t *testing.T) {
 	type args struct {
 		data []byte
-		v    *EfiVarJSON
+		v    *efiVarJSON
 	}
 	tests := []struct {
 		name    string

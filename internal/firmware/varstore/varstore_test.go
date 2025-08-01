@@ -5,10 +5,11 @@ import (
 
 	"github.com/bmcpi/pibmc/internal/firmware/efi"
 	"github.com/bmcpi/pibmc/internal/firmware/varstore"
+	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/stretchr/testify/assert"
 )
 
-// MockVarStore implements the VarStore interface for testing
+// MockVarStore implements the VarStore interface for testing.
 type MockVarStore struct {
 	varList     efi.EfiVarList
 	writeErrors bool
@@ -43,7 +44,13 @@ func TestVarStoreInterface(t *testing.T) {
 	// Create some test variables
 	varList := efi.NewEfiVarList()
 
-	bootOrderVar, err := efi.NewEfiVar("BootOrder", efi.EfiGlobalVariable, []byte{0x01, 0x00, 0x02, 0x00})
+	bootOrderVar, err := efi.NewEfiVar(
+		"BootOrder",
+		util.Ptr(efi.EfiGlobalVariable),
+		7,
+		[]byte{0x01, 0x00, 0x02, 0x00},
+		1,
+	)
 	assert.NoError(t, err)
 	assert.NoError(t, varList.Add(bootOrderVar))
 
@@ -59,7 +66,7 @@ func TestVarStoreInterface(t *testing.T) {
 	readVars := readVarList.Variables()
 	assert.Len(t, readVars, 1)
 	assert.Equal(t, "BootOrder", readVars[0].Name)
-	assert.Equal(t, efi.EfiGlobalVariable, readVars[0].GuidStr)
+	assert.Equal(t, efi.EfiGlobalVariable, readVars[0].Guid.String())
 	assert.Equal(t, []byte{0x01, 0x00, 0x02, 0x00}, readVars[0].Data)
 
 	// Test with write errors

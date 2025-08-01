@@ -17,7 +17,7 @@ import (
 	"github.com/go-logr/logr"
 )
 
-// EDK2Manager implements the FirmwareManager interface for Raspberry Pi EDK2 firmware
+// EDK2Manager implements the FirmwareManager interface for Raspberry Pi EDK2 firmware.
 type EDK2Manager struct {
 	firmwarePath string
 	varStore     *varstore.Edk2VarStore
@@ -25,7 +25,7 @@ type EDK2Manager struct {
 	logger       logr.Logger
 }
 
-// NewEDK2Manager creates a new EDK2Manager for the given firmware file
+// NewEDK2Manager creates a new EDK2Manager for the given firmware file.
 func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, error) {
 	manager := &EDK2Manager{
 		firmwarePath: firmwarePath,
@@ -36,7 +36,7 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 
 		firmwareRoot := filepath.Dir(firmwarePath)
 
-		if err := os.MkdirAll(firmwareRoot, 0755); err != nil {
+		if err := os.MkdirAll(firmwareRoot, 0o755); err != nil {
 			return nil, fmt.Errorf("failed to create firmware directory: %w", err)
 		}
 
@@ -45,12 +45,12 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 			kfr := filepath.Dir(kf)
 
 			if kfr != firmwareRoot {
-				if err := os.MkdirAll(kfr, 0755); err != nil {
+				if err := os.MkdirAll(kfr, 0o755); err != nil {
 					return nil, fmt.Errorf("failed to create firmware directory: %w", err)
 				}
 			}
 
-			if err := os.WriteFile(kf, f, 0644); err != nil {
+			if err := os.WriteFile(kf, f, 0o644); err != nil {
 				return nil, fmt.Errorf("failed to create firmware file: %w", err)
 			}
 		}
@@ -70,7 +70,7 @@ func NewEDK2Manager(firmwarePath string, logger logr.Logger) (*EDK2Manager, erro
 	return manager, nil
 }
 
-// GetBootOrder retrieves the boot order as a list of entry IDs
+// GetBootOrder retrieves the boot order as a list of entry IDs.
 func (m *EDK2Manager) GetBootOrder() ([]string, error) {
 	bootOrderVar, found := m.varList[efi.BootOrder]
 	if !found {
@@ -102,7 +102,7 @@ func (m *EDK2Manager) GetBootNext() (uint16, error) {
 	return bootNextVar.GetBootNext()
 }
 
-// SetBootOrder sets the boot order from a list of entry IDs
+// SetBootOrder sets the boot order from a list of entry IDs.
 func (m *EDK2Manager) SetBootOrder(order []string) error {
 	bootSequence := make([]uint16, len(order))
 
@@ -138,7 +138,7 @@ func (m *EDK2Manager) SetBootOrder(order []string) error {
 	return nil
 }
 
-// GetBootEntries returns all boot entries from the firmware
+// GetBootEntries returns all boot entries from the firmware.
 func (m *EDK2Manager) GetBootEntries() ([]types.BootEntry, error) {
 	bootEntries, err := m.varList.ListBootEntries()
 	if err != nil {
@@ -184,7 +184,7 @@ func (m *EDK2Manager) GetBootEntries() ([]types.BootEntry, error) {
 	return result, nil
 }
 
-// AddBootEntry adds a new boot entry to the firmware
+// AddBootEntry adds a new boot entry to the firmware.
 func (m *EDK2Manager) AddBootEntry(entry types.BootEntry) error {
 	foundKey := false
 	// Find the next available boot entry ID
@@ -265,7 +265,7 @@ func (m *EDK2Manager) AddBootEntry(entry types.BootEntry) error {
 	return nil
 }
 
-// UpdateBootEntry updates an existing boot entry in the firmware
+// UpdateBootEntry updates an existing boot entry in the firmware.
 func (m *EDK2Manager) UpdateBootEntry(id string, entry types.BootEntry) error {
 	// Add "Boot" prefix if not present
 	if !strings.HasPrefix(id, efi.BootPrefix) {
@@ -342,7 +342,7 @@ func (m *EDK2Manager) UpdateBootEntry(id string, entry types.BootEntry) error {
 	return nil
 }
 
-// DeleteBootEntry deletes a boot entry from the firmware
+// DeleteBootEntry deletes a boot entry from the firmware.
 func (m *EDK2Manager) DeleteBootEntry(id string) error {
 	// Add "Boot" prefix if not present
 	if !strings.HasPrefix(id, efi.BootPrefix) {
@@ -383,7 +383,7 @@ func (m *EDK2Manager) DeleteBootEntry(id string) error {
 	return nil
 }
 
-// GetNetworkSettings returns the current network settings
+// GetNetworkSettings returns the current network settings.
 func (m *EDK2Manager) GetNetworkSettings() (types.NetworkSettings, error) {
 	settings := types.NetworkSettings{
 		EnableDHCP: true, // Default to DHCP enabled
@@ -424,7 +424,7 @@ func (m *EDK2Manager) GetNetworkSettings() (types.NetworkSettings, error) {
 	return settings, nil
 }
 
-// SetNetworkSettings sets the network settings
+// SetNetworkSettings sets the network settings.
 func (m *EDK2Manager) SetNetworkSettings(settings types.NetworkSettings) error {
 	// Set MAC address if provided
 	if settings.MacAddress != "" {
@@ -459,7 +459,7 @@ func (m *EDK2Manager) SetNetworkSettings(settings types.NetworkSettings) error {
 	return nil
 }
 
-// GetMacAddress retrieves the MAC address from the firmware
+// GetMacAddress retrieves the MAC address from the firmware.
 func (m *EDK2Manager) GetMacAddress() (net.HardwareAddr, error) {
 	// Check for dedicated MAC address variable first
 	macVar, found := m.varList["MacAddress"]
@@ -506,7 +506,6 @@ func (m *EDK2Manager) SetDefaultBootEntries() error {
 	}
 
 	defaultBootEntries := []types.BootEntry{
-
 		{
 			Name: "UiApp",
 			// DevPath: "FvName(9a15aa37-d555-4a4e-b541-86391ff68164)/FvFileName(7c04a583-9e3e-4f1c-ad65-e05268d0b4d1)",
@@ -546,7 +545,7 @@ func (m *EDK2Manager) SetDefaultBootEntries() error {
 	return nil
 }
 
-// SetMacAddress sets the MAC address in the firmware
+// SetMacAddress sets the MAC address in the firmware.
 func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	var err error
 
@@ -567,7 +566,10 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 
 	ndl := m.getOrCreateVar("_NDL", "e622443c-284e-4b47-a984-fd66b482dac0")
 	ndl.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
-	ndlStr := fmt.Sprintf("030b2500%s0000000000000000000000000000000000000000000000000000017fff0400", strings.ToLower(macStr))
+	ndlStr := fmt.Sprintf(
+		"030b2500%s0000000000000000000000000000000000000000000000000000017fff0400",
+		strings.ToLower(macStr),
+	)
 	err = ndl.SetHexString(ndlStr)
 	if err != nil {
 		return fmt.Errorf("failed to set _NDL variable: %w", err)
@@ -591,7 +593,12 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	uniqueID := macStr[len(macStr)/2:]
 	efiIp6 := m.getOrCreateVar(macStr, efi.EfiIp6ConfigProtocol)
 	efiIp6.Attr = efi.EFI_VARIABLE_NON_VOLATILE | efi.EFI_VARIABLE_BOOTSERVICE_ACCESS
-	err = efiIp6.SetHexString(fmt.Sprintf("dd7ffde3fde803003400440008000000010000003000350004000000020000002c00000004000000030000000100000000000000da3addfffe%s", uniqueID))
+	err = efiIp6.SetHexString(
+		fmt.Sprintf(
+			"dd7ffde3fde803003400440008000000010000003000350004000000020000002c00000004000000030000000100000000000000da3addfffe%s",
+			uniqueID,
+		),
+	)
 	if err != nil {
 		return fmt.Errorf("failed to set MAC address variable: %w", err)
 	}
@@ -623,7 +630,7 @@ func (m *EDK2Manager) SetMacAddress(mac net.HardwareAddr) error {
 	return nil
 }
 
-// GetVariable retrieves a variable by name
+// GetVariable retrieves a variable by name.
 func (m *EDK2Manager) GetVariable(name string) (*efi.EfiVar, error) {
 	v, found := m.varList[name]
 	if !found {
@@ -632,7 +639,7 @@ func (m *EDK2Manager) GetVariable(name string) (*efi.EfiVar, error) {
 	return v, nil
 }
 
-// SetVariable sets a variable
+// SetVariable sets a variable.
 func (m *EDK2Manager) SetVariable(name string, value *efi.EfiVar) error {
 	if value == nil {
 		return fmt.Errorf("variable is nil")
@@ -641,12 +648,12 @@ func (m *EDK2Manager) SetVariable(name string, value *efi.EfiVar) error {
 	return nil
 }
 
-// ListVariables returns all variables in the firmware
+// ListVariables returns all variables in the firmware.
 func (m *EDK2Manager) ListVariables() (map[string]*efi.EfiVar, error) {
 	return m.varList, nil
 }
 
-// EnablePXEBoot enables or disables PXE boot
+// EnablePXEBoot enables or disables PXE boot.
 func (m *EDK2Manager) EnablePXEBoot(enable bool) error {
 	// Get all boot entries
 	entries, err := m.GetBootEntries()
@@ -695,7 +702,7 @@ func (m *EDK2Manager) EnablePXEBoot(enable bool) error {
 	return nil
 }
 
-// EnableHTTPBoot enables or disables HTTP boot
+// EnableHTTPBoot enables or disables HTTP boot.
 func (m *EDK2Manager) EnableHTTPBoot(enable bool) error {
 	// Get all boot entries
 	entries, err := m.GetBootEntries()
@@ -744,7 +751,7 @@ func (m *EDK2Manager) EnableHTTPBoot(enable bool) error {
 	return nil
 }
 
-// SetFirmwareTimeoutSeconds sets the boot menu timeout in seconds
+// SetFirmwareTimeoutSeconds sets the boot menu timeout in seconds.
 func (m *EDK2Manager) SetFirmwareTimeoutSeconds(seconds int) error {
 	// The timeout is stored as a 16-bit value in the Timeout variable
 	timeoutVar := m.getOrCreateVar("Timeout", efi.EFI_GLOBAL_VARIABLE)
@@ -756,7 +763,7 @@ func (m *EDK2Manager) SetFirmwareTimeoutSeconds(seconds int) error {
 	return nil
 }
 
-// SetConsoleConfig sets the console configuration
+// SetConsoleConfig sets the console configuration.
 func (m *EDK2Manager) SetConsoleConfig(consoleName string, baudRate int) error {
 	// Update the console preference variable
 	consoleVar := m.getOrCreateVar("ConsolePref", "2d2358b4-e96c-484d-b2dd-7c2edfc7d56f")
@@ -783,9 +790,9 @@ func (m *EDK2Manager) SetConsoleConfig(consoleName string, baudRate int) error {
 	return nil
 }
 
-// GetSystemInfo returns information about the system
-func (m *EDK2Manager) GetSystemInfo() (map[string]string, error) {
-	info := make(map[string]string)
+// GetSystemInfo returns information about the system.
+func (m *EDK2Manager) GetSystemInfo() (types.SystemInfo, error) {
+	info := types.SystemInfo{}
 
 	// Add firmware version
 	version, err := m.GetFirmwareVersion()
@@ -833,7 +840,7 @@ func (m *EDK2Manager) GetSystemInfo() (map[string]string, error) {
 	return info, nil
 }
 
-// UpdateFirmware updates the firmware with the provided data
+// UpdateFirmware updates the firmware with the provided data.
 func (m *EDK2Manager) UpdateFirmware(firmwareData []byte) error {
 	// Backup the original firmware
 	backupPath := m.firmwarePath + ".backup"
@@ -857,7 +864,7 @@ func (m *EDK2Manager) UpdateFirmware(firmwareData []byte) error {
 	return nil
 }
 
-// GetFirmwareVersion returns the firmware version
+// GetFirmwareVersion returns the firmware version.
 func (m *EDK2Manager) GetFirmwareVersion() (string, error) {
 	// Try to extract version from embedded firmware info
 	var version string
@@ -882,9 +889,8 @@ func (m *EDK2Manager) GetFirmwareVersion() (string, error) {
 	return version, nil
 }
 
-// SaveChanges writes the modified variables back to the firmware file
+// SaveChanges writes the modified variables back to the firmware file.
 func (m *EDK2Manager) SaveChanges() error {
-
 	if err := m.varStore.WriteVarStore(m.firmwarePath, m.varList); err != nil {
 		return fmt.Errorf("failed to write variable store: %w", err)
 	}
@@ -894,7 +900,7 @@ func (m *EDK2Manager) SaveChanges() error {
 	return nil
 }
 
-// RevertChanges discards all changes
+// RevertChanges discards all changes.
 func (m *EDK2Manager) RevertChanges() error {
 	// Reload the variables from the file
 	var err error
@@ -906,7 +912,7 @@ func (m *EDK2Manager) RevertChanges() error {
 	return nil
 }
 
-// ResetToDefaults resets the firmware to default settings
+// ResetToDefaults resets the firmware to default settings.
 func (m *EDK2Manager) ResetToDefaults() error {
 	// Reset the boot timeout
 	timeoutVar := m.getOrCreateVar("Timeout", efi.EFI_GLOBAL_VARIABLE)
@@ -932,9 +938,9 @@ func (m *EDK2Manager) ResetToDefaults() error {
 	return nil
 }
 
-// Helper functions
+// Helper functions.
 
-// getOrCreateVar gets an existing variable or creates a new one with the specified name and GUID
+// getOrCreateVar gets an existing variable or creates a new one with the specified name and GUID.
 func (m *EDK2Manager) getOrCreateVar(name, guidStr string) *efi.EfiVar {
 	v, found := m.varList[name]
 	if found {
@@ -954,7 +960,7 @@ func (m *EDK2Manager) getOrCreateVar(name, guidStr string) *efi.EfiVar {
 	return v
 }
 
-// boolToUint32 converts a boolean to a uint32 (0 or 1)
+// boolToUint32 converts a boolean to a uint32 (0 or 1).
 func boolToUint32(b bool) uint32 {
 	if b {
 		return 1
@@ -962,7 +968,7 @@ func boolToUint32(b bool) uint32 {
 	return 0
 }
 
-// replaceMAC replaces a MAC address in a string
+// replaceMAC replaces a MAC address in a string.
 func replaceMAC(s, newMAC string) string {
 	// Find the MAC address in the string
 	macIndex := strings.Index(s, "MAC:")
@@ -983,13 +989,13 @@ func replaceMAC(s, newMAC string) string {
 	return s[:macStart] + newMAC + s[macEnd:]
 }
 
-// File utility functions
+// File utility functions.
 func copyFile(src, dst string) error {
 	data, err := os.ReadFile(src)
 	if err != nil {
 		return fmt.Errorf("failed to read file %s: %w", src, err)
 	}
-	return os.WriteFile(dst, data, 0644)
+	return os.WriteFile(dst, data, 0o644)
 }
 
 func readFile(path string) ([]byte, error) {
@@ -997,7 +1003,7 @@ func readFile(path string) ([]byte, error) {
 }
 
 func writeFile(path string, data []byte) error {
-	return os.WriteFile(path, data, 0644)
+	return os.WriteFile(path, data, 0o644)
 }
 
 func removeFile(path string) error {

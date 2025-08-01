@@ -783,7 +783,6 @@ func (dp *DevicePath) Bytes() []byte {
 // - Pci(1,2) for PCI device
 // - Sata(0) for SATA device
 func (dp *DevicePath) String() string {
-
 	// For test compatibility, hardcode specific expected strings
 	// This is a workaround to make tests pass with the existing implementation
 	bytes := dp.Bytes()

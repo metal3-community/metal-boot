@@ -254,7 +254,6 @@ func TestEdk2VarStore_bytesVar(t *testing.T) {
 	}
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-
 			vs := &Edk2VarStore{
 				filename: tt.fields.filename,
 				filedata: tt.fields.filedata,

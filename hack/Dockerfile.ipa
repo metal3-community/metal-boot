@@ -1,42 +1,61 @@
-FROM alpine AS build
-WORKDIR /
-RUN apk add --no-cache curl \
-                       tar \
-                       git \
-                       binutils \
-                       python3 \
-                       py3-pip \
-                       dosfstools \
-                       efibootmgr \
-                       hdparm \
-                       ipmitool \
-                       iproute2 \
-                       lshw \
-                       mdadm \
-                       py3-installer \
-                       python3-dev \
-                       gcc \
-                       util-linux-misc \
-                       musl-dev \
-                       eudev \
-                       eudev-dev \
-                       linux-headers \
-                       mdadm-udev \
-                       upx \
-                       efivar && \
-  rm -rf /var/lib/apt/lists/* && \
-  git clone https://github.com/openstack/ironic-python-agent.git && \
-  cd ironic-python-agent && \
-  python3 -m venv venv && \
-  . venv/bin/activate && \
-  pip install -r requirements.txt && \
-  pip install pyinstaller && \
-  pip install . && \
-  pyinstaller --nowindow --collect-all eventlet --collect-all oslo_service.backend.eventlet --collect-all dns --collect-all zeroconf --collect-all ironic_python_agent --onefile venv/bin/ironic-python-agent
-# ENTRYPOINT ["/ironic-python-agent/dist/ironic-python-agent"]
+# Use minimal Alpine Linux base image
+FROM alpine:3.19
 
-FROM scratch AS final
-COPY --from=build /ironic-python-agent/dist/ironic-python-agent /rootfs/usr/local/lib/containers/ironic-python-agent/ironic-python-agent
-COPY ironic_python_agent.conf /rootfs/usr/local/lib/containers/ironic-python-agent/ironic_python_agent.conf
-COPY ironic-python-agent.yaml /rootfs/usr/local/etc/containers/ironic-python-agent.yaml
-COPY manifest.yaml /manifest.yaml
+# Install required packages for IPA build
+RUN apk add --no-cache \
+    build-base \
+    git \
+    python3 \
+    python3-dev \
+    py3-pip \
+    py3-setuptools \
+    py3-wheel \
+    py3-virtualenv \
+    curl \
+    wget \
+    tar \
+    gzip \
+    xz \
+    cpio \
+    findutils \
+    bash \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /build
+
+# Create Python virtual environment
+RUN python3 -m venv /opt/venv
+
+# Activate virtual environment and install ironic-python-agent-builder
+ENV PATH="/opt/venv/bin:$PATH"
+RUN pip install --upgrade pip setuptools wheel \
+    && pip install ironic-python-agent-builder
+
+# Set working directory for IPA build
+WORKDIR /build/ipa
+
+# Build IPA image for aarch64 without IPMI
+# Uses debian distribution with minimal configuration
+RUN ironic-python-agent-builder \
+    --release debian \
+    --architecture aarch64 \
+    --dhcp-provider none \
+    --disable-dhcp-fallback \
+    --inject-files \
+    --output-directory /output \
+    --disable-ilo \
+    --disable-ipmi \
+    --disable-redfish \
+    --extra-args "-v" \
+    debian
+
+# Create output directory and verify output files
+RUN mkdir -p /output \
+    && ls -la /output/ \
+    && echo "IPA build completed. Files in /output:"
+
+# Set the output directory as volume
+VOLUME ["/output"]
+
+ENTRYPOINT ["/bin/sh"]

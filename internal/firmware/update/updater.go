@@ -68,8 +68,11 @@ func (f *FirmwareUpdater) DownloadAndExtract() error {
 
 		// If it's an archive, extract it
 		if source.IsArchive() {
-			extractDir := filepath.Join(f.RootPath, strings.TrimSuffix(filepath.Base(source.URL), filepath.Ext(source.URL)))
-			if err := os.MkdirAll(extractDir, 0755); err != nil {
+			extractDir := filepath.Join(
+				f.RootPath,
+				strings.TrimSuffix(filepath.Base(source.URL), filepath.Ext(source.URL)),
+			)
+			if err := os.MkdirAll(extractDir, 0o755); err != nil {
 				return fmt.Errorf("failed to create extract directory: %w", err)
 			}
 
@@ -79,7 +82,7 @@ func (f *FirmwareUpdater) DownloadAndExtract() error {
 		} else {
 			// Just copy the file to destination
 			destDir := filepath.Dir(destPath)
-			if err := os.MkdirAll(destDir, 0755); err != nil {
+			if err := os.MkdirAll(destDir, 0o755); err != nil {
 				return fmt.Errorf("failed to create destination directory: %w", err)
 			}
 
