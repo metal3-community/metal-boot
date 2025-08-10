@@ -16,11 +16,11 @@ import (
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
-	"github.com/bmcpi/pibmc/internal/firmware/edk2"
-	"github.com/bmcpi/pibmc/internal/firmware/manager"
-	"github.com/bmcpi/pibmc/internal/firmware/types"
-	"github.com/bmcpi/pibmc/internal/firmware/varstore"
 	"github.com/bmcpi/pibmc/internal/util"
+	"github.com/bmcpi/uefi-firmware-manager/edk2"
+	"github.com/bmcpi/uefi-firmware-manager/manager"
+	"github.com/bmcpi/uefi-firmware-manager/types"
+	"github.com/bmcpi/uefi-firmware-manager/varstore"
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel"
 )
@@ -635,7 +635,7 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 // 	json.NewEncoder(w).Encode(biosSettings)
 // }
 
-// Handler for BIOS settings reset
+// Handler for BIOS settings reset.
 func (s *RedfishServer) ResetBIOS(w http.ResponseWriter, r *http.Request, systemId string) {
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
@@ -684,7 +684,7 @@ func (s *RedfishServer) ResetBIOS(w http.ResponseWriter, r *http.Request, system
 	w.WriteHeader(http.StatusNoContent)
 }
 
-// Handler for updating BIOS settings
+// Handler for updating BIOS settings.
 func (s *RedfishServer) UpdateBIOS(w http.ResponseWriter, r *http.Request, systemId string) {
 	ctx := r.Context()
 	tracer := otel.Tracer(tracerName)
@@ -1308,7 +1308,7 @@ func (s *RedfishServer) UpdateServiceSimpleUpdate(w http.ResponseWriter, r *http
 	go s.processFirmwareUpdate(ctx, *request.ImageURI, taskId)
 }
 
-// processFirmwareUpdate handles the firmware update process in the background
+// processFirmwareUpdate handles the firmware update process in the background.
 func (s *RedfishServer) processFirmwareUpdate(ctx context.Context, imageURI string, taskId string) {
 	s.Log.Info("starting firmware update task", "uri", imageURI, "taskId", taskId)
 
@@ -1321,7 +1321,7 @@ func (s *RedfishServer) processFirmwareUpdate(ctx context.Context, imageURI stri
 	// 5. Complete the task
 }
 
-// Additional response types needed for firmware management
+// Additional response types needed for firmware management.
 type BiosUpdateRequest struct {
 	Attributes map[string]any `json:"Attributes,omitempty"`
 }

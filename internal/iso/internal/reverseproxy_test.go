@@ -350,7 +350,7 @@ func TestXForwardedFor(t *testing.T) {
 	}
 }
 
-// Issue 38079: don't append to X-Forwarded-For if it's present but nil
+// Issue 38079: don't append to X-Forwarded-For if it's present but nil.
 func TestXForwardedFor_Omit(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if v := r.Header.Get("X-Forwarded-For"); v != "" {
@@ -652,7 +652,7 @@ func req(t *testing.T, v string) *http.Request {
 	return req
 }
 
-// Issue 12344
+// Issue 12344.
 func TestNilBody(t *testing.T) {
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Write([]byte("hi"))
@@ -682,7 +682,7 @@ func TestNilBody(t *testing.T) {
 	}
 }
 
-// Issue 15524
+// Issue 15524.
 func TestUserAgentHeader(t *testing.T) {
 	var gotUA string
 	backend := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -829,7 +829,7 @@ func (fn RoundTripperFunc) RoundTrip(req *http.Request) (*http.Response, error) 
 	return fn(req)
 }
 
-// Issue 16036: send a Request with a nil Body when possible
+// Issue 16036: send a Request with a nil Body when possible.
 func TestReverseProxy_NilBody(t *testing.T) {
 	backendURL, _ := url.Parse("http://fake.tld/")
 	proxyHandler := NewSingleHostReverseProxy(backendURL)
@@ -853,7 +853,7 @@ func TestReverseProxy_NilBody(t *testing.T) {
 	}
 }
 
-// Issue 33142: always allocate the request headers
+// Issue 33142: always allocate the request headers.
 func TestReverseProxy_AllocatedHeader(t *testing.T) {
 	proxyHandler := new(ReverseProxy)
 	proxyHandler.ErrorLog = log.New(io.Discard, "", 0) // quiet for tests
@@ -1003,7 +1003,7 @@ func TestReverseProxyErrorHandler(t *testing.T) {
 	}
 }
 
-// Issue 16659: log errors from short read
+// Issue 16659: log errors from short read.
 func TestReverseProxy_CopyBuffer(t *testing.T) {
 	backendServer := httptest.NewServer(
 		http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
@@ -1197,7 +1197,7 @@ func (cc *checkCloser) Read(b []byte) (int, error) {
 	return len(b), nil
 }
 
-// Issue 23643: panic on body copy error
+// Issue 23643: panic on body copy error.
 func TestReverseProxy_PanicBodyError(t *testing.T) {
 	log.SetOutput(io.Discard)
 	defer log.SetOutput(os.Stderr)

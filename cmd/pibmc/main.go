@@ -7,8 +7,8 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/bmcpi/pibmc/internal/firmware/efi"
-	"github.com/bmcpi/pibmc/internal/firmware/varstore"
+	"github.com/bmcpi/uefi-firmware-manager/efi"
+	"github.com/bmcpi/uefi-firmware-manager/varstore"
 )
 
 // type BootEntry struct {
@@ -71,7 +71,7 @@ import (
 // 	} `json:"Boot0000"`
 // }
 
-// parseEncodedData decodes the binary+hex encoded UEFI PXE data
+// parseEncodedData decodes the binary+hex encoded UEFI PXE data.
 func parseEncodedData(encodedHex string) (string, error) {
 	// Convert hex string to byte array
 	data, err := hex.DecodeString(encodedHex)
@@ -140,14 +140,14 @@ func decodeBootEntry(data []byte) (string, error) {
 	return decoded, nil
 }
 
-// decodeDWord decodes a little-endian DWord from hex
+// decodeDWord decodes a little-endian DWord from hex.
 func decodeDWord(data []byte) (string, error) {
 	// Convert little-endian bytes to uint32
 	value := binary.LittleEndian.Uint32(data)
 	return fmt.Sprintf("0x%08X", value), nil
 }
 
-// encodeDWord encodes a uint32 value to little-endian hex
+// encodeDWord encodes a uint32 value to little-endian hex.
 func encodeDWord(value uint32) string {
 	// Create a 4-byte array
 	data := make([]byte, 4)

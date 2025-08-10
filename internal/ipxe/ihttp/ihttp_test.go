@@ -159,7 +159,7 @@ func TestHandle(t *testing.T) {
 
 			defer resp.Body.Close()
 			if diff := cmp.Diff(resp.StatusCode, tt.want.StatusCode); diff != "" {
-				t.Fatalf(diff)
+				t.Fatalf("%s", diff)
 			}
 			if tt.want.Body != nil {
 				got, err := ioutil.ReadAll(resp.Body)
@@ -172,7 +172,7 @@ func TestHandle(t *testing.T) {
 				}
 
 				if diff := cmp.Diff(got, want); diff != "" {
-					t.Fatalf(diff)
+					t.Fatalf("%s", diff)
 				}
 			}
 		})

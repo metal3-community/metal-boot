@@ -99,8 +99,8 @@ func (s Handler) DownloadImages() error {
 // Serves embedded iPXE binaries.
 func (s Handler) Handle(w http.ResponseWriter, req *http.Request) {
 	path := req.URL.Path
-	if strings.HasPrefix(path, "/images/") {
-		path = strings.TrimPrefix(path, "/images/")
+	if after, ok := strings.CutPrefix(path, "/images/"); ok {
+		path = after
 	}
 
 	s.Log.V(1).Info("handling request", "method", req.Method, "path", req.URL.Path)
@@ -154,9 +154,10 @@ func (s Handler) Handle(w http.ResponseWriter, req *http.Request) {
 		defer file.Close()
 
 		http.ServeContent(w, req, filename, time.Now(), file)
-		if req.Method == http.MethodGet {
+		switch req.Method {
+		case http.MethodGet:
 			log.Info("file served", "name", filename)
-		} else if req.Method == http.MethodHead {
+		case http.MethodHead:
 			log.Info("HEAD method requested")
 		}
 

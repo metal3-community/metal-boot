@@ -80,9 +80,10 @@ func HandlerFunc(c *config.Config) http.HandlerFunc {
 		}
 
 		http.ServeContent(w, req, filename, time.Now(), bytes.NewReader(file))
-		if req.Method == http.MethodGet {
+		switch req.Method {
+		case http.MethodGet:
 			log.Info("file served", "name", filename, "fileSize", len(file))
-		} else if req.Method == http.MethodHead {
+		case http.MethodHead:
 			log.Info("HEAD method requested", "fileSize", len(file))
 		}
 		span.SetStatus(codes.Ok, filename)

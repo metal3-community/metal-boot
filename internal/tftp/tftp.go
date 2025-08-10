@@ -16,7 +16,7 @@ import (
 
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler"
-	"github.com/bmcpi/pibmc/internal/firmware/edk2"
+	"github.com/bmcpi/uefi-firmware-manager/edk2"
 	"github.com/go-logr/logr"
 	"github.com/pin/tftp/v3"
 	"github.com/tinkerbell/ipxedust/binary"
@@ -95,7 +95,7 @@ func Serve(_ context.Context, conn net.PacketConn, s *tftp.Server) error {
 }
 
 func (h *Handler) getDhcpInfo(
-	ctx context.Context,
+	_ context.Context,
 	f any,
 ) (*data.DHCP, *data.Netboot, *data.Power, error) {
 	outgoingTransfer, ok := f.(tftp.OutgoingTransfer)
@@ -229,10 +229,7 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
 		}
 	}
 
-	isPxe := false
-	if strings.Contains(prefix, "pxelinux.cfg") {
-		isPxe = true
-	}
+	isPxe := strings.Contains(prefix, "pxelinux.cfg")
 
 	// TODO: Add support for PXE booting - make it a toggle feature
 	if isPxe && false {

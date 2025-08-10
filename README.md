@@ -14,6 +14,108 @@ PiBMC provides enterprise-grade server management capabilities for Raspberry Pi 
 
 This project turns inexpensive Raspberry Pi 4 hardware into managed computing resources with functionality similar to enterprise-grade BMC (Baseboard Management Controller) solutions.
 
+## Process Flow
+
+1. Store raspberry PI firmware json exports in filesystem as backend
+2. Raspberry PI bootloader init -> DHCP -> Lookup and merge options with remote backend if specified
+3. Raspberry PI boots into netboot -> fetches firmware -> firmware manager dynamically renders firmware with UEFI vars from filesystem backend
+4. If boot method is PXE -> provide ironic IPA or configured ramdisk
+5. Ironic boots via IPA -> fetch devices via callback -> Update devices and Redfish config in backend
+6. Redfish API is called -> Is power option? -> true -> use remote backend to configure POE -> false -> Update firmware from translated settings
+
+
+```mermaid
+stateDiagram-v2
+    direction TB
+    
+    [*] --> Initialized: Firmware JSON stored in filesystem
+
+    state Initialized {
+        [*] --> BootloaderInit
+        BootloaderInit --> DHCPRequest
+        DHCPRequest --> ConfigLookup
+    }
+
+    state ConfigLookup {
+        [*] --> CheckRemoteBackend
+        CheckRemoteBackend --> MergeRemoteConfig: Remote backend specified
+        CheckRemoteBackend --> UseLocalConfig: No remote backend
+        MergeRemoteConfig --> ConfigReady
+        UseLocalConfig --> ConfigReady
+    }
+
+    Initialized --> NetbootReady: Configuration complete
+
+    state NetbootReady {
+        [*] --> FetchFirmware
+        FetchFirmware --> ReadUEFIVars
+        ReadUEFIVars --> RenderFirmware
+        RenderFirmware --> CheckBootMethod
+    }
+
+    state CheckBootMethod {
+        [*] --> BootMethodDecision
+        BootMethodDecision --> ProvidePXE: PXE boot
+        BootMethodDecision --> ProvideRamdisk: Other boot method
+        ProvidePXE --> BootReady
+        ProvideRamdisk --> BootReady
+    }
+
+    NetbootReady --> Booting: Boot method determined
+
+    state Booting {
+        [*] --> IronicBoot
+        IronicBoot --> HardwareDiscovery
+        HardwareDiscovery --> DeviceCallback
+        DeviceCallback --> UpdateDeviceRegistry
+        UpdateDeviceRegistry --> UpdateRedfishConfig
+    }
+
+    Booting --> Operational: Device registered and configured
+
+    state col1 {
+        state Operational {
+            [*] --> Idle
+            Idle --> ProcessingAPI: Redfish API called
+            
+            state ProcessingAPI {
+                [*] --> CheckOperation
+                CheckOperation --> PowerManagement: Power operation
+                CheckOperation --> FirmwareUpdate: Configuration update
+                
+                state PowerManagement {
+                    [*] --> ConfigurePOE
+                    ConfigurePOE --> ExecutePower
+                    ExecutePower --> PowerComplete
+                }
+                
+                state FirmwareUpdate {
+                    [*] --> TranslateSettings
+                    TranslateSettings --> ApplyFirmware
+                    ApplyFirmware --> FirmwareComplete
+                }
+            }
+            
+            ProcessingAPI --> Idle: Operation complete
+        }
+    }
+
+    state col2 {
+        state Error {
+            [*] --> DiagnoseError
+            DiagnoseError --> RetryOperation: Recoverable error
+            DiagnoseError --> FailedState: Fatal error
+        }
+    }
+
+    col1 --> col2: Critical error occurred
+    col2 --> col1: Error resolved
+    col2 --> [*]: Fatal error - system halt
+
+    Operational --> Shutdown: System shutdown requested
+    Shutdown --> [*]: Clean shutdown complete
+```
+
 ## Architecture
 
 ```mermaid

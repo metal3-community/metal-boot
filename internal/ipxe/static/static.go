@@ -150,9 +150,10 @@ func HandlerFunc(c *config.Config) http.HandlerFunc {
 			defer file.Close()
 
 			http.ServeContent(w, req, filename, time.Now(), file)
-			if req.Method == http.MethodGet {
+			switch req.Method {
+			case http.MethodGet:
 				log.Info("file served", "name", filename)
-			} else if req.Method == http.MethodHead {
+			case http.MethodHead:
 				log.Info("HEAD method requested")
 			}
 

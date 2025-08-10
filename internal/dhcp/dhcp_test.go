@@ -283,7 +283,7 @@ func TestBootfile(t *testing.T) {
 			args: args{
 				ipxeHTTPBinServer: &url.URL{Scheme: "http", Host: "1.2.3.4:8080"},
 			},
-			want: "http://1.2.3.4:8080/01:02:03:04:05:06/ipxe.efi",
+			want: "http://1.2.3.4:8080/01-02-03-04-05-06/ipxe.efi",
 		},
 		"firmware ipxe": {
 			info: Info{
