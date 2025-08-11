@@ -1,0 +1,79 @@
+# Use minimal Alpine Linux base image
+FROM alpine:3.19
+
+# Install required packages for U-Boot build
+RUN apk add --no-cache \
+    build-base \
+    git \
+    python3 \
+    py3-setuptools \
+    bison \
+    flex \
+    bc \
+    openssl-dev \
+    gnutls-dev \
+    libgcrypt-dev \
+    zlib-dev \
+    curl-dev \
+    gcc-aarch64-none-elf \
+    && rm -rf /var/cache/apk/*
+
+# Set working directory
+WORKDIR /build
+
+# Clone U-Boot source code
+RUN git clone --depth 1 --branch v2025.07 https://github.com/u-boot/u-boot.git
+
+# Set working directory to u-boot
+WORKDIR /build/u-boot
+
+# Configure and build U-Boot for Raspberry Pi 4 (arm64)
+RUN make CROSS_COMPILE=aarch64-none-elf- rpi_arm64_defconfig
+
+# Add custom boot command to load EFI binary from DHCP/TFTP and execute it
+# Use explicit memory addresses to avoid MMC dependencies in diskless boot
+# Set image size to 2GB to provide ample memory space for iPXE operations
+# RUN echo 'CONFIG_BOOTCOMMAND="fdt addr \$fdtcontroladdr; fdt set /memory@0 reg <0x0 0x0 0x0 0x80000000>; dhcp \$pxefile_addr_r; bootefi \$pxefile_addr_r \$fdtcontroladdr"' >> .config \
+#     && echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config \
+#     && echo 'CONFIG_EFI_LOADER_BOUNCE_BUFFER=y' >> .config
+#     && echo 'CONFIG_LMB_MAX_REGIONS=64' >> .config \
+#     && echo 'CONFIG_EFI_LOADER_HII=y' >> .config \
+#     && echo 'CONFIG_EFI_UNICODE_COLLATION_PROTOCOL2=y' >> .config
+#     && echo 'CONFIG_SYS_MALLOC_LEN=0x2000000' >> .config \
+#     && echo 'CONFIG_SYS_BOOTMAPSZ=0x8000000' >> .config \
+#     && echo 'CONFIG_SYS_BOOTM_LEN=0x8000000' >> .config
+
+RUN echo 'CONFIG_PREBOOT="setenv bootmenu_0 UEFI Boot Manager=bootefi bootmgr; setenv bootmenu_1 UEFI Maintenance Menu=eficonfig"' >> .config \
+    && echo 'CMD_BOOTEFI_BOOTMGR=y' >> .config \
+    && echo 'CONFIG_CMD_EFICONFIG=y' >> .config \
+    && echo 'CONFIG_USE_PREBOOT=y' >> .config
+
+# RUN echo 'CONFIG_BOOTCOMMAND="load mmc 0:1 \${fdt_addr_r} bcm2711-rpi-4-b.dtb; load mmc 0:1 \${kernel_addr_r} efi/ipxe.efi; bootefi \$kernel_addr_r \$fdt_addr_r"' >> .config \
+#     && echo 'CONFIG_USE_BOOTCOMMAND=y' >> .config
+#     && echo 'CONFIG_EFI_LOADER_BOUNCE_BUFFER=y' >> .config
+
+# Add memory configuration for large file support
+# RUN echo 'CONFIG_SYS_LOAD_ADDR=0x02000000' >> .config \
+#     && echo 'CONFIG_LOADADDR=0x82000000' >> .config \
+#     && echo 'CONFIG_SYS_SDRAM_SIZE=0x40000000' >> .config
+
+# Disable MMC support for diskless boot to avoid SD card timeouts
+# RUN echo '# CONFIG_MMC is not set' >> .config \
+#     && echo '# CONFIG_MMC_SDHCI is not set' >> .config \
+#     && echo '# CONFIG_MMC_SDHCI_BCM2835 is not set' >> .config
+
+# Add default bootcmd_custom for PXE boot
+# RUN echo 'CONFIG_EXTRA_ENV_SETTINGS="bootcmd_custom=echo Starting PXE boot...; pxe get; pxe boot"' >> .config
+
+# Build U-Boot
+RUN make CROSS_COMPILE=aarch64-none-elf- -j$(nproc)
+
+# Create output directory and copy only u-boot.bin
+RUN mkdir -p /output \
+    && cp u-boot.bin /output/ \
+    && ls -la /output/
+
+# Set the output directory as volume
+VOLUME ["/output"]
+
+ENTRYPOINT ["/bin/sh"]
