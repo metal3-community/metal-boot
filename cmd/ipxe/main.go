@@ -25,12 +25,8 @@ func main() {
 	buildCmd := exec.Command(
 		"docker",
 		"build",
-		"--memory",
-		"8g",
-		"--memory-swap",
-		"16g",
 		"--platform",
-		"linux/amd64",
+		"linux/arm64",
 		"-f",
 		dockerfilePath,
 		"-t",

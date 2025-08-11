@@ -7,6 +7,7 @@ import (
 	"net/http"
 )
 
+//go:generate go tool oapi-codegen -package redfish -o server.gen.go -generate std-http-server,models openapi.yaml
 func (server *RedfishServer) ListenAndServe(
 	ctx context.Context,
 	handlers map[string]http.HandlerFunc,

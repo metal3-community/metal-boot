@@ -41,7 +41,6 @@ var (
 	startTime = time.Now()
 )
 
-//go:generate go tool oapi-codegen -package redfish -o api/redfish/server.gen.go -generate std-http-server,models openapi.yaml
 //go:generate go run ./cmd/ipxe
 func main() {
 	cfg, err := config.NewConfig()

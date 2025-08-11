@@ -1,23 +1,34 @@
-# Use minimal Alpine Linux base image
-FROM alpine:3.19
+# Use Ubuntu base image
+FROM ubuntu:22.04
 
-# Install required packages for iPXE build
-RUN apk add --no-cache \
-    build-base \
+# Prevent interactive prompts during package installation
+ENV DEBIAN_FRONTEND=noninteractive
+
+# Install required packages for iPXE build and cross-compilation
+RUN apt-get update && apt-get install -y \
+    build-essential \
     git \
-    musl-dev \
     perl \
     mtools \
     xorriso \
-    gcc-aarch64-none-elf \
-    binutils-aarch64-none-elf \
+    gcc-aarch64-linux-gnu \
+    binutils-aarch64-linux-gnu \
+    gcc-arm-linux-gnueabihf \
+    binutils-arm-linux-gnueabihf \
+    gcc-x86-64-linux-gnu \
+    binutils-x86-64-linux-gnu \
     tar \
     curl \
-    zlib-dev \
-    openssl-dev \
-    xz-dev \
-    syslinux \
-    && rm -rf /var/cache/apk/*
+    wget \
+    zlib1g-dev \
+    libssl-dev \
+    liblzma-dev \
+    syslinux-common \
+    syslinux-efi \
+    isolinux \
+    make \
+    libc6-dev \
+    && rm -rf /var/lib/apt/lists/*
 
 # Set working directory
 WORKDIR /build
@@ -42,8 +53,8 @@ COPY internal/ipxe/binary/script/ipxe-customizations/crypto.h config/local/
 
 # Copy iPXE customizations for undionly
 COPY internal/ipxe/binary/script/ipxe-customizations/general.undionly.h config/local/general.h
-RUN make bin/undionly.kpxe -j4 EMBED=embed.ipxe
-RUN make bin/ipxe.lkrn -j4 EMBED=embed.ipxe
+RUN make bin/undionly.kpxe -j4 EMBED=embed.ipxe CROSS=x86_64-linux-gnu-
+RUN make bin/ipxe.lkrn -j4 EMBED=embed.ipxe CROSS=x86_64-linux-gnu-
 
 # Copy iPXE customizations for EFI
 COPY internal/ipxe/binary/script/ipxe-customizations/general.efi.h config/local/general.h
@@ -52,15 +63,15 @@ COPY internal/ipxe/binary/script/ipxe-customizations/general.efi.h config/local/
 # Copy iPXE customizations for ISA
 COPY internal/ipxe/binary/script/ipxe-customizations/isa.h config/local/
 
-RUN make EMBED=embed.ipxe -j4 bin-x86_64-efi/ipxe.efi
-RUN make EMBED=embed.ipxe -j4 bin-x86_64-efi/ipxe.iso
+RUN make EMBED=embed.ipxe -j4 bin-x86_64-efi/ipxe.efi CROSS=x86_64-linux-gnu-
+RUN make EMBED=embed.ipxe -j4 bin-x86_64-efi/ipxe.iso CROSS=x86_64-linux-gnu-
 RUN rm config/local/isa.h
 
 RUN sed -i.bak '/^WORKAROUND_CFLAGS/ s|^|#|' "arch/arm64/Makefile"
 # Copy iPXE customizations for ARM64 EFI
 COPY internal/ipxe/binary/script/ipxe-customizations/nap.h config/local/
 # Build iPXE with ARM64 EFI using proper cross-compiler
-RUN make bin-arm64-efi/snp.efi -j2 EMBED=embed.ipxe CROSS=aarch64-none-elf-
+RUN make bin-arm64-efi/snp.efi -j2 EMBED=embed.ipxe CROSS=aarch64-linux-gnu-
 
 # Create output directory and copy the built EFI file
 RUN mkdir -p /output/ \
@@ -74,4 +85,4 @@ RUN mkdir -p /output/ \
 # Set the output directory as volume
 VOLUME ["/output"]
 
-ENTRYPOINT ["/bin/sh"]
+ENTRYPOINT ["/bin/bash"]

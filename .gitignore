@@ -24,3 +24,5 @@ tools/*/
 fw-vars.json
 openapi.yaml
 .vscode/settings.json
+bin/
+out/
