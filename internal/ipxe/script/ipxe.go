@@ -240,7 +240,7 @@ func (h *Handler) serveBootScript(
 	hw data,
 ) {
 	span := trace.SpanFromContext(ctx)
-	span.SetAttributes(attribute.String("smee.script_name", name))
+	span.SetAttributes(attribute.String("ironic.script_name", name))
 	var script []byte
 	// check if the custom script should be used
 	if hw.IPXEScriptURL != nil || hw.IPXEScript != "" {

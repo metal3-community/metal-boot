@@ -1,4 +1,4 @@
-// package bhttp is the http server for smee.
+// package bhttp is the http server for ironic.
 package http
 
 import (
@@ -56,7 +56,7 @@ func (s *Config) ServeHTTP(
 	mux.HandleFunc("/healthcheck", s.serveHealthchecker(s.GitRev, s.StartTime))
 
 	// wrap the mux with an OpenTelemetry interceptor
-	otelHandler := otelhttp.NewHandler(mux, "smee-http")
+	otelHandler := otelhttp.NewHandler(mux, "ironic-http")
 
 	// add X-Forwarded-For support if trusted proxies are configured
 	var xffHandler http.Handler
@@ -85,7 +85,7 @@ func (s *Config) ServeHTTP(
 		Handler: xffHandler,
 
 		// Mitigate Slowloris attacks. 30 seconds is based on Apache's recommended 20-40
-		// recommendation. Smee doesn't really have many headers so 20s should be plenty of time.
+		// recommendation. Ironic doesn't really have many headers so 20s should be plenty of time.
 		// https://en.wikipedia.org/wiki/Slowloris_(computer_security)
 		ReadHeaderTimeout: 20 * time.Second,
 	}

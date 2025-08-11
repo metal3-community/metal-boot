@@ -1100,15 +1100,18 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 			*req.Boot.BootSourceOverrideTarget,
 		)
 
-		var nextBootIndex uint16
+		nextBootIndex := uint16(99)
+		devPath := ""
 
 		switch *req.Boot.BootSourceOverrideTarget {
 		case Pxe:
 			s.Log.Info("setting boot source override to PXE", "system", systemId)
-			nextBootIndex = 3
+			// nextBootIndex = 3
+			devPath = "MAC()/IPv4()"
 		case Hdd:
 			s.Log.Info("setting boot source override to HDD", "system", systemId)
-			nextBootIndex = 2
+			// nextBootIndex = 2
+			devPath = "MAC()/IPv4()"
 		case None:
 			s.Log.Info("clearing boot source override", "system", systemId)
 		default:
@@ -1125,6 +1128,18 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		firmwareMgr, err := s.GetEdk2FirmwareManager(systemIdAddr)
 		if err != nil {
 			s.Log.Error(err, "failed to create firmware manager")
+			w.WriteHeader(http.StatusInternalServerError)
+			json.NewEncoder(w).Encode(redfishError(err))
+			return
+		}
+
+		if err = firmwareMgr.SetBootLast(types.BootEntry{
+			ID:      "0099",
+			Name:    "BootNext",
+			DevPath: devPath,
+			OptData: "4eac0881119f594d850ee21a522c59b2",
+		}); err != nil {
+			s.Log.Error(err, "failed to set boot last", "system", systemId)
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(redfishError(err))
 			return

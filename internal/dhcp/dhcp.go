@@ -264,7 +264,7 @@ func (i Info) Bootfile(
 
 	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Tinkerbell userclass (option 77).
 	switch { // order matters here.
-	case i.UserClass == Tinkerbell,
+	case i.UserClass == IPXE,
 		(customUC != "" && i.UserClass == customUC): // this case gets us out of an ipxe boot loop.
 		if ipxeScript != nil {
 			bootfile = ipxeScript.String()
@@ -278,16 +278,6 @@ func (i Info) Bootfile(
 			}
 			bootfile = ipxeHTTPBinServer.JoinPath(paths...).String()
 		}
-	case i.UserClass == IPXE: // if the "iPXE" user class is found it means we aren't in our custom version of ipxe, but because of the option 43 we're setting we need to give a full tftp url from which to boot.
-		t := url.URL{
-			Scheme: "tftp",
-			Host:   ipxeTFTPBinServer.String(),
-		}
-		paths := []string{i.IPXEBinary}
-		if i.Mac != nil {
-			paths = append([]string{i.Mac.String()}, paths...)
-		}
-		bootfile = t.JoinPath(paths...).String()
 	default:
 		paths := []string{i.IPXEBinary}
 		if i.VendorClassFrom() == "PXEClient" && util.IsRaspberryPI(i.Mac) {
