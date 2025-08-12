@@ -318,15 +318,20 @@ func (i Info) NextServer(ipxeHTTPBinServer *url.URL, ipxeTFTPBinServer netip.Add
 func (i Info) AddRPIOpt43(opts dhcpv4.Options) []byte {
 	// these are suboptions of option43. ref: https://datatracker.ietf.org/doc/html/rfc2132#section-8.4
 	if util.IsRaspberryPI(i.Mac) {
-		// TODO document what these hex strings are and why they are needed.
+		// Equivalent of dnsmasq's pxe-service=0,"Raspberry Pi Boot"
 		// https://www.raspberrypi.org/documentation/computers/raspberry-pi.html#PXE_OPTION43
 		// tested with Raspberry Pi 4 using UEFI from here: https://github.com/pftf/RPi4/releases/tag/v1.31
 		// all files were served via a tftp server and lived at the top level dir of the tftp server (i.e tftp://server/)
+
+		// Suboption 9: Boot Server Discovery Control - contains boot service type and description
 		// "\x00\x00\x11" is equal to NUL(Null), NUL(Null), DC1(Device Control 1)
+		// This provides the equivalent of pxe-service=0,"Raspberry Pi Boot"
 		opt9, _ := hex.DecodeString(
 			"00001152617370626572727920506920426f6f74",
 		) // "\x00\x00\x11Raspberry Pi Boot"
 		opts[9] = opt9
+
+		// Suboption 10: Boot Menu - provides PXE menu option
 		// "\x0a\x04\x00" is equal to LF(Line Feed), EOT(End of Transmission), NUL(Null)
 		opt10, _ := hex.DecodeString("00505845") // "\x0a\x04\x00PXE"
 		opts[10] = opt10

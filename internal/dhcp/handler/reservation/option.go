@@ -12,6 +12,7 @@ import (
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	dhcpotel "github.com/bmcpi/pibmc/internal/dhcp/otel"
 	"github.com/bmcpi/pibmc/internal/otel"
+	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/insomniacslk/dhcp/dhcpv4"
 )
 
@@ -124,12 +125,15 @@ func (h *Handler) setNetworkBootOpts(
 			d.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, opt43Bytes))
 
 			// For Raspberry PIs not booting in iPXE mode, ensure TFTP server is explicitly provided
-			// The AddRPIOpt43 function determines if this is an RPI
+			// Use AddRPIOpt43 logic to determine if this is an RPI, then add TFTP server configuration
 			if i.UserClass != dhcp.IPXE && i.UserClass != dhcp.Tinkerbell {
-				// Check if this is a Raspberry PI by using the same logic as AddRPIOpt43
-				// For RPIs, ensure TFTP server options are explicitly set
-				// Option 66: TFTP Server Name - explicitly specify the TFTP server IP
-				d.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionTFTPServerName, h.IPAddr.AsSlice()))
+				// Check if this is a Raspberry PI using the util package function
+				if util.IsRaspberryPI(i.Mac) {
+					// Option 66: TFTP Server Name - explicitly specify the TFTP server IP for RPIs
+					d.UpdateOption(
+						dhcpv4.OptGeneric(dhcpv4.OptionTFTPServerName, h.IPAddr.AsSlice()),
+					)
+				}
 			}
 		}
 	}
