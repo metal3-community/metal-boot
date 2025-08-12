@@ -2,7 +2,6 @@ package reservation
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
 	"fmt"
 	"net"
@@ -89,39 +88,30 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 	var reply *dhcpv4.DHCPv4
 	switch mt := p.Pkt.MessageType(); mt {
 	case dhcpv4.MessageTypeDiscover:
-		reply, _ := dhcpv4.NewReplyFromRequest(p.Pkt)
-		opts := dhcpv4.Options{}
+		d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
+		if err != nil {
+			if hardwareNotFound(err) {
+				span.SetStatus(codes.Ok, "no reservation found")
+				return
+			}
+			log.Info("error reading from backend", "error", err)
+			span.SetStatus(codes.Error, err.Error())
 
-		opt9, _ := hex.DecodeString(
-			"00001152617370626572727920506920426f6f74",
-		) // "\x00\x00\x11Raspberry Pi Boot"
-		opts[9] = opt9
+			return
+		}
+		if d.Disabled {
+			log.Info(
+				"DHCP is disabled for this MAC address, no response sent",
+				"type",
+				p.Pkt.MessageType().String(),
+			)
+			span.SetStatus(codes.Ok, "disabled DHCP response")
 
-		// Suboption 10: Boot Menu - provides PXE menu option
-		// "\x0a\x04\x00" is equal to LF(Line Feed), EOT(End of Transmission), NUL(Null)
-		opt10, _ := hex.DecodeString("00505845") // "\x0a\x04\x00PXE"
-		opts[10] = opt10
-		opt43Bytes := opts.ToBytes()
-
-		reply.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, opt43Bytes))
-		reply.UpdateOption(
-			dhcpv4.OptGeneric(dhcpv4.OptionTFTPServerName, h.IPAddr.AsSlice()),
-		)
-		return
-		// d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
-		// if err != nil {
-		// 	if hardwareNotFound(err) {
-		// 		span.SetStatus(codes.Ok, "no reservation found")
-		// 		return
-		// 	}
-		// 	log.Info("error reading from backend", "error", err)
-		// 	span.SetStatus(codes.Error, err.Error())
-
-		// 	return
-		// }
-		// log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
-		// reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeOffer)
-		// log = log.WithValues("type", dhcpv4.MessageTypeOffer.String())
+			return
+		}
+		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
+		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeOffer)
+		log = log.WithValues("type", dhcpv4.MessageTypeOffer.String())
 	case dhcpv4.MessageTypeRequest:
 		d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
 		if err != nil {
