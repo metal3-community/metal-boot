@@ -117,9 +117,20 @@ func (h *Handler) setNetworkBootOpts(
 				6:  []byte{8},
 				69: dhcpotel.TraceparentFromContext(ctx),
 			}
-			d.UpdateOption(
-				dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, i.AddRPIOpt43(pxe)),
-			)
+
+			// Use AddRPIOpt43 to add Raspberry PI specific options if needed
+			// This function detects RPIs and adds necessary DHCP option 43 suboptions
+			opt43Bytes := i.AddRPIOpt43(pxe)
+			d.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, opt43Bytes))
+
+			// For Raspberry PIs not booting in iPXE mode, ensure TFTP server is explicitly provided
+			// The AddRPIOpt43 function determines if this is an RPI
+			if i.UserClass != dhcp.IPXE && i.UserClass != dhcp.Tinkerbell {
+				// Check if this is a Raspberry PI by using the same logic as AddRPIOpt43
+				// For RPIs, ensure TFTP server options are explicitly set
+				// Option 66: TFTP Server Name - explicitly specify the TFTP server IP
+				d.UpdateOption(dhcpv4.OptGeneric(dhcpv4.OptionTFTPServerName, h.IPAddr.AsSlice()))
+			}
 		}
 	}
 
