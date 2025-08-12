@@ -1,0 +1,73 @@
+# Example configuration for PiBMC with DHCP lease management
+# This shows how to enable DNSMasq-compatible lease and configuration management
+
+address: "0.0.0.0"
+port: 8080
+
+# DHCP Configuration
+dhcp:
+  enabled: true
+  interface: "eth0"
+  address: "10.1.1.1"
+  port: 67
+  proxy_enabled: false # Use reservation handler instead of proxy
+
+  # Lease management files (DNSMasq compatible)
+  lease_file: "/var/lib/dhcp/dhcp.leases"
+  config_file: "/etc/dhcp/dhcp.conf"
+
+  # Network boot configuration
+  ipxe_binary_url:
+    scheme: "http"
+    address: "10.1.1.1"
+    port: 8080
+    path: "/ipxe"
+
+  ipxe_http_url:
+    scheme: "http"
+    address: "10.1.1.1"
+    port: 8080
+    path: "/boot"
+
+  tftp_address: "10.1.1.1"
+  tftp_port: 69
+  syslog_ip: "10.1.1.1"
+
+# TFTP Configuration
+tftp:
+  enabled: true
+  address: "10.1.1.1"
+  port: 69
+  root_directory: "/tftpboot"
+  ipxe_patch: ""
+
+# iPXE HTTP Script Configuration
+ipxe_http_script:
+  enabled: true
+  retries: 3
+  retry_delay: 1
+  tink_server: "10.1.1.1:42113"
+  hook_url: "http://10.1.1.1:3333"
+  tink_server_insecure_tls: true
+  tink_server_use_tls: false
+  extra_kernel_args:
+    - "console=ttyS0"
+    - "console=ttyS1"
+  static_ipxe_enabled: true
+  static_files_enabled: true
+
+# Backend Configuration
+backend_file_path: "/etc/pibmc/hardware.yaml"
+
+# Logging
+log_level: "info"
+
+# Trusted proxies (for HTTP headers)
+trusted_proxies: "10.0.0.0/8,172.16.0.0/12,192.168.0.0/16"
+
+# Unifi configuration
+unifi:
+  api_key: your_api_key
+  endpoint: https://192.168.0.1
+  site: "default"
+  device: "aa:bb:dd:cc:ee:ff"

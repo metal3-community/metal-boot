@@ -1,4 +1,5 @@
 redfish.yaml
+config.yaml
 # Added by goreleaser init:
 dist/
 tftpboot/
@@ -26,3 +27,4 @@ openapi.yaml
 .vscode/settings.json
 bin/
 out/
+/pibmc

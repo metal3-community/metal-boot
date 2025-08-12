@@ -5,8 +5,9 @@ import (
 	"net/netip"
 	"net/url"
 
+	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/dhcp"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler"
+	"github.com/bmcpi/pibmc/internal/dhcp/lease"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
 )
@@ -14,7 +15,7 @@ import (
 // Handler holds the configuration details for the running the DHCP server.
 type Handler struct {
 	// Backend is the backend to use for getting DHCP data.
-	Backend handler.BackendReader
+	Backend backend.BackendReader
 
 	// IPAddr is the IP address to use in DHCP responses.
 	// Option 54 and the sname DHCP header.
@@ -36,6 +37,12 @@ type Handler struct {
 
 	// SyslogAddr is the address to send syslog messages to. DHCP Option 7.
 	SyslogAddr netip.Addr
+
+	// LeaseManager handles DHCP lease file operations
+	LeaseManager *lease.Manager
+
+	// ConfigManager handles DHCP configuration file operations
+	ConfigManager *lease.ConfigManager
 }
 
 // Netboot holds the netboot configuration details used in running a DHCP server.

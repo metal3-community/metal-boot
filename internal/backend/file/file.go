@@ -307,7 +307,6 @@ func (w *Watcher) Put(
 		}
 
 		if n != nil {
-
 			if n.AllowNetboot != v.Netboot.AllowPXE {
 				v.Netboot.AllowPXE = n.AllowNetboot
 			}

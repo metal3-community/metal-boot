@@ -4,6 +4,7 @@ package remote
 import (
 	"context"
 	"crypto/tls"
+	"errors"
 	"fmt"
 	"io"
 	"net"
@@ -155,7 +156,6 @@ func (w *Remote) loadConfigs() error {
 	}
 
 	for k, v := range configs {
-
 		backendDir := path.Dir(w.config.BackendFilePath)
 		configFile := filepath.Join(backendDir, fmt.Sprintf("%s.yaml", k))
 
@@ -244,7 +244,6 @@ func (w *Remote) GetByMac(
 	netboot := w.getNetBoot(mac)
 
 	if activeClient, err := w.getActiveClientByMac(ctx, mac); err == nil {
-
 		power.Port = activeClient.SwPort
 
 		if ipAddr, err := netip.ParseAddr(activeClient.IP); err == nil {
@@ -265,7 +264,6 @@ func (w *Remote) GetByMac(
 		}
 
 		if network, err := w.client.GetNetwork(ctx, w.config.Unifi.Site, networkId); err == nil {
-
 			if _, cidr, err := net.ParseCIDR(network.IPSubnet); err == nil {
 				dhcp.SubnetMask = cidr.Mask
 			}
@@ -302,7 +300,6 @@ func (w *Remote) GetByMac(
 		} else {
 			w.Log.Error(err, "failed to get network")
 		}
-
 	} else {
 		w.Log.Error(err, "failed to get active client by mac")
 	}
@@ -352,36 +349,41 @@ func (w *Remote) getActiveClientByMac(
 }
 
 func (w *Remote) getActiveClientsForDevice(ctx context.Context) (unifi.ClientList, error) {
-	deviceMac := w.config.Unifi.Device
-	lastSeenMacLookup := map[string]int{}
+	filteredClients := unifi.ClientList{}
 
-	device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, deviceMac)
-	if err != nil {
-		return nil, err
-	}
-	if device.PortTable != nil {
-		for _, portTable := range device.PortTable {
-			if portTable.LastConnection.Mac != "" {
-				if hw, err := net.ParseMAC(portTable.LastConnection.Mac); err == nil {
-					if util.IsRaspberryPI(hw) {
-						lastSeenMacLookup[portTable.LastConnection.Mac] = portTable.PortIdx
+	if devices, err := w.client.ListDevice(ctx, w.config.Unifi.Site); err == nil {
+		for _, device := range devices {
+			if device.Type == "usw" {
+				for _, portTable := range device.PortTable {
+					if portTable.LastConnection.Mac != "" {
+						if hw, err := net.ParseMAC(portTable.LastConnection.Mac); err == nil {
+							if util.IsRaspberryPI(hw) {
+								client, err := w.client.GetClientLocal(
+									ctx,
+									w.config.Unifi.Site,
+									hw.String(),
+								)
+								if err != nil {
+									var notFoundErr *unifi.NotFoundError
+									if errors.As(err, &notFoundErr) {
+										// Client not found, continue
+										continue
+									}
+									return nil, err
+								}
+								if client.SwPort == 0 {
+									client.SwPort = portTable.PortIdx
+								}
+								filteredClients = append(filteredClients, *client)
+							}
+						}
 					}
 				}
 			}
 		}
-	}
-
-	filteredClients := unifi.ClientList{}
-
-	for k, v := range lastSeenMacLookup {
-		client, err := w.client.GetClientLocal(ctx, w.config.Unifi.Site, k)
-		if err != nil {
-			return nil, err
-		}
-		if client.SwPort == 0 {
-			client.SwPort = v
-		}
-		filteredClients = append(filteredClients, *client)
+	} else {
+		w.Log.Error(err, "failed to list devices")
+		return nil, err
 	}
 
 	return filteredClients, nil
@@ -463,7 +465,6 @@ func (w *Remote) GetByIP(
 	netboot := w.getNetBoot(dhcp.MACAddress)
 
 	if activeClient, err := w.getActiveClientByIP(ctx, ip); err == nil {
-
 		power.Port = activeClient.SwPort
 
 		if ipAddr, err := netip.ParseAddr(activeClient.IP); err == nil {
@@ -485,7 +486,6 @@ func (w *Remote) GetByIP(
 		dhcp.Disabled = false
 
 		if network, err := w.client.GetNetwork(ctx, w.config.Unifi.Site, activeClient.NetworkID); err == nil {
-
 			if _, cidr, err := net.ParseCIDR(network.IPSubnet); err == nil {
 				dhcp.SubnetMask = cidr.Mask
 			}
@@ -520,7 +520,6 @@ func (w *Remote) GetByIP(
 		} else {
 			return nil, nil, nil, err
 		}
-
 	} else {
 		return nil, nil, nil, err
 	}
@@ -558,7 +557,6 @@ func (w *Remote) Put(
 	}
 
 	if p != nil {
-
 		pwr := data.Power{}
 
 		if pd, ok := w.power[mac.String()]; ok {
@@ -687,7 +685,6 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 		MAC:     w.config.Unifi.Device,
 		PortIDX: util.Ptr(pwr.Port),
 	}); err != nil {
-
 		w.Log.Error(err, "failed to power cycle")
 		return err
 	}
@@ -698,17 +695,13 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 // Start starts watching a file for changes and updates the in memory data (w.data) on changew.
 // Start is a blocking method. Use a context cancellation to exit.
 func (w *Remote) Start(ctx context.Context) {
-	for {
-		select {
-		case <-ctx.Done():
-			w.Log.Info("stopping remote")
-			w.Log.Info("saving dhcp")
-			if err := w.saveConfigs(); err != nil {
-				w.Log.Error(err, "failed to save configs")
-			} else {
-				w.Log.Info("configs saved")
-			}
-			return
+	for range ctx.Done() {
+		w.Log.Info("stopping remote")
+		w.Log.Info("saving dhcp")
+		if err := w.saveConfigs(); err != nil {
+			w.Log.Error(err, "failed to save configs")
+		} else {
+			w.Log.Info("configs saved")
 		}
 	}
 }

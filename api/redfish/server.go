@@ -13,9 +13,9 @@ import (
 	"strings"
 	"time"
 
+	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler"
 	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/bmcpi/uefi-firmware-manager/edk2"
 	"github.com/bmcpi/uefi-firmware-manager/manager"
@@ -103,7 +103,7 @@ type RedfishServer struct {
 
 	Log logr.Logger
 
-	backend handler.BackendStore
+	backend backend.BackendStore
 
 	firmwarePath string
 }
@@ -135,7 +135,7 @@ func (f *RedfishServer) GetEdk2FirmwareManager(
 	return firmwareMgr, nil
 }
 
-func NewRedfishServer(cfg *config.Config, backend handler.BackendStore) *RedfishServer {
+func NewRedfishServer(cfg *config.Config, backend backend.BackendStore) *RedfishServer {
 	server := &RedfishServer{
 		Config:       cfg,
 		Log:          cfg.Log.WithName("redfish-server"),
@@ -775,28 +775,6 @@ func (s *RedfishServer) UpdateBIOS(w http.ResponseWriter, r *http.Request, syste
 				return
 			}
 		}
-
-		// Update PXE boot if provided
-		if pxeBoot, ok := attrs["EnablePXEBoot"].(bool); ok {
-			err = firmwareMgr.EnablePXEBoot(pxeBoot)
-			if err != nil {
-				s.Log.Error(err, "failed to update PXE boot")
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(redfishError(err))
-				return
-			}
-		}
-
-		// Update HTTP boot if provided
-		if httpBoot, ok := attrs["EnableHTTPBoot"].(bool); ok {
-			err = firmwareMgr.EnableHTTPBoot(httpBoot)
-			if err != nil {
-				s.Log.Error(err, "failed to update HTTP boot")
-				w.WriteHeader(http.StatusInternalServerError)
-				json.NewEncoder(w).Encode(redfishError(err))
-				return
-			}
-		}
 	}
 
 	// Save changes
@@ -1101,17 +1079,14 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		)
 
 		nextBootIndex := uint16(99)
-		devPath := ""
 
 		switch *req.Boot.BootSourceOverrideTarget {
 		case Pxe:
 			s.Log.Info("setting boot source override to PXE", "system", systemId)
-			// nextBootIndex = 3
-			devPath = "MAC()/IPv4()"
+			nextBootIndex = 99
 		case Hdd:
 			s.Log.Info("setting boot source override to HDD", "system", systemId)
-			// nextBootIndex = 2
-			devPath = "MAC()/IPv4()"
+			nextBootIndex = 0
 		case None:
 			s.Log.Info("clearing boot source override", "system", systemId)
 		default:
@@ -1133,23 +1108,27 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 			return
 		}
 
-		if err = firmwareMgr.SetBootLast(types.BootEntry{
-			ID:      "0099",
-			Name:    "BootNext",
-			DevPath: devPath,
-			OptData: "4eac0881119f594d850ee21a522c59b2",
-		}); err != nil {
-			s.Log.Error(err, "failed to set boot last", "system", systemId)
+		if err := firmwareMgr.SetMacAddress(systemIdAddr); err != nil {
+			s.Log.Error(err, "failed to set MAC address", "system", systemId)
 			w.WriteHeader(http.StatusInternalServerError)
 			json.NewEncoder(w).Encode(redfishError(err))
 			return
 		}
 
-		if err = firmwareMgr.SetBootNext(nextBootIndex); err != nil {
-			s.Log.Error(err, "failed to set boot next", "system", systemId)
-			w.WriteHeader(http.StatusInternalServerError)
-			json.NewEncoder(w).Encode(redfishError(err))
-			return
+		if nextBootIndex == 0 {
+			if err := firmwareMgr.DeleteBootNext(); err != nil {
+				s.Log.Error(err, "failed to delete boot next", "system", systemId)
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(redfishError(err))
+				return
+			}
+		} else {
+			if err = firmwareMgr.SetBootNext(nextBootIndex); err != nil {
+				s.Log.Error(err, "failed to set boot next", "system", systemId)
+				w.WriteHeader(http.StatusInternalServerError)
+				json.NewEncoder(w).Encode(redfishError(err))
+				return
+			}
 		}
 
 		if err = firmwareMgr.SaveChanges(); err != nil {
@@ -1324,7 +1303,7 @@ func (s *RedfishServer) UpdateServiceSimpleUpdate(w http.ResponseWriter, r *http
 }
 
 // processFirmwareUpdate handles the firmware update process in the background.
-func (s *RedfishServer) processFirmwareUpdate(ctx context.Context, imageURI string, taskId string) {
+func (s *RedfishServer) processFirmwareUpdate(_ context.Context, imageURI string, taskId string) {
 	s.Log.Info("starting firmware update task", "uri", imageURI, "taskId", taskId)
 
 	// Placeholder for task update mechanism

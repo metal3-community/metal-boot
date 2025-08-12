@@ -12,7 +12,7 @@ import (
 // Handler is a noop backend.
 type noop struct{}
 
-// GetKeys implements handler.BackendReader.
+// GetKeys implements backend.BackendReader.
 func (h noop) GetKeys(context.Context) ([]net.HardwareAddr, error) {
 	return nil, errors.New("no backend specified, please specify a backend")
 }

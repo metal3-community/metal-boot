@@ -369,6 +369,26 @@ flowchart TD
 3. IPA collects hardware information and sends to Ironic Inspector
 4. Ironic manages the devices through PiBMC's Redfish API
 
+### DHCP Lease Management
+
+PiBMC supports DNSMasq-compatible DHCP lease management for production environments. See [DHCP Lease Management](docs/DHCP_LEASE_MANAGEMENT.md) for complete documentation.
+
+Key features:
+- DNSMasq-compatible lease file format
+- Automatic DHCP option configuration for netboot clients
+- Persistent lease storage across service restarts
+- Periodic cleanup of expired leases
+
+Enable lease management in your configuration:
+
+```yaml
+dhcp:
+  enabled: true
+  proxy_enabled: false  # Required for lease management
+  lease_file: "/var/lib/dhcp/dhcp.leases"
+  config_file: "/etc/dhcp/dhcp.conf"
+```
+
 ## Testing
 
 ### Local Testing Environment

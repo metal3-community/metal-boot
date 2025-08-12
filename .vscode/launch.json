@@ -9,14 +9,8 @@
       "type": "go",
       "request": "launch",
       "mode": "auto",
-      "program": "${workspaceFolder}"
-    },
-    {
-      "name": "Launch CMD",
-      "type": "go",
-      "request": "launch",
-      "mode": "auto",
-      "program": "${workspaceFolder}/cmd/pibmc"
+      "program": "${workspaceFolder}/cmd/pibmc",
+      "cwd": "${workspaceFolder}"
     },
     {
       "name": "Launch file",

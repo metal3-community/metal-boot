@@ -21,9 +21,9 @@ import (
 	"net/netip"
 	"net/url"
 
+	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/dhcp"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler"
 	oteldhcp "github.com/bmcpi/pibmc/internal/dhcp/otel"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
@@ -39,7 +39,7 @@ const tracerName = "github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
 // Handler holds the configuration details for the running the DHCP server.
 type Handler struct {
 	// Backend is the backend to use for getting DHCP data.
-	Backend handler.BackendReader
+	Backend backend.BackendReader
 
 	// IPAddr is the IP address to use in DHCP responses.
 	// Option 54 and the sname DHCP header.

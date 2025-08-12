@@ -62,7 +62,6 @@ func (s Handler) DownloadImages() error {
 	}
 
 	for _, image := range s.ImageURLs {
-
 		if util.ExistsInRoot(root, image.Path) {
 			s.Log.Info("file already exists", "path", image.Path)
 			continue

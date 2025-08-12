@@ -1,334 +1,339 @@
 package tftp
 
 import (
+	"bytes"
 	"context"
+	"errors"
 	"io"
 	"net"
-	"net/netip"
-	"reflect"
+	"os"
+	"path/filepath"
 	"testing"
 
+	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler"
 	"github.com/go-logr/logr"
-	"github.com/pin/tftp/v3"
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
+	"github.com/tinkerbell/ipxedust/binary"
 )
 
-func TestHandler_OnSuccess(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
+// mockBackend implements backend.BackendReader for testing.
+type mockBackend struct {
+	mock.Mock
+}
+
+func (m *mockBackend) GetByIP(
+	ctx context.Context,
+	ip net.IP,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
+	args := m.Called(ctx, ip)
+	dhcp := args.Get(0)
+	netboot := args.Get(1)
+	power := args.Get(2)
+	err := args.Error(3)
+
+	var dhcpPtr *data.DHCP
+	if dhcp != nil {
+		dhcpPtr = dhcp.(*data.DHCP)
 	}
-	type args struct {
-		stats tftp.TransferStats
+
+	var netbootPtr *data.Netboot
+	if netboot != nil {
+		netbootPtr = netboot.(*data.Netboot)
 	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
+
+	var powerPtr *data.Power
+	if power != nil {
+		powerPtr = power.(*data.Power)
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
-			}
-			h.OnSuccess(tt.args.stats)
-		})
+
+	return dhcpPtr, netbootPtr, powerPtr, err
+}
+
+func (m *mockBackend) GetByMac(
+	ctx context.Context,
+	mac net.HardwareAddr,
+) (*data.DHCP, *data.Netboot, *data.Power, error) {
+	args := m.Called(ctx, mac)
+	return args.Get(0).(*data.DHCP), args.Get(1).(*data.Netboot), args.Get(2).(*data.Power), args.Error(
+		3,
+	)
+}
+
+func (m *mockBackend) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]net.HardwareAddr), args.Error(1)
+}
+
+// mockReaderFrom implements io.ReaderFrom for testing.
+type mockReaderFrom struct {
+	*bytes.Buffer
+}
+
+func newMockReaderFrom() *mockReaderFrom {
+	return &mockReaderFrom{
+		Buffer: &bytes.Buffer{},
 	}
 }
 
-func TestHandler_OnFailure(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
-	}
-	type args struct {
-		stats tftp.TransferStats
-		err   error
-	}
-	tests := []struct {
-		name   string
-		fields fields
-		args   args
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
-			}
-			h.OnFailure(tt.args.stats, tt.args.err)
-		})
-	}
+func (m *mockReaderFrom) ReadFrom(r io.Reader) (int64, error) {
+	return m.Buffer.ReadFrom(r)
 }
 
-func TestServer_ListenAndServe(t *testing.T) {
-	type fields struct {
-		Logger        logr.Logger
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-	}
-	type args struct {
-		ctx     context.Context
-		addr    netip.AddrPort
-		backend handler.BackendReader
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			r := &Server{
-				Logger:        tt.fields.Logger,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-			}
-			if err := r.ListenAndServe(tt.args.ctx, tt.args.addr, tt.args.backend); (err != nil) != tt.wantErr {
-				t.Errorf("Server.ListenAndServe() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+// mockOutgoingTransfer implements tftp.OutgoingTransfer for testing.
+type mockOutgoingTransfer struct {
+	io.ReaderFrom
+	remoteAddr net.UDPAddr
 }
 
-func TestServe(t *testing.T) {
-	type args struct {
-		in0  context.Context
-		conn net.PacketConn
-		s    *tftp.Server
-	}
-	tests := []struct {
-		name    string
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			if err := Serve(tt.args.in0, tt.args.conn, tt.args.s); (err != nil) != tt.wantErr {
-				t.Errorf("Serve() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+func (m *mockOutgoingTransfer) RemoteAddr() net.UDPAddr {
+	return m.remoteAddr
 }
 
-func TestHandler_getDhcpInfo(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
-	}
-	type args struct {
-		ctx context.Context
-		rf  io.ReaderFrom
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		want    *data.DHCP
-		want1   *data.Netboot
-		want2   *data.Power
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
-			}
-			got, got1, got2, err := h.getDhcpInfo(tt.args.ctx, tt.args.rf)
-			if (err != nil) != tt.wantErr {
-				t.Errorf("Handler.getDhcpInfo() error = %v, wantErr %v", err, tt.wantErr)
-				return
-			}
-			if !reflect.DeepEqual(got, tt.want) {
-				t.Errorf("Handler.getDhcpInfo() got = %v, want %v", got, tt.want)
-			}
-			if !reflect.DeepEqual(got1, tt.want1) {
-				t.Errorf("Handler.getDhcpInfo() got1 = %v, want %v", got1, tt.want1)
-			}
-			if !reflect.DeepEqual(got2, tt.want2) {
-				t.Errorf("Handler.getDhcpInfo() got2 = %v, want %v", got2, tt.want2)
-			}
-		})
-	}
+// mockIncomingTransfer implements tftp.IncomingTransfer for testing.
+type mockIncomingTransfer struct {
+	io.WriterTo
+	remoteAddr net.UDPAddr
+}
+
+func (m *mockIncomingTransfer) RemoteAddr() net.UDPAddr {
+	return m.remoteAddr
 }
 
 func TestHandler_HandleRead(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
-	}
-	type args struct {
-		fullfilepath string
-		rf           io.ReaderFrom
-	}
+	// Setup test directory
+	tempDir := t.TempDir()
+	testFile := filepath.Join(tempDir, "test.txt")
+	testContent := []byte("test file content")
+	require.NoError(t, os.WriteFile(testFile, testContent, 0o644))
+
+	// Create MAC address for testing
+	mac, err := net.ParseMAC("aa:bb:cc:dd:ee:ff")
+	require.NoError(t, err)
+
 	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
+		name          string
+		fullfilepath  string
+		setupBackend  func(*mockBackend)
+		isWrite       bool
+		expectedError error
+		expectedData  []byte
+		rootDirectory string
 	}{
-		// TODO: Add test cases.
+		{
+			name:         "read: serve iPXE binary with default patch",
+			fullfilepath: "undionly.kpxe",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+			},
+			rootDirectory: tempDir,
+		},
+		{
+			name:         "read: serve iPXE binary with custom patch from netboot",
+			fullfilepath: "undionly.kpxe",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				netboot := &data.Netboot{IPXEScript: "custom script"}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, netboot, (*data.Power)(nil), nil)
+			},
+			rootDirectory: tempDir,
+		},
+		{
+			name:         "read: serve file from filesystem",
+			fullfilepath: "test.txt",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+			},
+			expectedData:  testContent,
+			rootDirectory: tempDir,
+		},
+		{
+			name:         "read: resolve serial to MAC address",
+			fullfilepath: "12a34567/test.txt",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+			},
+			rootDirectory: tempDir,
+		},
+		{
+			name:         "read: file not found returns ErrNotExist",
+			fullfilepath: "nonexistent.txt",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+			},
+			expectedError: os.ErrNotExist,
+			rootDirectory: tempDir,
+		},
+		{
+			name:         "read: DHCP info error logs but continues",
+			fullfilepath: "test.txt",
+			setupBackend: func(mb *mockBackend) {
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return((*data.DHCP)(nil), (*data.Netboot)(nil), (*data.Power)(nil), errors.New("backend error"))
+			},
+			expectedData:  testContent,
+			rootDirectory: tempDir,
+		},
+		{
+			name:         "read: invalid root directory",
+			fullfilepath: "test.txt",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+			},
+			rootDirectory: "/nonexistent/path",
+		},
+		{
+			name:         "read: MAC-specific path fallback to generic",
+			fullfilepath: "aa:bb:cc:dd:ee:ff/generic.txt",
+			setupBackend: func(mb *mockBackend) {
+				dhcp := &data.DHCP{MACAddress: mac}
+				mb.On("GetByIP", mock.Anything, mock.Anything).
+					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+			},
+			expectedError: os.ErrNotExist,
+			rootDirectory: tempDir,
+		},
 	}
+
 	for _, tt := range tests {
 		t.Run(tt.name, func(t *testing.T) {
-			h := &Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
+			// Setup mocks
+			mockBackend := &mockBackend{}
+			if tt.setupBackend != nil {
+				tt.setupBackend(mockBackend)
 			}
-			if err := h.HandleRead(tt.args.fullfilepath, tt.args.rf); (err != nil) != tt.wantErr {
-				t.Errorf("Handler.HandleRead() error = %v, wantErr %v", err, tt.wantErr)
+
+			// Create handler
+			handler := &Handler{
+				ctx:           context.Background(),
+				RootDirectory: tt.rootDirectory,
+				Patch:         "default patch",
+				Log:           logr.Discard(),
+				backend:       mockBackend,
 			}
+
+			// Setup transfer
+			var err error
+			if tt.isWrite {
+				wt := &mockIncomingTransfer{
+					WriterTo:   &bytes.Buffer{},
+					remoteAddr: net.UDPAddr{IP: net.ParseIP("192.168.1.100")},
+				}
+				err = handler.HandleWrite(tt.fullfilepath, wt)
+			} else {
+				rf := &mockOutgoingTransfer{
+					ReaderFrom: newMockReaderFrom(),
+					remoteAddr: net.UDPAddr{IP: net.ParseIP("192.168.1.100")},
+				}
+				err = handler.HandleRead(tt.fullfilepath, rf)
+				if tt.expectedData != nil {
+					if mrf, ok := rf.ReaderFrom.(*mockReaderFrom); ok {
+						assert.Equal(t, tt.expectedData, mrf.Bytes())
+					}
+				}
+			}
+
+			// Verify results
+			if tt.expectedError != nil {
+				assert.ErrorIs(t, err, tt.expectedError)
+			} else {
+				assert.NoError(t, err)
+			}
+
+			mockBackend.AssertExpectations(t)
 		})
 	}
 }
 
-func TestHandler_createFile(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
+func TestHandler_HandleRead_iPXEBinary(t *testing.T) {
+	// Mock binary.Files for testing
+	originalFiles := binary.Files
+	binary.Files = map[string][]byte{
+		"test.kpxe": []byte("test ipxe binary"),
 	}
-	type args struct {
-		root     *Root
-		filename string
-		content  []byte
+	defer func() { binary.Files = originalFiles }()
+
+	mockBackend := &mockBackend{}
+	mac, _ := net.ParseMAC("aa:bb:cc:dd:ee:ff")
+	dhcp := &data.DHCP{MACAddress: mac}
+	netboot := &data.Netboot{IPXEScript: "custom script content"}
+	mockBackend.On("GetByIP", mock.Anything, mock.Anything).
+		Return(dhcp, netboot, (*data.Power)(nil), nil)
+
+	handler := &Handler{
+		ctx:           context.Background(),
+		RootDirectory: t.TempDir(),
+		Patch:         "default patch",
+		Log:           logr.Discard(),
+		backend:       mockBackend,
 	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
+
+	rf := &mockOutgoingTransfer{
+		ReaderFrom: newMockReaderFrom(),
+		remoteAddr: net.UDPAddr{IP: net.ParseIP("192.168.1.100")},
 	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
-			}
-			if err := h.createFile(tt.args.root, tt.args.filename, tt.args.content); (err != nil) != tt.wantErr {
-				t.Errorf("Handler.createFile() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+
+	err := handler.HandleRead("test.kpxe", rf)
+	assert.NoError(t, err)
+
+	mockBackend.AssertExpectations(t)
 }
 
-func TestHandler_HandleIpxeRead(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
+func TestHandler_HandleRead_GetRemoteIPError(t *testing.T) {
+	handler := &Handler{
+		ctx:           context.Background(),
+		RootDirectory: t.TempDir(),
+		Log:           logr.Discard(),
+		backend:       &mockBackend{},
 	}
-	type args struct {
-		filename string
-		rf       io.ReaderFrom
-		content  []byte
-		patch    string
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
-			}
-			if err := h.HandleIpxeRead(tt.args.filename, tt.args.rf, tt.args.content, tt.args.patch); (err != nil) != tt.wantErr {
-				t.Errorf("Handler.HandleIpxeRead() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+
+	transfer := &mockOutgoingTransfer{} // No remote address
+
+	err := handler.HandleRead("test.txt", transfer)
+	assert.Error(t, err) // Expect an error because getRemoteIP will fail
 }
 
-func TestHandler_HandleWrite(t *testing.T) {
-	type fields struct {
-		ctx           context.Context
-		RootDirectory string
-		Patch         string
-		Log           logr.Logger
-		backend       handler.BackendReader
-	}
-	type args struct {
-		filename string
-		wt       io.WriterTo
-	}
-	tests := []struct {
-		name    string
-		fields  fields
-		args    args
-		wantErr bool
-	}{
-		// TODO: Add test cases.
-	}
-	for _, tt := range tests {
-		t.Run(tt.name, func(t *testing.T) {
-			h := &Handler{
-				ctx:           tt.fields.ctx,
-				RootDirectory: tt.fields.RootDirectory,
-				Patch:         tt.fields.Patch,
-				Log:           tt.fields.Log,
-				backend:       tt.fields.backend,
-			}
-			if err := h.HandleWrite(tt.args.filename, tt.args.wt); (err != nil) != tt.wantErr {
-				t.Errorf("Handler.HandleWrite() error = %v, wantErr %v", err, tt.wantErr)
-			}
-		})
-	}
+// mockBackend needs to implement the full backend.BackendReader interface.
+func (m *mockBackend) Create(ctx context.Context, dhcp *data.DHCP, netboot *data.Netboot) error {
+	args := m.Called(ctx, dhcp, netboot)
+	return args.Error(0)
 }
+
+func (m *mockBackend) Delete(ctx context.Context, mac net.HardwareAddr) error {
+	args := m.Called(ctx, mac)
+	return args.Error(0)
+}
+
+func (m *mockBackend) GetByMacAndIP(
+	ctx context.Context,
+	mac net.HardwareAddr,
+	ip net.IP,
+) (*data.DHCP, *data.Netboot, error) {
+	args := m.Called(ctx, mac, ip)
+	return args.Get(0).(*data.DHCP), args.Get(1).(*data.Netboot), args.Error(2)
+}
+
+func (m *mockBackend) ListAll(ctx context.Context) ([]*data.DHCP, []*data.Netboot, error) {
+	args := m.Called(ctx)
+	return args.Get(0).([]*data.DHCP), args.Get(1).([]*data.Netboot), args.Error(2)
+}
+
+func (m *mockBackend) Update(ctx context.Context, dhcp *data.DHCP, netboot *data.Netboot) error {
+	args := m.Called(ctx, dhcp, netboot)
+	return args.Error(0)
+}
+
+var _ backend.BackendReader = &mockBackend{}

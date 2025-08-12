@@ -76,6 +76,7 @@ type DhcpConfig struct {
 	Interface         string  `yaml:"interface"            mapstructure:"interface"`
 	Address           string  `yaml:"address"              mapstructure:"address"`
 	Port              int     `yaml:"port"                 mapstructure:"port"`
+	ProxyEnabled      bool    `yaml:"proxy_enabled"        mapstructure:"proxy_enabled"`
 	IpxeBinaryUrl     IpxeUrl `yaml:"ipxe_binary_url"      mapstructure:"ipxe_binary_url"`
 	IpxeHttpUrl       IpxeUrl `yaml:"ipxe_http_url"        mapstructure:"ipxe_http_url"`
 	IpxeHttpScript    IpxeUrl `yaml:"ipxe_http_script"     mapstructure:"ipxe_http_script"`
@@ -83,6 +84,9 @@ type DhcpConfig struct {
 	TftpAddress       string  `yaml:"tftp_address"         mapstructure:"tftp_address"`
 	TftpPort          int     `yaml:"tftp_port"            mapstructure:"tftp_port"`
 	SyslogIP          string  `yaml:"syslog_ip"            mapstructure:"syslog_ip"`
+	StaticIPAMEnabled bool    `yaml:"static_ipam_enabled"  mapstructure:"static_ipam_enabled"`
+	LeaseFile         string  `yaml:"lease_file"           mapstructure:"lease_file"`
+	ConfigFile        string  `yaml:"config_file"          mapstructure:"config_file"`
 }
 
 type IpxeHttpScript struct {
@@ -114,7 +118,7 @@ type ImageURL struct {
 	URL  string `yaml:"url"  mapstructure:"url"`
 }
 
-type ImagesConfig struct {
+type StaticConfig struct {
 	Enabled       bool       `yaml:"enabled"        mapstructure:"enabled"`
 	ImageURLs     []ImageURL `yaml:"image_urls"     mapstructure:"image_urls"`
 	RootDirectory string     `yaml:"root_directory" mapstructure:"root_directory"`
@@ -133,7 +137,7 @@ type Config struct {
 	IpxeHttpScript  IpxeHttpScript `yaml:"ipxe_http_script"  mapstructure:"ipxe_http_script"`
 	TrustedProxies  string         `yaml:"trusted_proxies"   mapstructure:"trusted_proxies"`
 	Otel            OtelConfig     `yaml:"otel"              mapstructure:"otel"`
-	Images          ImagesConfig   `yaml:"images"            mapstructure:"images"`
+	Static          StaticConfig   `yaml:"static"            mapstructure:"static"`
 	ResetDelaySec   int            `yaml:"reset_delay_sec"   mapstructure:"reset_delay_sec"`
 	FirmwarePath    string         `yaml:"firmware_path"     mapstructure:"firmware_path"`
 }
@@ -200,7 +204,7 @@ func NewConfig() (conf *Config, err error) {
 
 	netInfo := GetDefaultIpAddrInfo()
 
-	viper.SetConfigName("redfish")
+	viper.SetConfigName("config")
 
 	viper.AddConfigPath("/app/")
 	viper.AddConfigPath("/config/")
@@ -230,6 +234,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dhcp.interface", netInfo.Iface)
 	viper.SetDefault("dhcp.address", netInfo.BindIP)
 	viper.SetDefault("dhcp.port", 67)
+	viper.SetDefault("dhcp.proxy_enabled", false)
 	viper.SetDefault("dhcp.ipxe_http_script_url", "")
 	viper.SetDefault("dhcp.ipxe_binary_url.address", netInfo.ExternalIP)
 	viper.SetDefault("dhcp.ipxe_binary_url.port", netInfo.Port)
@@ -242,10 +247,11 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dhcp.tftp_address", netInfo.ExternalIP)
 	viper.SetDefault("dhcp.tftp_port", 69)
 	viper.SetDefault("dhcp.syslog_ip", "")
+	viper.SetDefault("dhcp.static_ipam_enabled", false)
 
-	viper.SetDefault("images.enabled", true)
-	viper.SetDefault("images.image_urls", []ImageURL{})
-	viper.SetDefault("images.root_directory", "/images/")
+	viper.SetDefault("static.enabled", true)
+	viper.SetDefault("static.image_urls", []ImageURL{})
+	viper.SetDefault("static.root_directory", "/shared/html")
 
 	viper.SetDefault("ipxe_http_script.enabled", true)
 	viper.SetDefault("ipxe_http_script.retries", 3)
@@ -284,7 +290,7 @@ func NewConfig() (conf *Config, err error) {
 	// Load the Config the first time we start the app.
 	err = loadConfig(conf)
 	if err != nil {
-		return
+		return conf, err
 	}
 
 	conf.Log = defaultLogger(conf.LogLevel)
@@ -298,7 +304,7 @@ func NewConfig() (conf *Config, err error) {
 		_ = loadConfig(conf)
 	})
 
-	return
+	return conf, err
 }
 
 func loadConfig(conf *Config) (err error) {

@@ -1,81 +1,68 @@
 package tftp
 
 import (
-	"errors"
 	"io/fs"
 	"os"
 	"path/filepath"
-	"syscall"
 )
 
+// Root provides a rooted filesystem for TFTP operations.
 type Root struct {
-	*os.Root
+	root string
 }
 
-func OpenRoot(path string) (*Root, error) {
-	root, err := os.OpenRoot(path)
-	if err != nil {
+// NewRoot creates a new Root rooted at the given path.
+func NewRoot(root string) (*Root, error) {
+	if _, err := os.Stat(root); os.IsNotExist(err) {
 		return nil, err
 	}
-	return &Root{root}, nil
+	return &Root{
+		root: root,
+	}, nil
 }
 
-func (root *Root) MkdirAll(path string, perm os.FileMode) error {
-	// Fast path: if we can tell whether path is a directory or file, stop with success or error.
-	dir, err := root.Stat(path)
-	if err == nil {
-		if dir.IsDir() {
-			return nil
-		}
-		return &os.PathError{Op: "mkdir", Path: path, Err: syscall.ENOTDIR}
-	}
-
-	// Slow path: make sure parent exists and then call Mkdir for path.
-
-	// Extract the parent folder from path by first removing any trailing
-	// path separator and then scanning backward until finding a path
-	// separator or reaching the beginning of the string.
-	i := len(path) - 1
-	for i >= 0 && os.IsPathSeparator(path[i]) {
-		i--
-	}
-	for i >= 0 && !os.IsPathSeparator(path[i]) {
-		i--
-	}
-	if i < 0 {
-		i = 0
-	}
-
-	// If there is a parent directory, and it is not the volume name,
-	// recurse to ensure parent directory exists.
-	if parent := path[:i]; len(parent) > len(filepath.VolumeName(path)) {
-		err = root.MkdirAll(parent, perm)
-		if err != nil {
-			return err
-		}
-	}
-
-	// Parent now exists; invoke Mkdir and use its result.
-	err = root.Mkdir(path, perm)
-	if err != nil {
-		// Handle arguments like "foo/." by
-		// double-checking that directory doesn't exist.
-		dir, err1 := root.Lstat(path)
-		if err1 == nil && dir.IsDir() {
-			return nil
-		}
-		return err
-	}
-	return nil
+// Open opens a file from the rooted filesystem.
+func (r *Root) Open(name string) (fs.File, error) {
+	return os.Open(filepath.Join(r.root, name))
 }
 
-func (root *Root) Exists(path string) bool {
-	_, err := root.Stat(path)
-	if err == nil {
-		return true
-	}
-	if errors.Is(err, fs.ErrNotExist) {
-		return false
-	}
-	return false
+// Create creates a file in the rooted filesystem.
+func (r *Root) Create(name string) (*os.File, error) {
+	return os.Create(filepath.Join(r.root, name))
+}
+
+// MkdirAll creates a directory path in the rooted filesystem.
+func (r *Root) MkdirAll(path string, perm os.FileMode) error {
+	return os.MkdirAll(filepath.Join(r.root, path), perm)
+}
+
+// Stat returns the FileInfo for a file in the rooted filesystem.
+func (r *Root) Stat(name string) (fs.FileInfo, error) {
+	return os.Stat(filepath.Join(r.root, name))
+}
+
+// Exists checks if a path exists in the rooted filesystem.
+func (r *Root) Exists(path string) bool {
+	_, err := r.Stat(path)
+	return err == nil
+}
+
+// Close is a no-op for Root.
+func (r *Root) Close() error {
+	return nil // Nothing to close
+}
+
+// OpenFile opens a file from the rooted filesystem with the specified flag.
+func (r *Root) OpenFile(name string, flag int, perm os.FileMode) (*os.File, error) {
+	return os.OpenFile(filepath.Join(r.root, name), flag, perm)
+}
+
+// Lstat returns a FileInfo describing the named file.
+func (r *Root) Lstat(name string) (fs.FileInfo, error) {
+	return os.Lstat(filepath.Join(r.root, name))
+}
+
+// Mkdir creates a new directory with the specified name and permission bits.
+func (r *Root) Mkdir(name string, perm os.FileMode) error {
+	return os.Mkdir(filepath.Join(r.root, name), perm)
 }

@@ -1,224 +1,444 @@
 package main
 
 import (
-	"encoding/binary"
-	"encoding/hex"
+	"context"
 	"errors"
 	"fmt"
-	"strings"
+	"log/slog"
+	"net"
+	"net/netip"
+	"net/url"
+	"os"
+	"os/signal"
+	"path"
+	"syscall"
+	"time"
 
-	"github.com/bmcpi/uefi-firmware-manager/efi"
-	"github.com/bmcpi/uefi-firmware-manager/varstore"
+	"github.com/bmcpi/pibmc/api"
+	"github.com/bmcpi/pibmc/api/health"
+	"github.com/bmcpi/pibmc/api/ipxe"
+	"github.com/bmcpi/pibmc/api/iso"
+	"github.com/bmcpi/pibmc/api/metrics"
+	"github.com/bmcpi/pibmc/api/redfish"
+	"github.com/bmcpi/pibmc/internal/backend"
+	"github.com/bmcpi/pibmc/internal/backend/remote"
+	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
+	"github.com/bmcpi/pibmc/internal/dhcp/handler/reservation"
+	dhcpServer "github.com/bmcpi/pibmc/internal/dhcp/server"
+	"github.com/bmcpi/pibmc/internal/tftp"
+	"github.com/go-logr/logr"
+	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/insomniacslk/dhcp/dhcpv4/server4"
+	"golang.org/x/sync/errgroup"
 )
 
-// type BootEntry struct {
-// 	Attr    uint32
-// 	Title   string
-// 	DevPath string
-// 	MACAddr string
-// 	OptData []byte
-// }
+var (
+	// GitRev is the git revision of the build. It is set by the Makefile.
+	GitRev = "unknown (use make)"
 
-// func (b *BootEntry) UnmarshalJSON(data []byte) error {
-// 	// Extract the title (UTF-16LE decoding)
-// 	var titleBuilder strings.Builder
-// 	for i := 4; i < len(data); i += 2 {
-// 		if data[i] == 0 && data[i+1] == 0 { // Null-terminator for UTF-16
-// 			break
-// 		}
-// 		titleBuilder.WriteByte(data[i]) // Extract ASCII characters from UTF-16
-// 	}
-// 	title := titleBuilder.String()
+	startTime = time.Now()
+)
 
-// 	// Check if it starts with "D" (Boot Entry Identifier)
-// 	isBootEntry := false
-// 	if strings.HasPrefix(title, "D") {
-// 		isBootEntry = true
-// 		title = title[1:] // Remove "D" prefix
-// 	}
-
-// 	// Extract MAC address (fixed position based on observed structure)
-// 	macStart := 24 // Position where MAC is expected
-// 	macBytes := data[macStart : macStart+6]
-// 	macAddr := fmt.Sprintf("%02X:%02X:%02X:%02X:%02X:%02X", macBytes[0], macBytes[1], macBytes[2], macBytes[3], macBytes[4], macBytes[5])
-
-// 	b.MACAddr = macAddr
-
-// 	// Extract optional data (last 16 bytes)
-// 	optDataStart := len(data) - 16
-// 	optDataHex := hex.EncodeToString(data[optDataStart:])
-
-// 	b.OptData = data[optDataStart:]
-
-// 	b.Title = title
-
-// 	// Format decoded output
-// 	decoded := fmt.Sprintf(`title="%s (MAC:%s)" devpath=MAC()/IPv4() optdata=%s`, title, macAddr, optDataHex)
-
-// 	// Include boot entry info if applicable
-// 	if isBootEntry {
-// 		decoded = fmt.Sprintf("[Boot Entry] %s", decoded)
-// 	}
-
-// 	return nil
-// }
-
-// type Edk2EfiVars struct {
-// 	Boot0000 struct {
-// 		Title   string `json:"title"`
-// 		DevPath string `json:"devpath"`
-// 		OptData string `json:"optdata"`
-// 	} `json:"Boot0000"`
-// }
-
-// parseEncodedData decodes the binary+hex encoded UEFI PXE data.
-func parseEncodedData(encodedHex string) (string, error) {
-	// Convert hex string to byte array
-	data, err := hex.DecodeString(encodedHex)
-	if err != nil {
-		return "", fmt.Errorf("error decoding hex: %v", err)
-	}
-
-	if len(data) == 4 {
-		return decodeDWord(data)
-	}
-
-	if len(data) >= 24 {
-		return decodeBootEntry(data)
-	}
-
-	return "", errors.New("invalid encoded data")
-}
-
-func decodeBootEntry(data []byte) (string, error) {
-	// Extract the title (UTF-16LE decoding)
-	var titleBuilder strings.Builder
-	for i := 4; i < len(data); i += 2 {
-		if data[i] == 0 && data[i+1] == 0 { // Null-terminator for UTF-16
-			break
-		}
-		titleBuilder.WriteByte(data[i]) // Extract ASCII characters from UTF-16
-	}
-	title := titleBuilder.String()
-
-	// Check if it starts with "D" (Boot Entry Identifier)
-	isBootEntry := false
-	if strings.HasPrefix(title, "D") {
-		isBootEntry = true
-		title = title[1:] // Remove "D" prefix
-	}
-
-	// Extract MAC address (fixed position based on observed structure)
-	macStart := 24 // Position where MAC is expected
-	macBytes := data[macStart : macStart+6]
-	macAddr := fmt.Sprintf(
-		"%02X:%02X:%02X:%02X:%02X:%02X",
-		macBytes[0],
-		macBytes[1],
-		macBytes[2],
-		macBytes[3],
-		macBytes[4],
-		macBytes[5],
-	)
-
-	// Extract optional data (last 16 bytes)
-	optDataStart := len(data) - 16
-	optDataHex := hex.EncodeToString(data[optDataStart:])
-
-	// Format decoded output
-	decoded := fmt.Sprintf(
-		`title="%s (MAC:%s)" devpath=MAC()/IPv4() optdata=%s`,
-		title,
-		macAddr,
-		optDataHex,
-	)
-
-	// Include boot entry info if applicable
-	if isBootEntry {
-		decoded = fmt.Sprintf("[Boot Entry] %s", decoded)
-	}
-	return decoded, nil
-}
-
-// decodeDWord decodes a little-endian DWord from hex.
-func decodeDWord(data []byte) (string, error) {
-	// Convert little-endian bytes to uint32
-	value := binary.LittleEndian.Uint32(data)
-	return fmt.Sprintf("0x%08X", value), nil
-}
-
-// encodeDWord encodes a uint32 value to little-endian hex.
-func encodeDWord(value uint32) string {
-	// Create a 4-byte array
-	data := make([]byte, 4)
-	binary.LittleEndian.PutUint32(data, value)
-
-	// Return as hex string
-	return hex.EncodeToString(data)
-}
-
-// func (self *BootEntry) Parse(data []byte) error {
-// 	// Extract attr (uint32) and pathsize (uint16)
-// 	self.Attr = binary.LittleEndian.Uint32(data[0:4])
-// 	pathsize := binary.LittleEndian.Uint16(data[4:6])
-
-// 	// Parse title using UCS-16
-// 	self.Title = efi.FromUCS16(data[6:])
-
-// 	// Extract path data
-// 	titleSize := self.Title.Size()
-// 	pathStart := 6 + titleSize
-// 	pathEnd := pathStart + int(pathsize)
-// 	path := data[pathStart:pathEnd]
-// 	self.DevPath = efi.NewDevicePath(path)
-
-// 	// Extract optional data if it exists
-// 	if len(data) > pathEnd {
-// 		self.OptData = data[pathEnd:]
-// 	}
-
-// 	return nil
-// }
-
+//go:generate go run ../../internal/ipxe/generate
 func main() {
-	readFile()
-	readFile()
-	// The rest of the function is disabled to avoid unreachable code
+	// Load configuration
+	cfg, err := config.NewConfig()
+	if err != nil {
+		slog.Error("Failed to load configuration", "error", err)
+		os.Exit(1)
+	}
+
+	// Create structured logger from config
+	logger := cfg.Log
+	logger.Info("PiBMC starting", "version", GitRev, "start_time", startTime)
+
+	// Create backend
+	backend, err := createBackend(context.Background(), logger, cfg)
+	if err != nil {
+		logger.Error(err, "failed to create backend")
+		os.Exit(1)
+	}
+
+	// Set up graceful shutdown context
+	ctx, cancel := signal.NotifyContext(
+		context.Background(),
+		os.Interrupt,
+		syscall.SIGHUP,
+		syscall.SIGTERM,
+	)
+	defer cancel()
+
+	// Start all services
+	if err := startServices(ctx, cfg, logger, backend); err != nil {
+		logger.Error(err, "failed to start services")
+		os.Exit(1)
+	}
+
+	logger.Info("PiBMC shutdown complete")
 }
 
-func readFile() {
-	filename := "/Users/atkini01/src/go/pibmc/cmd/pibmc/RPI_EFI.fd"
-	vs := varstore.NewEdk2VarStore(filename)
-
-	efiVarList, err := vs.GetVarList()
+// createBackend initializes and starts the backend service.
+func createBackend(
+	ctx context.Context,
+	log logr.Logger,
+	cfg *config.Config,
+) (backend.BackendStore, error) {
+	backend, err := remote.NewRemote(log, cfg)
 	if err != nil {
-		panic(fmt.Errorf("error reading varstore: %v", err))
+		return nil, fmt.Errorf("failed to create backend: %w", err)
 	}
 
-	bootEntries, err := efiVarList.ListBootEntries()
+	go backend.Start(ctx)
+	return backend, nil
+}
+
+// startServices initializes and starts all configured services.
+func startServices(
+	ctx context.Context,
+	cfg *config.Config,
+	logger logr.Logger,
+	backend backend.BackendStore,
+) error {
+	g, ctx := errgroup.WithContext(ctx)
+
+	// Start HTTP API server
+	if err := startHTTPServer(ctx, g, cfg, logger, backend); err != nil {
+		return fmt.Errorf("failed to start HTTP server: %w", err)
+	}
+
+	// Start TFTP server if enabled
+	if cfg.Tftp.Enabled {
+		logger.Info("TFTP server enabled", "root_directory", cfg.Tftp.RootDirectory)
+		startTFTPServer(ctx, g, cfg, logger, backend)
+	}
+
+	// Start DHCP server if enabled
+	if cfg.Dhcp.Enabled {
+		logger.Info(
+			"DHCP server enabled",
+			"interface",
+			cfg.Dhcp.Interface,
+			"address",
+			cfg.Dhcp.Address,
+		)
+		if err := startDHCPServer(ctx, g, cfg, logger, backend); err != nil {
+			return fmt.Errorf("failed to start DHCP server: %w", err)
+		}
+	}
+
+	// Wait for all services or shutdown signal
+	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
+		return fmt.Errorf("service error: %w", err)
+	}
+
+	return nil
+}
+
+// startHTTPServer configures and starts the HTTP API server.
+func startHTTPServer(
+	ctx context.Context,
+	g *errgroup.Group,
+	cfg *config.Config,
+	logger logr.Logger,
+	backend backend.BackendStore,
+) error {
+	// Create structured logger for HTTP server
+	slogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	// Create API instance
+	apiServer := api.New(cfg, slogger)
+
+	// Configure API handlers
+	configureAPIHandlers(apiServer, cfg, logger, backend, slogger)
+
+	// Start the server in a goroutine
+	bindAddr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
+	logger.Info("starting HTTP server", "addr", bindAddr)
+
+	g.Go(func() error {
+		return apiServer.Start()
+	})
+
+	// Handle graceful shutdown
+	g.Go(func() error {
+		<-ctx.Done()
+		logger.Info("shutting down HTTP server")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		done := make(chan error, 1)
+		go func() {
+			done <- apiServer.Shutdown()
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				logger.Error(err, "error during HTTP server shutdown")
+			}
+			return err
+		case <-shutdownCtx.Done():
+			logger.Error(
+				errors.New("HTTP server shutdown timeout"),
+				"forced shutdown after 30 seconds",
+			)
+			return errors.New("HTTP server shutdown timeout")
+		}
+	})
+
+	return nil
+}
+
+// configureAPIHandlers sets up all HTTP API route handlers.
+func configureAPIHandlers(
+	apiServer *api.Api,
+	cfg *config.Config,
+	logger logr.Logger,
+	backend backend.BackendStore,
+	slogger *slog.Logger,
+) {
+	// Add health check handler
+	apiServer.AddHandler("/healthcheck", health.New(slogger, GitRev, startTime))
+	logger.V(1).Info("registered health check handler", "path", "/healthcheck")
+
+	// Add metrics handler
+	apiServer.AddHandler("/metrics", metrics.New(slogger))
+	logger.V(1).Info("registered metrics handler", "path", "/metrics")
+
+	// Add Redfish handler
+	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, backend))
+	logger.V(1).Info("registered Redfish handler", "path", "/redfish/v1/")
+
+	// Add iPXE handlers if enabled
+	if cfg.IpxeHttpScript.Enabled {
+		apiServer.AddHandler("/", ipxe.New(slogger, cfg, backend))
+		logger.Info("iPXE HTTP script handler enabled", "path", "/")
+	}
+
+	// Add ISO handler if enabled
+	if cfg.Iso.Enabled {
+		apiServer.AddHandler("/iso/", iso.New(logger, cfg, backend))
+		logger.Info("ISO handler enabled", "path", "/iso/")
+	}
+}
+
+// startTFTPServer configures and starts the TFTP server.
+func startTFTPServer(
+	ctx context.Context,
+	g *errgroup.Group,
+	cfg *config.Config,
+	logger logr.Logger,
+	backend backend.BackendStore,
+) {
+	ts := &tftp.Server{
+		Logger:        logger.WithName("tftp"),
+		RootDirectory: cfg.Tftp.RootDirectory,
+		Patch:         cfg.Tftp.IpxePatch,
+	}
+
+	logger.Info("starting TFTP server", "addr", cfg.Address)
+	g.Go(func() error {
+		return ts.ListenAndServe(
+			ctx,
+			netip.AddrPortFrom(netip.MustParseAddr(cfg.Address), 69),
+			backend,
+		)
+	})
+}
+
+// startDHCPServer configures and starts the DHCP server.
+func startDHCPServer(
+	ctx context.Context,
+	g *errgroup.Group,
+	cfg *config.Config,
+	logger logr.Logger,
+	backend backend.BackendReader,
+) error {
+	dh, err := createDHCPHandler(cfg, logger, backend)
 	if err != nil {
-		panic(fmt.Errorf("error listing boot entries: %v", err))
+		return fmt.Errorf("failed to create DHCP handler: %w", err)
 	}
 
-	bootEntries[5].Title = *efi.NewUCS16String("Test Boot Entry")
+	logger.Info("starting DHCP server", "bind_addr", cfg.Dhcp.Address)
+	g.Go(func() error {
+		return serveDHCP(ctx, cfg, logger, dh)
+	})
 
-	for index, entry := range bootEntries {
-		fmt.Printf("Boot%04X: %s\n", index, entry)
+	// Start lease cleanup routine if using reservation handler with lease management
+	if !cfg.Dhcp.ProxyEnabled && (cfg.Dhcp.LeaseFile != "" || cfg.Dhcp.ConfigFile != "") {
+		g.Go(func() error {
+			return runLeaseCleanup(ctx, logger, dh)
+		})
 	}
 
-	for k, v := range efiVarList {
-		fmt.Printf("%s: %s\n", k, v)
-	}
+	return nil
+}
 
-	efiVarListJson, err := efiVarList.MarshalJSON()
+// serveDHCP runs the DHCP server with proper connection handling.
+func serveDHCP(
+	ctx context.Context,
+	cfg *config.Config,
+	logger logr.Logger,
+	dh dhcpServer.Handler,
+) error {
+	dhcpAddr, err := netip.ParseAddrPort(
+		fmt.Sprintf("%s:%d", cfg.Dhcp.Address, cfg.Dhcp.Port),
+	)
 	if err != nil {
-		panic(fmt.Errorf("error encoding EFI JSON: %v", err))
+		return fmt.Errorf("invalid DHCP bind address: %w", err)
 	}
 
-	fmt.Println(string(efiVarListJson))
-
-	err = vs.WriteVarStore(filename, efiVarList)
+	conn, err := server4.NewIPv4UDPConn(
+		cfg.Dhcp.Interface,
+		net.UDPAddrFromAddrPort(dhcpAddr),
+	)
 	if err != nil {
-		panic(fmt.Errorf("error writing varstore: %v", err))
+		return fmt.Errorf("failed to create DHCP connection: %w", err)
 	}
+	defer conn.Close()
+
+	ds := &dhcpServer.DHCP{
+		Logger:   logger,
+		Conn:     conn,
+		Handlers: []dhcpServer.Handler{dh},
+	}
+
+	// Handle shutdown gracefully
+	go func() {
+		<-ctx.Done()
+		logger.Info("shutting down DHCP server")
+		conn.Close()
+		ds.Close()
+	}()
+
+	return ds.Serve(ctx)
+}
+
+// createDHCPHandler creates a DHCP handler with proper configuration.
+func createDHCPHandler(
+	cfg *config.Config,
+	logger logr.Logger,
+	backend backend.BackendReader,
+) (dhcpServer.Handler, error) {
+	return dhcpHandler(cfg, context.Background(), logger, backend)
+}
+
+// dhcpHandler configures a DHCP proxy handler with network boot capabilities.
+func dhcpHandler(
+	c *config.Config,
+	_ context.Context,
+	log logr.Logger,
+	backend backend.BackendReader,
+) (dhcpServer.Handler, error) {
+	pktIP, err := netip.ParseAddr(c.Dhcp.Address)
+	if err != nil {
+		return nil, fmt.Errorf("invalid bind address: %w", err)
+	}
+	tftpIP, err := netip.ParseAddrPort(fmt.Sprintf("%s:%d", c.Dhcp.TftpAddress, c.Dhcp.TftpPort))
+	if err != nil {
+		return nil, fmt.Errorf("invalid tftp address for DHCP server: %w", err)
+	}
+	httpBinaryURL := &url.URL{
+		Scheme: c.Dhcp.IpxeBinaryUrl.Scheme,
+		Host:   fmt.Sprintf("%s:%d", c.Dhcp.IpxeBinaryUrl.Address, c.Dhcp.IpxeBinaryUrl.Port),
+		Path:   c.Dhcp.IpxeBinaryUrl.Path,
+	}
+	if _, err := url.Parse(httpBinaryURL.String()); err != nil {
+		return nil, fmt.Errorf("invalid http ipxe binary url: %w", err)
+	}
+
+	httpScriptURL, err := c.GetIpxeHttpUrl()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get ipxe http url: %w", err)
+	}
+
+	if _, err := url.Parse(httpScriptURL.String()); err != nil {
+		return nil, fmt.Errorf("invalid http ipxe script url: %w", err)
+	}
+
+	ipxeScript := func(d *dhcpv4.DHCPv4) *url.URL {
+		u := *httpScriptURL
+		p := path.Base(u.Path)
+		u.Path = path.Join(path.Dir(u.Path), d.ClientHWAddr.String(), p)
+		return &u
+	}
+
+	var dh dhcpServer.Handler
+
+	if c.Dhcp.ProxyEnabled {
+		dh = &proxy.Handler{
+			Backend: backend,
+			IPAddr:  pktIP,
+			Log:     log,
+			Netboot: proxy.Netboot{
+				IPXEBinServerTFTP: tftpIP,
+				IPXEBinServerHTTP: httpBinaryURL,
+				IPXEScriptURL:     ipxeScript,
+				Enabled:           true,
+			},
+			OTELEnabled:      false, // Disabled since we removed OpenTelemetry
+			AutoProxyEnabled: true,
+		}
+	} else {
+		// Use reservation handler with lease management
+		reservationHandler := &reservation.Handler{
+			Backend: backend,
+			IPAddr:  pktIP,
+			Log:     log,
+			Netboot: reservation.Netboot{
+				IPXEBinServerTFTP: tftpIP,
+				IPXEBinServerHTTP: httpBinaryURL,
+				IPXEScriptURL:     ipxeScript,
+				Enabled:           true,
+			},
+			OTELEnabled: false, // Disabled since we removed OpenTelemetry
+		}
+
+		// Add lease management if configured
+		if c.Dhcp.LeaseFile != "" || c.Dhcp.ConfigFile != "" {
+			var err error
+			reservationHandler, err = reservation.NewHandlerWithLeaseManagement(
+				reservationHandler,
+				c.Dhcp.LeaseFile,
+				c.Dhcp.ConfigFile,
+			)
+			if err != nil {
+				return nil, fmt.Errorf("failed to initialize lease management: %w", err)
+			}
+			log.Info("DHCP lease management enabled",
+				"lease_file", c.Dhcp.LeaseFile,
+				"config_file", c.Dhcp.ConfigFile)
+		}
+
+		dh = reservationHandler
+	}
+	return dh, nil
+}
+
+// runLeaseCleanup periodically cleans up expired DHCP leases.
+func runLeaseCleanup(ctx context.Context, logger logr.Logger, handler dhcpServer.Handler) error {
+	// Try to cast to reservation handler
+	if reservationHandler, ok := handler.(*reservation.Handler); ok {
+		ticker := time.NewTicker(5 * time.Minute) // Clean every 5 minutes
+		defer ticker.Stop()
+
+		logger.Info("starting DHCP lease cleanup routine")
+
+		for {
+			select {
+			case <-ctx.Done():
+				logger.Info("stopping DHCP lease cleanup routine")
+				return nil
+			case <-ticker.C:
+				reservationHandler.CleanupExpiredLeases()
+				logger.V(1).Info("cleaned up expired DHCP leases")
+			}
+		}
+	}
+
+	return nil
 }
