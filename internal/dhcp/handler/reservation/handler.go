@@ -89,6 +89,7 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 	var reply *dhcpv4.DHCPv4
 	switch mt := p.Pkt.MessageType(); mt {
 	case dhcpv4.MessageTypeDiscover:
+		reply, _ := dhcpv4.NewReplyFromRequest(p.Pkt)
 		opts := dhcpv4.Options{}
 
 		opt9, _ := hex.DecodeString(
