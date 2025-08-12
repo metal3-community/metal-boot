@@ -4,8 +4,6 @@ github.com/apapsch/go-jsonmerge/v2 v2.0.0/go.mod h1:lvDnEdqiQrp0O42VQGgmlKpxL1AP
 github.com/beorn7/perks v1.0.1 h1:VlbKKnNfV8bJzeqoa4cOKqO6bYr3WgKZxO8Z16+hsOM=
 github.com/beorn7/perks v1.0.1/go.mod h1:G2ZrVWU2WbWT9wwq4/hrbKbnv/1ERSJQ0ibhJ6rlkpw=
 github.com/bmatcuk/doublestar v1.1.1/go.mod h1:UD6OnuiIn0yFxxA2le/rnRU1G4RaI4UvFv1sNto9p6w=
-github.com/bmcpi/uefi-firmware-manager v0.0.0-20250812084550-80cc7b1d4672 h1:NiTd27sB03zsAuo5HGutXedv0bmQQLfujxklkHwUp+k=
-github.com/bmcpi/uefi-firmware-manager v0.0.0-20250812084550-80cc7b1d4672/go.mod h1:gUpGrIFisYSem1mnItbKPkS4gIliZQJd0aALkg2sCYE=
 github.com/bmcpi/uefi-firmware-manager v0.0.0-20250812085239-15e82bc54eb5 h1:XkI/9grn8GMfUJyySdp/xdmS/7yRT0pqTt9VkN5hQ3g=
 github.com/bmcpi/uefi-firmware-manager v0.0.0-20250812085239-15e82bc54eb5/go.mod h1:gUpGrIFisYSem1mnItbKPkS4gIliZQJd0aALkg2sCYE=
 github.com/ccoveille/go-safecast v1.5.0 h1:cT/3uVQ/i5PTiJvhvkSU81HeKNurtyQtBndXEH3hDg4=
