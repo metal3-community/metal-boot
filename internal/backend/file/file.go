@@ -413,7 +413,7 @@ func (w *Watcher) Start(ctx context.Context) {
 			if !ok {
 				continue
 			}
-			if event.Op&fsnotify.Write == fsnotify.Write {
+			if event.Has(fsnotify.Write) {
 				w.Log.Info("file changed, updating cache")
 				w.fileMu.RLock()
 				d, err := os.ReadFile(w.FilePath)

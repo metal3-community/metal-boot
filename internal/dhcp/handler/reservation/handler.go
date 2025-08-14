@@ -91,24 +91,13 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
 		if err != nil {
 			if hardwareNotFound(err) {
-				// Try fallback configuration for unknown devices
-				if h.FallbackConfig != nil && h.FallbackConfig.Enabled {
-					log.Info("no reservation found, using fallback configuration")
-					d = h.generateDefaultDHCP(p.Pkt.ClientHWAddr)
-					n = h.generateDefaultNetboot()
-					if d == nil {
-						span.SetStatus(codes.Error, "failed to generate fallback configuration")
-						return
-					}
-				} else {
-					span.SetStatus(codes.Ok, "no reservation found")
-					return
-				}
-			} else {
-				log.Info("error reading from backend", "error", err)
-				span.SetStatus(codes.Error, err.Error())
+				span.SetStatus(codes.Ok, "no reservation found")
 				return
 			}
+			log.Info("error reading from backend", "error", err)
+			span.SetStatus(codes.Error, err.Error())
+
+			return
 		}
 		if d.Disabled {
 			log.Info(
@@ -127,24 +116,13 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
 		if err != nil {
 			if hardwareNotFound(err) {
-				// Try fallback configuration for unknown devices
-				if h.FallbackConfig != nil && h.FallbackConfig.Enabled {
-					log.Info("no reservation found, using fallback configuration")
-					d = h.generateDefaultDHCP(p.Pkt.ClientHWAddr)
-					n = h.generateDefaultNetboot()
-					if d == nil {
-						span.SetStatus(codes.Error, "failed to generate fallback configuration")
-						return
-					}
-				} else {
-					span.SetStatus(codes.Ok, "no reservation found")
-					return
-				}
-			} else {
-				log.Info("error reading from backend", "error", err)
-				span.SetStatus(codes.Error, err.Error())
+				span.SetStatus(codes.Ok, "no reservation found")
 				return
 			}
+			log.Info("error reading from backend", "error", err)
+			span.SetStatus(codes.Error, err.Error())
+
+			return
 		}
 		if d.Disabled {
 			log.Info(
@@ -270,16 +248,6 @@ func (h *Handler) updateMsg(
 	// 2. We always use the clients transaction id (XID) in responses. See dhcpv4.WithReply().
 	reply, _ := dhcpv4.NewReplyFromRequest(pkt, mods...)
 
-	// Record lease for ACK messages (actual assignments)
-	if msgType == dhcpv4.MessageTypeAck && h.LeaseManager != nil {
-		h.recordLease(pkt.ClientHWAddr, d)
-	}
-
-	// Update DHCP configuration for netboot clients
-	if h.Netboot.Enabled && dhcp.IsNetbootClient(pkt) == nil && h.ConfigManager != nil {
-		h.updateDHCPConfig(pkt.ClientHWAddr, n)
-	}
-
 	return reply
 }
 
@@ -298,49 +266,4 @@ func hardwareNotFound(err error) bool {
 	}
 	te, ok := err.(hardwareNotFound)
 	return ok && te.NotFound()
-}
-
-// recordLease adds or updates a lease in the lease manager.
-func (h *Handler) recordLease(mac net.HardwareAddr, d *data.DHCP) {
-	if h.LeaseManager == nil {
-		return
-	}
-
-	hostname := d.Hostname
-	if hostname == "" {
-		hostname = "*"
-	}
-
-	h.LeaseManager.AddLease(mac, d.IPAddress.AsSlice(), hostname, d.LeaseTime)
-
-	// Save leases to file asynchronously to avoid blocking DHCP responses
-	go func() {
-		if err := h.LeaseManager.SaveLeases(); err != nil {
-			h.Log.Error(err, "failed to save DHCP leases", "mac", mac.String())
-		}
-	}()
-}
-
-// updateDHCPConfig updates the DHCP configuration for netboot options.
-func (h *Handler) updateDHCPConfig(mac net.HardwareAddr, n *data.Netboot) {
-	if h.ConfigManager == nil || !n.AllowNetboot {
-		return
-	}
-
-	// Determine TFTP and HTTP servers from configuration
-	tftpServer := h.Netboot.IPXEBinServerTFTP.Addr().String()
-	var httpServer string
-	if h.Netboot.IPXEBinServerHTTP != nil {
-		httpServer = h.Netboot.IPXEBinServerHTTP.Host
-	}
-
-	// Add netboot options for this MAC
-	h.ConfigManager.AddNetbootOptions(mac, tftpServer, httpServer)
-
-	// Save configuration to file asynchronously
-	go func() {
-		if err := h.ConfigManager.SaveConfig(); err != nil {
-			h.Log.Error(err, "failed to save DHCP configuration", "mac", mac.String())
-		}
-	}()
 }

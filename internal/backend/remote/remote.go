@@ -15,6 +15,7 @@ import (
 	"path"
 	"path/filepath"
 	"slices"
+	"sync"
 	"time"
 
 	"github.com/bmcpi/pibmc/internal/config"
@@ -41,11 +42,11 @@ type Remote struct {
 
 	jar *cookiejar.Jar
 
-	dhcp map[string]data.DHCP
-
+	// Maps protected by mutex to prevent concurrent access
+	mu      sync.RWMutex
+	dhcp    map[string]data.DHCP
 	netboot map[string]data.Netboot
-
-	power map[string]data.Power
+	power   map[string]data.Power
 }
 
 // NewRemote creates a new file watcher.
@@ -102,6 +103,9 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 }
 
 func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
 	if w.netboot != nil {
 		if netboot, ok := w.netboot[mac.String()]; ok {
 			return &netboot
@@ -115,6 +119,9 @@ func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
 }
 
 func (w *Remote) loadConfigs() error {
+	w.mu.Lock()
+	defer w.mu.Unlock()
+
 	errors := []error{}
 
 	configs := map[string]any{
@@ -155,6 +162,9 @@ func (w *Remote) loadConfigs() error {
 }
 
 func (w *Remote) saveConfigs() error {
+	w.mu.RLock()
+	defer w.mu.RUnlock()
+
 	errors := []error{}
 
 	configs := map[string]any{
@@ -195,20 +205,38 @@ func (w *Remote) GetByMac(
 	_, span := tracer.Start(ctx, "backend.remote.GetByMac")
 	defer span.End()
 
-	dhcp, ok := w.dhcp[mac.String()]
-	if !ok {
-		dhcp = data.DHCP{}
-		w.dhcp[mac.String()] = dhcp
+	// First, try to get existing data with read lock
+	w.mu.RLock()
+	dhcp, dhcpExists := w.dhcp[mac.String()]
+	power, powerExists := w.power[mac.String()]
+	w.mu.RUnlock()
+
+	// If data doesn't exist, initialize with write lock
+	if !dhcpExists {
+		w.mu.Lock()
+		// Double-check after acquiring write lock
+		if _, exists := w.dhcp[mac.String()]; !exists {
+			dhcp = data.DHCP{}
+			w.dhcp[mac.String()] = dhcp
+		} else {
+			dhcp = w.dhcp[mac.String()]
+		}
+		w.mu.Unlock()
+	}
+
+	if !powerExists {
+		w.mu.Lock()
+		// Double-check after acquiring write lock
+		if _, exists := w.power[mac.String()]; !exists {
+			power = data.Power{}
+			w.power[mac.String()] = power
+		} else {
+			power = w.power[mac.String()]
+		}
+		w.mu.Unlock()
 	}
 
 	dhcp.MACAddress = mac
-
-	power, ok := w.power[mac.String()]
-	if !ok {
-		power = data.Power{}
-		w.power[mac.String()] = power
-	}
-
 	netboot := w.getNetBoot(mac)
 
 	if activeClient, err := w.getActiveClientByMac(ctx, mac); err == nil {
@@ -278,7 +306,10 @@ func (w *Remote) GetByMac(
 		power.SiteId = w.config.Unifi.Site
 		power.Port = portOverrides.PortIDX
 
+		// Update the power map with write lock
+		w.mu.Lock()
 		w.power[mac.String()] = power
+		w.mu.Unlock()
 	} else {
 		w.Log.Error(err, "failed to get port override")
 	}
@@ -515,8 +546,9 @@ func (w *Remote) Put(
 	defer span.End()
 
 	if p != nil {
-		pwr := data.Power{}
+		w.mu.Lock()
 
+		pwr := data.Power{}
 		if pd, ok := w.power[mac.String()]; ok {
 			pwr = pd
 		}
@@ -538,6 +570,7 @@ func (w *Remote) Put(
 		}
 
 		w.power[mac.String()] = pwr
+		w.mu.Unlock()
 
 		device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, w.config.Unifi.Device)
 		if err != nil {
@@ -558,10 +591,9 @@ func (w *Remote) Put(
 			portOverrides[i].PortPoe = util.Ptr(pwr.State == "auto")
 			portOverrides[i].QOSProfile = nil
 
-			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, &unifi.Device{
-				ID:            device.ID,
-				PortOverrides: portOverrides,
-			}); err != nil {
+			device.PortOverrides = portOverrides
+
+			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, device); err != nil {
 				return err
 			}
 		}
@@ -598,7 +630,9 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 	_, span := tracer.Start(ctx, "backend.remote.PowerCycle")
 	defer span.End()
 
+	w.mu.RLock()
 	pwr, ok := w.power[mac.String()]
+	w.mu.RUnlock()
 
 	if pwr.Port == 0 || !ok {
 		pwr = data.Power{}
@@ -625,7 +659,9 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 			pwr.Mode = "auto"
 		}
 
+		w.mu.Lock()
 		w.power[mac.String()] = pwr
+		w.mu.Unlock()
 	}
 
 	if _, err := w.client.ExecuteCmd(ctx, w.config.Unifi.Site, "devmgr", unifi.Cmd{

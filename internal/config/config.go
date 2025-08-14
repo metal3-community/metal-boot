@@ -23,28 +23,28 @@ const (
 )
 
 type UnifiConfig struct {
-	APIKey   string `yaml:"api_key"  mapstructure:"api_key"`
-	Username string `yaml:"username" mapstructure:"username"`
-	Password string `yaml:"password" mapstructure:"password"`
-	Endpoint string `yaml:"endpoint" mapstructure:"endpoint"`
-	Site     string `yaml:"site"     mapstructure:"site"`
-	Device   string `yaml:"device"   mapstructure:"device"`
-	Insecure bool   `yaml:"insecure" mapstructure:"insecure"`
+	APIKey   string `mapstructure:"api_key"`
+	Username string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+	Endpoint string `mapstructure:"endpoint"`
+	Site     string `mapstructure:"site"`
+	Device   string `mapstructure:"device"`
+	Insecure bool   `mapstructure:"insecure"`
 }
 
 type TftpConfig struct {
-	Enabled       bool   `yaml:"enabled"        mapstructure:"enabled"`
-	Address       string `yaml:"address"        mapstructure:"address"`
-	Port          int    `yaml:"port"           mapstructure:"port"`
-	RootDirectory string `yaml:"root_directory" mapstructure:"root_directory"`
-	IpxePatch     string `yaml:"ipxe_patch"     mapstructure:"ipxe_patch"`
+	Enabled       bool   `mapstructure:"enabled"`
+	Address       string `mapstructure:"address"`
+	Port          int    `mapstructure:"port"`
+	RootDirectory string `mapstructure:"root_directory"`
+	IpxePatch     string `mapstructure:"ipxe_patch"`
 }
 
 type IpxeUrl struct {
-	Address string `yaml:"address" mapstructure:"address"`
-	Port    int    `yaml:"port"    mapstructure:"port"`
-	Scheme  string `yaml:"scheme"  mapstructure:"scheme"`
-	Path    string `yaml:"path"    mapstructure:"path"`
+	Address string `mapstructure:"address"`
+	Port    int    `mapstructure:"port"`
+	Scheme  string `mapstructure:"scheme"`
+	Path    string `mapstructure:"path"`
 }
 
 func (u IpxeUrl) GetUrl(paths ...string) *url.URL {
@@ -73,82 +73,90 @@ func (u IpxeUrl) GetUrl(paths ...string) *url.URL {
 }
 
 type DhcpConfig struct {
-	Enabled           bool     `yaml:"enabled"              mapstructure:"enabled"`
-	Interface         string   `yaml:"interface"            mapstructure:"interface"`
-	Address           string   `yaml:"address"              mapstructure:"address"`
-	Port              int      `yaml:"port"                 mapstructure:"port"`
-	ProxyEnabled      bool     `yaml:"proxy_enabled"        mapstructure:"proxy_enabled"`
-	IpxeBinaryUrl     IpxeUrl  `yaml:"ipxe_binary_url"      mapstructure:"ipxe_binary_url"`
-	IpxeHttpUrl       IpxeUrl  `yaml:"ipxe_http_url"        mapstructure:"ipxe_http_url"`
-	IpxeHttpScript    IpxeUrl  `yaml:"ipxe_http_script"     mapstructure:"ipxe_http_script"`
-	IpxeHttpScriptURL string   `yaml:"ipxe_http_script_url" mapstructure:"ipxe_http_script_url"`
-	TftpAddress       string   `yaml:"tftp_address"         mapstructure:"tftp_address"`
-	TftpPort          int      `yaml:"tftp_port"            mapstructure:"tftp_port"`
-	SyslogIP          string   `yaml:"syslog_ip"            mapstructure:"syslog_ip"`
-	StaticIPAMEnabled bool     `yaml:"static_ipam_enabled"  mapstructure:"static_ipam_enabled"`
-	LeaseFile         string   `yaml:"lease_file"           mapstructure:"lease_file"`
-	ConfigFile        string   `yaml:"config_file"          mapstructure:"config_file"`
-	FallbackEnabled   bool     `yaml:"fallback_enabled"     mapstructure:"fallback_enabled"`
-	FallbackIPStart   string   `yaml:"fallback_ip_start"    mapstructure:"fallback_ip_start"`
-	FallbackIPEnd     string   `yaml:"fallback_ip_end"      mapstructure:"fallback_ip_end"`
-	FallbackGateway   string   `yaml:"fallback_gateway"     mapstructure:"fallback_gateway"`
-	FallbackSubnet    string   `yaml:"fallback_subnet"      mapstructure:"fallback_subnet"`
-	FallbackDNS       []string `yaml:"fallback_dns"         mapstructure:"fallback_dns"`
-	FallbackDomain    string   `yaml:"fallback_domain"      mapstructure:"fallback_domain"`
-	FallbackNetboot   bool     `yaml:"fallback_netboot"     mapstructure:"fallback_netboot"`
+	Enabled           bool     `mapstructure:"enabled"`
+	Interface         string   `mapstructure:"interface"`
+	Address           string   `mapstructure:"address"`
+	Port              int      `mapstructure:"port"`
+	ProxyEnabled      bool     `mapstructure:"proxy_enabled"`
+	IpxeBinaryUrl     IpxeUrl  `mapstructure:"ipxe_binary_url"`
+	IpxeHttpUrl       IpxeUrl  `mapstructure:"ipxe_http_url"`
+	IpxeHttpScript    IpxeUrl  `mapstructure:"ipxe_http_script"`
+	IpxeHttpScriptURL string   `mapstructure:"ipxe_http_script_url"`
+	TftpAddress       string   `mapstructure:"tftp_address"`
+	TftpPort          int      `mapstructure:"tftp_port"`
+	SyslogIP          string   `mapstructure:"syslog_ip"`
+	StaticIPAMEnabled bool     `mapstructure:"static_ipam_enabled"`
+	LeaseFile         string   `mapstructure:"lease_file"`
+	ConfigFile        string   `mapstructure:"config_file"`
+	FallbackEnabled   bool     `mapstructure:"fallback_enabled"`
+	FallbackIPStart   string   `mapstructure:"fallback_ip_start"`
+	FallbackIPEnd     string   `mapstructure:"fallback_ip_end"`
+	FallbackGateway   string   `mapstructure:"fallback_gateway"`
+	FallbackSubnet    string   `mapstructure:"fallback_subnet"`
+	FallbackDNS       []string `mapstructure:"fallback_dns"`
+	FallbackDomain    string   `mapstructure:"fallback_domain"`
+	FallbackNetboot   bool     `mapstructure:"fallback_netboot"`
 }
 
 type IpxeHttpScript struct {
-	Enabled               bool     `yaml:"enabled"                  mapstructure:"enabled"`
-	Retries               int      `yaml:"retries"                  mapstructure:"retries"`
-	RetryDelay            int      `yaml:"retry_delay"              mapstructure:"retry_delay"`
-	TinkServer            string   `yaml:"tink_server"              mapstructure:"tink_server"`
-	HookURL               string   `yaml:"hook_url"                 mapstructure:"hook_url"`
-	TinkServerInsecureTLS bool     `yaml:"tink_server_insecure_tls" mapstructure:"tink_server_insecure_tls"`
-	TinkServerUseTLS      bool     `yaml:"tink_server_use_tls"      mapstructure:"tink_server_use_tls"`
-	ExtraKernelArgs       []string `yaml:"extra_kernel_args"        mapstructure:"extra_kernel_args"`
-	StaticIPXEEnabled     bool     `yaml:"static_ipxe_enabled"      mapstructure:"static_ipxe_enabled"`
-	StaticFilesEnabled    bool     `yaml:"static_files_enabled"     mapstructure:"static_files_enabled"`
+	Enabled               bool     `mapstructure:"enabled"`
+	Retries               int      `mapstructure:"retries"`
+	RetryDelay            int      `mapstructure:"retry_delay"`
+	TinkServer            string   `mapstructure:"tink_server"`
+	HookURL               string   `mapstructure:"hook_url"`
+	TinkServerInsecureTLS bool     `mapstructure:"tink_server_insecure_tls"`
+	TinkServerUseTLS      bool     `mapstructure:"tink_server_use_tls"`
+	ExtraKernelArgs       []string `mapstructure:"extra_kernel_args"`
+	StaticIPXEEnabled     bool     `mapstructure:"static_ipxe_enabled"`
+	StaticFilesEnabled    bool     `mapstructure:"static_files_enabled"`
 }
 
 type IsoConfig struct {
-	Enabled     bool   `yaml:"enabled"      mapstructure:"enabled"`
-	Url         string `yaml:"url"          mapstructure:"url"`
-	MagicString string `yaml:"magic_string" mapstructure:"magic_string"`
+	Enabled     bool   `mapstructure:"enabled"`
+	Url         string `mapstructure:"url"`
+	MagicString string `mapstructure:"magic_string"`
 }
 
 type OtelConfig struct {
-	Endpoint string `yaml:"endpoint" mapstructure:"endpoint"`
-	Insecure bool   `yaml:"insecure" mapstructure:"insecure"`
+	Endpoint string `mapstructure:"endpoint"`
+	Insecure bool   `mapstructure:"insecure"`
 }
 
 type ImageURL struct {
-	Path string `yaml:"path" mapstructure:"path"`
-	URL  string `yaml:"url"  mapstructure:"url"`
+	Path string `mapstructure:"path"`
+	URL  string `mapstructure:"url"`
 }
 
 type StaticConfig struct {
-	Enabled       bool       `yaml:"enabled"        mapstructure:"enabled"`
-	ImageURLs     []ImageURL `yaml:"image_urls"     mapstructure:"image_urls"`
-	RootDirectory string     `yaml:"root_directory" mapstructure:"root_directory"`
+	Enabled       bool       `mapstructure:"enabled"`
+	ImageURLs     []ImageURL `mapstructure:"image_urls"`
+	RootDirectory string     `mapstructure:"root_directory"`
+}
+
+type DnsmasqConfig struct {
+	Enabled    bool   `mapstructure:"enabled"`
+	RootDir    string `mapstructure:"root_dir"`
+	TFTPServer string `mapstructure:"tftp_server"`
+	HTTPServer string `mapstructure:"http_server"`
 }
 
 type Config struct {
-	Address         string         `yaml:"address"           mapstructure:"address"`
-	Port            int            `yaml:"port"              mapstructure:"port"`
-	Unifi           UnifiConfig    `yaml:"unifi"             mapstructure:"unifi"`
-	Tftp            TftpConfig     `yaml:"tftp"              mapstructure:"tftp"`
-	Dhcp            DhcpConfig     `yaml:"dhcp"              mapstructure:"dhcp"`
-	LogLevel        string         `yaml:"log_level"         mapstructure:"log_level"`
-	BackendFilePath string         `yaml:"backend_file_path" mapstructure:"backend_file_path"`
-	Log             logr.Logger    `yaml:"-"                 mapstructure:"-"`
-	Iso             IsoConfig      `yaml:"iso"               mapstructure:"iso"`
-	IpxeHttpScript  IpxeHttpScript `yaml:"ipxe_http_script"  mapstructure:"ipxe_http_script"`
-	TrustedProxies  string         `yaml:"trusted_proxies"   mapstructure:"trusted_proxies"`
-	Otel            OtelConfig     `yaml:"otel"              mapstructure:"otel"`
-	Static          StaticConfig   `yaml:"static"            mapstructure:"static"`
-	ResetDelaySec   int            `yaml:"reset_delay_sec"   mapstructure:"reset_delay_sec"`
-	FirmwarePath    string         `yaml:"firmware_path"     mapstructure:"firmware_path"`
+	Address         string         `mapstructure:"address"`
+	Port            int            `mapstructure:"port"`
+	Unifi           UnifiConfig    `mapstructure:"unifi"`
+	Tftp            TftpConfig     `mapstructure:"tftp"`
+	Dhcp            DhcpConfig     `mapstructure:"dhcp"`
+	LogLevel        string         `mapstructure:"log_level"`
+	BackendFilePath string         `mapstructure:"backend_file_path"`
+	Log             logr.Logger    `mapstructure:"-"`
+	Iso             IsoConfig      `mapstructure:"iso"`
+	IpxeHttpScript  IpxeHttpScript `mapstructure:"ipxe_http_script"`
+	TrustedProxies  string         `mapstructure:"trusted_proxies"`
+	Otel            OtelConfig     `mapstructure:"otel"`
+	Static          StaticConfig   `mapstructure:"static"`
+	Dnsmasq         DnsmasqConfig  `mapstructure:"dnsmasq"`
+	ResetDelaySec   int            `mapstructure:"reset_delay_sec"`
+	FirmwarePath    string         `mapstructure:"firmware_path"`
 }
 
 func (c *Config) GetIpxeHttpUrl() (*url.URL, error) {
@@ -217,7 +225,25 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.AddConfigPath("/app/")
 	viper.AddConfigPath("/config/")
-	viper.AddConfigPath(".")
+
+	wd, _ := os.Getwd()
+	confDir := "."
+	if wd == "/" {
+		confDir = os.TempDir()
+		if configDir, err := os.UserConfigDir(); err != nil {
+			log.Fatalf("Unable to get user config dir: %s", err.Error())
+		} else {
+			confDir = configDir
+		}
+	}
+
+	if _, err := os.Stat(confDir); errors.Is(err, os.ErrNotExist) {
+		if err := os.Mkdir(confDir, 0o755); err != nil {
+			log.Fatalf("Unable to create config directory: %s", err.Error())
+		}
+	}
+
+	viper.AddConfigPath(confDir)
 
 	viper.SetDefault("reset_delay_sec", 45)
 
@@ -226,12 +252,11 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("trusted_proxies", "")
 	viper.SetDefault("backend_file_path", "backend.yaml")
 
-	viper.SetDefault("unifi.username", "")
-	viper.SetDefault("unifi.password", "")
 	viper.SetDefault("unifi.endpoint", "https://10.0.0.1")
 	viper.SetDefault("unifi.site", "default")
 	viper.SetDefault("unifi.device", "")
 	viper.SetDefault("unifi.insecure", true)
+	viper.SetDefault("unifi.api_key", "your_api_key")
 
 	viper.SetDefault("tftp.enabled", false)
 	viper.SetDefault("tftp.address", netInfo.BindIP)
@@ -256,6 +281,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dhcp.tftp_address", netInfo.ExternalIP)
 	viper.SetDefault("dhcp.tftp_port", 69)
 	viper.SetDefault("dhcp.syslog_ip", "")
+	viper.SetDefault("dhcp.lease_file", "")
 	viper.SetDefault("dhcp.static_ipam_enabled", false)
 	viper.SetDefault("dhcp.fallback_enabled", false)
 	viper.SetDefault("dhcp.fallback_ip_start", "192.168.1.100")
@@ -269,6 +295,11 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("static.enabled", true)
 	viper.SetDefault("static.image_urls", []ImageURL{})
 	viper.SetDefault("static.root_directory", "/shared/html")
+
+	viper.SetDefault("dnsmasq.enabled", true)
+	viper.SetDefault("dnsmasq.root_dir", "/shared/dnsmasq")
+	viper.SetDefault("dnsmasq.tftp_server", netInfo.ExternalIP)
+	viper.SetDefault("dnsmasq.http_server", netInfo.ExternalIP)
 
 	viper.SetDefault("ipxe_http_script.enabled", true)
 	viper.SetDefault("ipxe_http_script.retries", 3)
@@ -294,16 +325,7 @@ func NewConfig() (conf *Config, err error) {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			configFile := "config.yaml"
-			wd, _ := os.Getwd()
-			if wd == "/" {
-				if _, err := os.Stat("/config"); errors.Is(err, os.ErrNotExist) {
-					if err := os.Mkdir("/config", 0o755); err != nil {
-						log.Fatalf("Unable to create config directory: %s", err.Error())
-					}
-				}
-				configFile = "/config/" + configFile
-			}
+			configFile := filepath.Join(confDir, "config.yaml")
 			log.Printf("config: creating default config file: %s", configFile)
 			if err := viper.SafeWriteConfigAs(configFile); err != nil {
 				log.Fatalf("Unable to write config file: %s", err.Error())

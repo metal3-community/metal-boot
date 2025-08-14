@@ -23,7 +23,6 @@ import (
 )
 
 const (
-	examplePXEClient  = "PXEClient:Arch:00007:UNDI:003001"
 	exampleHTTPClient = "HTTPClient:Arch:00016:UNDI:003001"
 )
 

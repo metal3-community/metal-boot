@@ -55,22 +55,22 @@ func (s *Server) ListenAndServe(
 
 	a, err := net.ResolveUDPAddr("udp", addr.String())
 	if err != nil {
-		return fmt.Errorf("failed to resolve UDP address: %w", err)
+		return fmt.Errorf("(tftp) failed to resolve UDP address: %w", err)
 	}
 
 	conn, err := net.ListenUDP("udp", a)
 	if err != nil {
-		return fmt.Errorf("failed to listen on UDP: %w", err)
+		return fmt.Errorf("(tftp) failed to listen on UDP: %w", err)
 	}
 
 	go func() {
 		<-ctx.Done()
-		s.Logger.Info("shutting down tftp server")
+		s.Logger.Info("(tftp) shutting down tftp server")
 		tftpServer.Shutdown()
 	}()
 
 	if err := tftpServer.Serve(conn); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.Logger.Error(err, "TFTP server error")
+		s.Logger.Error(err, "(tftp) TFTP server error")
 		return err
 	}
 
@@ -78,11 +78,11 @@ func (s *Server) ListenAndServe(
 }
 
 func (h *Handler) OnSuccess(stats tftp.TransferStats) {
-	h.Log.Info("transfer complete", "remote", stats.RemoteAddr, "path", stats.Filename)
+	h.Log.Info("(tftp) transfer complete", "remote", stats.RemoteAddr, "path", stats.Filename)
 }
 
 func (h *Handler) OnFailure(stats tftp.TransferStats, err error) {
-	h.Log.Error(err, "transfer failed", "remote", stats.RemoteAddr, "path", stats.Filename)
+	h.Log.Error(err, "(tftp) transfer failed", "remote", stats.RemoteAddr, "path", stats.Filename)
 }
 
 // HandleRead handles TFTP GET requests.
@@ -92,8 +92,10 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
 		h.Log.Info("could not get DHCP info, proceeding without it", "error", err)
 	}
 
+	filename := filepath.Base(fullfilepath)
+
 	// Serve iPXE binaries if requested
-	if content, ok := binary.Files[filepath.Base(fullfilepath)]; ok {
+	if content, ok := binary.Files[filename]; ok {
 		patch := h.Patch
 		if netboot != nil && len(netboot.IPXEScript) > 1 {
 			patch = netboot.IPXEScript
@@ -193,11 +195,24 @@ func (h *Handler) getDHCPInfo(r any) (*data.DHCP, *data.Netboot, error) {
 
 func (h *Handler) resolvePath(fullfilepath string, dhcpInfo *data.DHCP) string {
 	parts := strings.Split(fullfilepath, "/")
+
+	if len(parts) < 2 {
+		return fullfilepath
+	}
+
 	prefix := parts[0]
+	filename := parts[len(parts)-1]
+
+	mac := dhcpInfo.MACAddress.String()
+	mac = strings.ReplaceAll(mac, ":", "-")
 
 	isSerial, _ := regexp.MatchString(`^\d{2}[a-z]\d{5}$`, prefix)
 	if isSerial && dhcpInfo != nil {
-		return strings.Replace(fullfilepath, prefix, dhcpInfo.MACAddress.String(), 1)
+		if filename == "RPI_EFI.fd" {
+			return strings.Replace(fullfilepath, prefix, mac, 1)
+		} else {
+			return strings.Join(parts[1:], "/")
+		}
 	}
 
 	return fullfilepath

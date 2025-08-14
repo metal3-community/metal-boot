@@ -1,15 +1,20 @@
-// Package lease provides DNSMasq-compatible DHCP lease file management.
-package lease
+// Package dnsmasq provides DNSMasq-compatible DHCP lease file management.
+package dnsmasq
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/go-logr/logr"
 )
 
 // Lease represents a DHCP lease entry compatible with DNSMasq format.
@@ -26,28 +31,63 @@ type Lease struct {
 	ClientID string
 }
 
-// Manager handles DHCP lease file operations in DNSMasq format.
-type Manager struct {
+// LeaseManager handles DHCP lease file operations in DNSMasq format with file watching.
+type LeaseManager struct {
+	fileMu sync.RWMutex // protects LeaseFile for reads
+
 	// LeaseFile is the path to the lease file
 	LeaseFile string
-	// leases maps MAC addresses to lease entries
-	leases map[string]*Lease
+
+	// Log is the logger to be used in the LeaseManager
+	Log logr.Logger
+
+	dataMu  sync.RWMutex         // protects leases
+	leases  map[string]*Lease    // leases maps MAC addresses to lease entries
+	watcher *fsnotify.Watcher    // file system watcher
 }
 
-// NewManager creates a new lease manager with the specified lease file path.
-func NewManager(leaseFile string) *Manager {
-	return &Manager{
-		LeaseFile: leaseFile,
-		leases:    make(map[string]*Lease),
+// NewLeaseManager creates a new lease manager with file watching capabilities.
+func NewLeaseManager(log logr.Logger, leaseFile string) (*LeaseManager, error) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file watcher: %w", err)
 	}
+
+	m := &LeaseManager{
+		LeaseFile: leaseFile,
+		Log:       log,
+		leases:    make(map[string]*Lease),
+		watcher:   watcher,
+	}
+
+	// Load initial data
+	if err := m.LoadLeases(); err != nil {
+		watcher.Close()
+		return nil, fmt.Errorf("failed to load initial lease data: %w", err)
+	}
+
+	// Add the lease file to the watcher if it exists
+	if _, err := os.Stat(leaseFile); err == nil {
+		if err := watcher.Add(leaseFile); err != nil {
+			watcher.Close()
+			return nil, fmt.Errorf("failed to add lease file to watcher: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		watcher.Close()
+		return nil, fmt.Errorf("failed to check lease file: %w", err)
+	}
+
+	return m, nil
 }
 
 // LoadLeases reads and parses the DNSMasq lease file format.
 // DNSMasq lease file format:
 // <expiry-time> <mac-address> <ip-address> <hostname> <client-id>
 // Example: 1692123456 aa:bb:cc:dd:ee:ff 192.168.1.100 hostname 01:aa:bb:cc:dd:ee:ff.
-func (m *Manager) LoadLeases() error {
+func (m *LeaseManager) LoadLeases() error {
+	m.fileMu.RLock()
 	file, err := os.Open(m.LeaseFile)
+	m.fileMu.RUnlock()
 	if err != nil {
 		// If file doesn't exist, that's OK - we'll create it when we write
 		if os.IsNotExist(err) {
@@ -56,6 +96,9 @@ func (m *Manager) LoadLeases() error {
 		return fmt.Errorf("failed to open lease file %s: %w", m.LeaseFile, err)
 	}
 	defer file.Close()
+
+	// Create a temporary map to hold new leases
+	newLeases := make(map[string]*Lease)
 
 	scanner := bufio.NewScanner(file)
 	lineNum := 0
@@ -69,22 +112,27 @@ func (m *Manager) LoadLeases() error {
 		lease, err := m.parseLeaseLine(line)
 		if err != nil {
 			// Log the error but continue parsing other leases
-			fmt.Fprintf(os.Stderr, "Warning: failed to parse lease line %d: %v\n", lineNum, err)
+			m.Log.Error(err, "failed to parse lease line", "line", lineNum, "content", line)
 			continue
 		}
 
-		m.leases[lease.MAC.String()] = lease
+		newLeases[lease.MAC.String()] = lease
 	}
 
 	if err := scanner.Err(); err != nil {
 		return fmt.Errorf("error reading lease file: %w", err)
 	}
 
+	// Update the leases map with the new data
+	m.dataMu.Lock()
+	m.leases = newLeases
+	m.dataMu.Unlock()
+
 	return nil
 }
 
 // parseLeaseLine parses a single lease line from the DNSMasq format.
-func (m *Manager) parseLeaseLine(line string) (*Lease, error) {
+func (m *LeaseManager) parseLeaseLine(line string) (*Lease, error) {
 	fields := strings.Fields(line)
 	if len(fields) < 4 {
 		return nil, fmt.Errorf("invalid lease line format: %s", line)
@@ -127,7 +175,12 @@ func (m *Manager) parseLeaseLine(line string) (*Lease, error) {
 }
 
 // AddLease adds or updates a lease entry.
-func (m *Manager) AddLease(mac net.HardwareAddr, ip net.IP, hostname string, leaseTime uint32) {
+func (m *LeaseManager) AddLease(
+	mac net.HardwareAddr,
+	ip net.IP,
+	hostname string,
+	leaseTime uint32,
+) {
 	expiry := time.Now().Add(time.Duration(leaseTime) * time.Second).Unix()
 
 	lease := &Lease{
@@ -137,22 +190,28 @@ func (m *Manager) AddLease(mac net.HardwareAddr, ip net.IP, hostname string, lea
 		Hostname: hostname,
 	}
 
+	m.dataMu.Lock()
 	m.leases[mac.String()] = lease
+	m.dataMu.Unlock()
 }
 
 // GetLease retrieves a lease by MAC address.
-func (m *Manager) GetLease(mac net.HardwareAddr) (*Lease, bool) {
+func (m *LeaseManager) GetLease(mac net.HardwareAddr) (*Lease, bool) {
+	m.dataMu.RLock()
 	lease, exists := m.leases[mac.String()]
+	m.dataMu.RUnlock()
 	return lease, exists
 }
 
 // RemoveLease removes a lease by MAC address.
-func (m *Manager) RemoveLease(mac net.HardwareAddr) {
+func (m *LeaseManager) RemoveLease(mac net.HardwareAddr) {
+	m.dataMu.Lock()
 	delete(m.leases, mac.String())
+	m.dataMu.Unlock()
 }
 
 // SaveLeases writes all leases to the lease file in DNSMasq format.
-func (m *Manager) SaveLeases() error {
+func (m *LeaseManager) SaveLeases() error {
 	// Create directory if it doesn't exist
 	if dir := filepath.Dir(m.LeaseFile); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {
@@ -174,6 +233,7 @@ func (m *Manager) SaveLeases() error {
 
 	// Write all leases
 	now := time.Now().Unix()
+	m.dataMu.RLock()
 	for _, lease := range m.leases {
 		// Skip expired leases
 		if lease.Expiry < now {
@@ -193,39 +253,94 @@ func (m *Manager) SaveLeases() error {
 
 		fmt.Fprintln(file, line)
 	}
+	m.dataMu.RUnlock()
 
 	if err := file.Close(); err != nil {
 		return fmt.Errorf("failed to close temporary lease file: %w", err)
 	}
+
+	// Check if the file is being watched before replacing
+	m.fileMu.RLock()
+	fileExists := false
+	if _, err := os.Stat(m.LeaseFile); err == nil {
+		fileExists = true
+	}
+	m.fileMu.RUnlock()
 
 	// Atomically replace the original file
 	if err := os.Rename(tmpFile, m.LeaseFile); err != nil {
 		return fmt.Errorf("failed to replace lease file: %w", err)
 	}
 
+	// Add to watcher if this is the first time the file is created
+	if !fileExists {
+		if err := m.watcher.Add(m.LeaseFile); err != nil {
+			m.Log.Error(err, "failed to add lease file to watcher", "file", m.LeaseFile)
+		}
+	}
+
 	return nil
 }
 
 // CleanExpiredLeases removes expired leases from memory.
-func (m *Manager) CleanExpiredLeases() {
+func (m *LeaseManager) CleanExpiredLeases() {
 	now := time.Now().Unix()
+	m.dataMu.Lock()
 	for mac, lease := range m.leases {
 		if lease.Expiry < now {
 			delete(m.leases, mac)
 		}
 	}
+	m.dataMu.Unlock()
 }
 
 // GetActiveLeases returns all non-expired leases.
-func (m *Manager) GetActiveLeases() map[string]*Lease {
+func (m *LeaseManager) GetActiveLeases() map[string]*Lease {
 	active := make(map[string]*Lease)
 	now := time.Now().Unix()
 
+	m.dataMu.RLock()
 	for mac, lease := range m.leases {
 		if lease.Expiry >= now {
 			active[mac] = lease
 		}
 	}
+	m.dataMu.RUnlock()
 
 	return active
+}
+
+// Start starts watching the lease file for changes and updates the in-memory data on changes.
+// Start is a blocking method. Use a context cancellation to exit.
+func (m *LeaseManager) Start(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			m.Log.Info("stopping lease file watcher")
+			return
+		case event, ok := <-m.watcher.Events:
+			if !ok {
+				continue
+			}
+			if event.Has(fsnotify.Write) {
+				m.Log.Info("lease file changed, updating cache", "file", m.LeaseFile)
+				if err := m.LoadLeases(); err != nil {
+					m.Log.Error(err, "failed to reload lease file", "file", m.LeaseFile)
+				}
+			}
+		case err, ok := <-m.watcher.Errors:
+			if !ok {
+				continue
+			}
+			m.Log.Error(err, "error watching lease file", "file", m.LeaseFile)
+		}
+	}
+}
+
+// Close closes the file watcher and cleans up resources.
+func (m *LeaseManager) Close() error {
+	if m.watcher != nil {
+		return m.watcher.Close()
+	}
+	return nil
 }

@@ -21,6 +21,7 @@ import (
 	"github.com/bmcpi/pibmc/api/metrics"
 	"github.com/bmcpi/pibmc/api/redfish"
 	"github.com/bmcpi/pibmc/internal/backend"
+	"github.com/bmcpi/pibmc/internal/backend/dnsmasq"
 	"github.com/bmcpi/pibmc/internal/backend/remote"
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
@@ -107,10 +108,20 @@ func startServices(
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
 
+	dnsmasqBackend, err := dnsmasq.NewBackend(logger, dnsmasq.Config{
+		RootDir:    cfg.Dnsmasq.RootDir,
+		TFTPServer: cfg.Dhcp.TftpAddress,
+		HTTPServer: cfg.IpxeHttpScript.HookURL,
+	})
+	if err != nil {
+		logger.Error(err, "failed to create dnsmasq backend")
+		return fmt.Errorf("failed to create dnsmasq backend: %w", err)
+	}
+
 	// Start TFTP server if enabled
 	if cfg.Tftp.Enabled {
 		logger.Info("TFTP server enabled", "root_directory", cfg.Tftp.RootDirectory)
-		startTFTPServer(ctx, g, cfg, logger, backend)
+		startTFTPServer(ctx, g, cfg, logger, dnsmasqBackend)
 	}
 
 	// Start DHCP server if enabled
@@ -122,7 +133,7 @@ func startServices(
 			"address",
 			cfg.Dhcp.Address,
 		)
-		if err := startDHCPServer(ctx, g, cfg, logger, backend); err != nil {
+		if err := startDHCPServer(ctx, g, cfg, logger, dnsmasqBackend); err != nil {
 			return fmt.Errorf("failed to start DHCP server: %w", err)
 		}
 	}
@@ -269,11 +280,11 @@ func startDHCPServer(
 	})
 
 	// Start lease cleanup routine if using reservation handler with lease management
-	if !cfg.Dhcp.ProxyEnabled && (cfg.Dhcp.LeaseFile != "" || cfg.Dhcp.ConfigFile != "") {
-		g.Go(func() error {
-			return runLeaseCleanup(ctx, logger, dh)
-		})
-	}
+	// if !cfg.Dhcp.ProxyEnabled && (cfg.Dhcp.LeaseFile != "" || cfg.Dhcp.ConfigFile != "") {
+	// 	g.Go(func() error {
+	// 		return runLeaseCleanup(ctx, logger, dh)
+	// 	})
+	// }
 
 	return nil
 }
@@ -398,47 +409,7 @@ func dhcpHandler(
 			OTELEnabled: false, // Disabled since we removed OpenTelemetry
 		}
 
-		// Add lease management if configured
-		if c.Dhcp.LeaseFile != "" || c.Dhcp.ConfigFile != "" {
-			var err error
-			reservationHandler, err = reservation.NewHandlerWithLeaseManagement(
-				reservationHandler,
-				c.Dhcp.LeaseFile,
-				c.Dhcp.ConfigFile,
-			)
-			if err != nil {
-				return nil, fmt.Errorf("failed to initialize lease management: %w", err)
-			}
-			log.Info("DHCP lease management enabled",
-				"lease_file", c.Dhcp.LeaseFile,
-				"config_file", c.Dhcp.ConfigFile)
-		}
-
 		dh = reservationHandler
 	}
 	return dh, nil
-}
-
-// runLeaseCleanup periodically cleans up expired DHCP leases.
-func runLeaseCleanup(ctx context.Context, logger logr.Logger, handler dhcpServer.Handler) error {
-	// Try to cast to reservation handler
-	if reservationHandler, ok := handler.(*reservation.Handler); ok {
-		ticker := time.NewTicker(5 * time.Minute) // Clean every 5 minutes
-		defer ticker.Stop()
-
-		logger.Info("starting DHCP lease cleanup routine")
-
-		for {
-			select {
-			case <-ctx.Done():
-				logger.Info("stopping DHCP lease cleanup routine")
-				return nil
-			case <-ticker.C:
-				reservationHandler.CleanupExpiredLeases()
-				logger.V(1).Info("cleaned up expired DHCP leases")
-			}
-		}
-	}
-
-	return nil
 }
