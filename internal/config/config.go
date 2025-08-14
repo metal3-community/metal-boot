@@ -291,10 +291,15 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.SetConfigType("yaml")
 
-	viper.SafeWriteConfigAs("./config.yaml")
-
 	if err := viper.ReadInConfig(); err != nil {
-		log.Fatalf("config: unable to bind env: %s", err.Error())
+		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
+			viper.SafeWriteConfigAs("./config.yaml")
+			if err := viper.ReadInConfig(); err != nil {
+				log.Fatalf("config: Unable to read config file: %s", err.Error())
+			}
+		} else {
+			log.Fatalf("config: Unable to read config file: %s", err.Error())
+		}
 	}
 
 	for _, key := range viper.AllKeys() {
