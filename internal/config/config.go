@@ -302,6 +302,7 @@ func NewConfig() (conf *Config, err error) {
 				}
 				configFile = "/config/" + configFile
 			}
+			log.Printf("config: creating default config file: %s", configFile)
 			viper.SafeWriteConfigAs(configFile)
 			if err := viper.ReadInConfig(); err != nil {
 				log.Fatalf("Unable to read after writing config file: %s", err.Error())
