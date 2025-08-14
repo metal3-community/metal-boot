@@ -1,6 +1,7 @@
 package config
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"log/slog"
@@ -293,12 +294,20 @@ func NewConfig() (conf *Config, err error) {
 
 	if err := viper.ReadInConfig(); err != nil {
 		if _, ok := err.(viper.ConfigFileNotFoundError); ok {
-			viper.SafeWriteConfigAs("./config.yaml")
+			configFile := "config.yaml"
+			wd, _ := os.Getwd()
+			if wd == "/" {
+				if _, err := os.Stat("/config"); errors.Is(err, os.ErrNotExist) {
+					os.MkdirAll("/config", 0o755)
+				}
+				configFile = "/config/" + configFile
+			}
+			viper.SafeWriteConfigAs(configFile)
 			if err := viper.ReadInConfig(); err != nil {
-				log.Fatalf("config: Unable to read config file: %s", err.Error())
+				log.Fatalf("Unable to read after writing config file: %s", err.Error())
 			}
 		} else {
-			log.Fatalf("config: Unable to read config file: %s", err.Error())
+			log.Fatalf("Unable to read config file: %s", err.Error())
 		}
 	}
 
