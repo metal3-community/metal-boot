@@ -298,7 +298,9 @@ func NewConfig() (conf *Config, err error) {
 			wd, _ := os.Getwd()
 			if wd == "/" {
 				if _, err := os.Stat("/config"); errors.Is(err, os.ErrNotExist) {
-					os.MkdirAll("/config", 0o755)
+					if err := os.Mkdir("/config", 0o755); err != nil {
+						log.Fatalf("Unable to create config directory: %s", err.Error())
+					}
 				}
 				configFile = "/config/" + configFile
 			}
