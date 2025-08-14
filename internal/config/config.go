@@ -72,21 +72,29 @@ func (u IpxeUrl) GetUrl(paths ...string) *url.URL {
 }
 
 type DhcpConfig struct {
-	Enabled           bool    `yaml:"enabled"              mapstructure:"enabled"`
-	Interface         string  `yaml:"interface"            mapstructure:"interface"`
-	Address           string  `yaml:"address"              mapstructure:"address"`
-	Port              int     `yaml:"port"                 mapstructure:"port"`
-	ProxyEnabled      bool    `yaml:"proxy_enabled"        mapstructure:"proxy_enabled"`
-	IpxeBinaryUrl     IpxeUrl `yaml:"ipxe_binary_url"      mapstructure:"ipxe_binary_url"`
-	IpxeHttpUrl       IpxeUrl `yaml:"ipxe_http_url"        mapstructure:"ipxe_http_url"`
-	IpxeHttpScript    IpxeUrl `yaml:"ipxe_http_script"     mapstructure:"ipxe_http_script"`
-	IpxeHttpScriptURL string  `yaml:"ipxe_http_script_url" mapstructure:"ipxe_http_script_url"`
-	TftpAddress       string  `yaml:"tftp_address"         mapstructure:"tftp_address"`
-	TftpPort          int     `yaml:"tftp_port"            mapstructure:"tftp_port"`
-	SyslogIP          string  `yaml:"syslog_ip"            mapstructure:"syslog_ip"`
-	StaticIPAMEnabled bool    `yaml:"static_ipam_enabled"  mapstructure:"static_ipam_enabled"`
-	LeaseFile         string  `yaml:"lease_file"           mapstructure:"lease_file"`
-	ConfigFile        string  `yaml:"config_file"          mapstructure:"config_file"`
+	Enabled           bool     `yaml:"enabled"              mapstructure:"enabled"`
+	Interface         string   `yaml:"interface"            mapstructure:"interface"`
+	Address           string   `yaml:"address"              mapstructure:"address"`
+	Port              int      `yaml:"port"                 mapstructure:"port"`
+	ProxyEnabled      bool     `yaml:"proxy_enabled"        mapstructure:"proxy_enabled"`
+	IpxeBinaryUrl     IpxeUrl  `yaml:"ipxe_binary_url"      mapstructure:"ipxe_binary_url"`
+	IpxeHttpUrl       IpxeUrl  `yaml:"ipxe_http_url"        mapstructure:"ipxe_http_url"`
+	IpxeHttpScript    IpxeUrl  `yaml:"ipxe_http_script"     mapstructure:"ipxe_http_script"`
+	IpxeHttpScriptURL string   `yaml:"ipxe_http_script_url" mapstructure:"ipxe_http_script_url"`
+	TftpAddress       string   `yaml:"tftp_address"         mapstructure:"tftp_address"`
+	TftpPort          int      `yaml:"tftp_port"            mapstructure:"tftp_port"`
+	SyslogIP          string   `yaml:"syslog_ip"            mapstructure:"syslog_ip"`
+	StaticIPAMEnabled bool     `yaml:"static_ipam_enabled"  mapstructure:"static_ipam_enabled"`
+	LeaseFile         string   `yaml:"lease_file"           mapstructure:"lease_file"`
+	ConfigFile        string   `yaml:"config_file"          mapstructure:"config_file"`
+	FallbackEnabled   bool     `yaml:"fallback_enabled"     mapstructure:"fallback_enabled"`
+	FallbackIPStart   string   `yaml:"fallback_ip_start"    mapstructure:"fallback_ip_start"`
+	FallbackIPEnd     string   `yaml:"fallback_ip_end"      mapstructure:"fallback_ip_end"`
+	FallbackGateway   string   `yaml:"fallback_gateway"     mapstructure:"fallback_gateway"`
+	FallbackSubnet    string   `yaml:"fallback_subnet"      mapstructure:"fallback_subnet"`
+	FallbackDNS       []string `yaml:"fallback_dns"         mapstructure:"fallback_dns"`
+	FallbackDomain    string   `yaml:"fallback_domain"      mapstructure:"fallback_domain"`
+	FallbackNetboot   bool     `yaml:"fallback_netboot"     mapstructure:"fallback_netboot"`
 }
 
 type IpxeHttpScript struct {
@@ -219,7 +227,7 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.SetDefault("unifi.username", "")
 	viper.SetDefault("unifi.password", "")
-	viper.SetDefault("unifi.endpoint", "")
+	viper.SetDefault("unifi.endpoint", "https://10.0.0.1")
 	viper.SetDefault("unifi.site", "default")
 	viper.SetDefault("unifi.device", "")
 	viper.SetDefault("unifi.insecure", true)
@@ -248,6 +256,14 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dhcp.tftp_port", 69)
 	viper.SetDefault("dhcp.syslog_ip", "")
 	viper.SetDefault("dhcp.static_ipam_enabled", false)
+	viper.SetDefault("dhcp.fallback_enabled", false)
+	viper.SetDefault("dhcp.fallback_ip_start", "192.168.1.100")
+	viper.SetDefault("dhcp.fallback_ip_end", "192.168.1.200")
+	viper.SetDefault("dhcp.fallback_gateway", "192.168.1.1")
+	viper.SetDefault("dhcp.fallback_subnet", "255.255.255.0")
+	viper.SetDefault("dhcp.fallback_dns", []string{"8.8.8.8", "8.8.4.4"})
+	viper.SetDefault("dhcp.fallback_domain", "local")
+	viper.SetDefault("dhcp.fallback_netboot", false)
 
 	viper.SetDefault("static.enabled", true)
 	viper.SetDefault("static.image_urls", []ImageURL{})
@@ -275,6 +291,8 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.SetConfigType("yaml")
 
+	viper.SafeWriteConfigAs("./config.yaml")
+
 	if err := viper.ReadInConfig(); err != nil {
 		log.Fatalf("config: unable to bind env: %s", err.Error())
 	}
@@ -287,13 +305,13 @@ func NewConfig() (conf *Config, err error) {
 		}
 	}
 
+	conf.Log = defaultLogger(conf.LogLevel)
+
 	// Load the Config the first time we start the app.
 	err = loadConfig(conf)
 	if err != nil {
 		return conf, err
 	}
-
-	conf.Log = defaultLogger(conf.LogLevel)
 
 	// Tell viper to watch the config file.
 	viper.WatchConfig()

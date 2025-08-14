@@ -11,7 +11,6 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"net/netip"
-	"net/url"
 	"os"
 	"path"
 	"path/filepath"
@@ -100,37 +99,6 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 	backend.loadConfigs()
 
 	return backend, nil
-}
-
-func (w *Remote) isTokenExpired() bool {
-	if w.jar == nil {
-		w.jar, _ = cookiejar.New(nil)
-	}
-
-	unifiURL, err := url.Parse(w.config.Unifi.Endpoint)
-	if err != nil {
-		return true
-	}
-
-	cookies := w.jar.Cookies(unifiURL)
-
-	if len(cookies) == 0 {
-		return true
-	}
-
-	return slices.IndexFunc(cookies, func(c *http.Cookie) bool {
-		return c.Name == "TOKEN"
-	}) == -1
-}
-
-func (w *Remote) login(ctx context.Context) error {
-	if w.isTokenExpired() {
-		if err := w.client.Login(ctx, w.config.Unifi.Username, w.config.Unifi.Password); err != nil {
-			return err
-		}
-	}
-
-	return nil
 }
 
 func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
@@ -435,11 +403,6 @@ func (w *Remote) GetByIP(
 	ctx context.Context,
 	ip net.IP,
 ) (*data.DHCP, *data.Netboot, *data.Power, error) {
-	err := w.login(ctx)
-	if err != nil {
-		return nil, nil, nil, err
-	}
-
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.GetByIP")
 	defer span.End()
@@ -551,11 +514,6 @@ func (w *Remote) Put(
 	_, span := tracer.Start(ctx, "backend.remote.Put")
 	defer span.End()
 
-	err := w.login(ctx)
-	if err != nil {
-		return err
-	}
-
 	if p != nil {
 		pwr := data.Power{}
 
@@ -617,11 +575,6 @@ func (w *Remote) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
 	_, span := tracer.Start(ctx, "backend.remote.GetKeys")
 	defer span.End()
 
-	err := w.login(ctx)
-	if err != nil {
-		return nil, err
-	}
-
 	var keys []net.HardwareAddr
 
 	clients, err := w.getActiveClientsForDevice(ctx)
@@ -644,11 +597,6 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.PowerCycle")
 	defer span.End()
-
-	err := w.login(ctx)
-	if err != nil {
-		return err
-	}
 
 	pwr, ok := w.power[mac.String()]
 

@@ -92,8 +92,8 @@ func (c *ConfigManager) parseOptionLine(line string) (*DHCPOption, error) {
 	// Parse tags and option code
 	var optionCodeIndex int
 	for i, part := range parts {
-		if strings.HasPrefix(part, "tag:") {
-			tag := strings.TrimPrefix(part, "tag:")
+		if after, ok := strings.CutPrefix(part, "tag:"); ok {
+			tag := after
 			if option.Tag == "" {
 				option.Tag = tag
 			} else {

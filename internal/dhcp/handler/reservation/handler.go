@@ -91,13 +91,24 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
 		if err != nil {
 			if hardwareNotFound(err) {
-				span.SetStatus(codes.Ok, "no reservation found")
+				// Try fallback configuration for unknown devices
+				if h.FallbackConfig != nil && h.FallbackConfig.Enabled {
+					log.Info("no reservation found, using fallback configuration")
+					d = h.generateDefaultDHCP(p.Pkt.ClientHWAddr)
+					n = h.generateDefaultNetboot()
+					if d == nil {
+						span.SetStatus(codes.Error, "failed to generate fallback configuration")
+						return
+					}
+				} else {
+					span.SetStatus(codes.Ok, "no reservation found")
+					return
+				}
+			} else {
+				log.Info("error reading from backend", "error", err)
+				span.SetStatus(codes.Error, err.Error())
 				return
 			}
-			log.Info("error reading from backend", "error", err)
-			span.SetStatus(codes.Error, err.Error())
-
-			return
 		}
 		if d.Disabled {
 			log.Info(
@@ -116,13 +127,24 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		d, n, err := h.readBackend(ctx, p.Pkt.ClientHWAddr)
 		if err != nil {
 			if hardwareNotFound(err) {
-				span.SetStatus(codes.Ok, "no reservation found")
+				// Try fallback configuration for unknown devices
+				if h.FallbackConfig != nil && h.FallbackConfig.Enabled {
+					log.Info("no reservation found, using fallback configuration")
+					d = h.generateDefaultDHCP(p.Pkt.ClientHWAddr)
+					n = h.generateDefaultNetboot()
+					if d == nil {
+						span.SetStatus(codes.Error, "failed to generate fallback configuration")
+						return
+					}
+				} else {
+					span.SetStatus(codes.Ok, "no reservation found")
+					return
+				}
+			} else {
+				log.Info("error reading from backend", "error", err)
+				span.SetStatus(codes.Error, err.Error())
 				return
 			}
-			log.Info("error reading from backend", "error", err)
-			span.SetStatus(codes.Error, err.Error())
-
-			return
 		}
 		if d.Disabled {
 			log.Info(
