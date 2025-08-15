@@ -22,7 +22,7 @@ require (
 	github.com/spf13/viper v1.19.0
 	github.com/stretchr/testify v1.10.0
 	github.com/tinkerbell/ipxedust v0.0.0-20250129162407-3c29a914f8be
-	github.com/ubiquiti-community/go-unifi v1.33.13-0.20250619160421-f6e8954f4667
+	github.com/ubiquiti-community/go-unifi v1.33.13-0.20250815000754-9bfd66c219d8
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.54.0
 	go.opentelemetry.io/otel v1.32.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.31.0
@@ -31,7 +31,6 @@ require (
 	golang.org/x/net v0.40.0
 	golang.org/x/sync v0.14.0
 	google.golang.org/grpc v1.70.0
-	gopkg.in/yaml.v2 v2.4.0
 	k8s.io/apimachinery v0.32.2
 )
 
@@ -106,6 +105,7 @@ require (
 	google.golang.org/protobuf v1.36.1 // indirect
 	gopkg.in/inf.v0 v0.9.1 // indirect
 	gopkg.in/ini.v1 v1.67.0 // indirect
+	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 	k8s.io/klog/v2 v2.130.1 // indirect
 	k8s.io/utils v0.0.0-20241104100929-3ea5e8cea738 // indirect

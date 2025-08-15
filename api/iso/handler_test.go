@@ -186,23 +186,23 @@ type mockBackend struct{}
 func (m *mockBackend) GetByMac(
 	context.Context,
 	net.HardwareAddr,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	d := &data.DHCP{}
 	n := &data.Netboot{
 		Facility: "test",
 	}
-	return d, n, nil, nil
+	return d, n, nil
 }
 
 func (m *mockBackend) GetByIP(
 	context.Context,
 	net.IP,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	d := &data.DHCP{}
 	n := &data.Netboot{
 		Facility: "test",
 	}
-	return d, n, nil, nil
+	return d, n, nil
 }
 
 // GetKeys implements the backend.BackendReader interface.

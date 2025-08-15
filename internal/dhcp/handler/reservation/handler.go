@@ -210,7 +210,7 @@ func (h *Handler) readBackend(
 	ctx, span := tracer.Start(ctx, "Hardware data get")
 	defer span.End()
 
-	d, n, _, err := h.Backend.GetByMac(ctx, mac)
+	d, n, err := h.Backend.GetByMac(ctx, mac)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
 

@@ -14,8 +14,8 @@ import (
 type BackendReader interface {
 	// Read data (from a backend) based on a mac address
 	// and return DHCP headers and options, including netboot info.
-	GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, *data.Power, error)
-	GetByIP(context.Context, net.IP) (*data.DHCP, *data.Netboot, *data.Power, error)
+	GetByMac(context.Context, net.HardwareAddr) (*data.DHCP, *data.Netboot, error)
+	GetByIP(context.Context, net.IP) (*data.DHCP, *data.Netboot, error)
 	GetKeys(context.Context) ([]net.HardwareAddr, error)
 }
 
@@ -27,11 +27,12 @@ type BackendWriter interface {
 		mac net.HardwareAddr,
 		d *data.DHCP,
 		n *data.Netboot,
-		p *data.Power,
 	) error
 }
 
 type BackendPower interface {
+	GetPower(context.Context, net.HardwareAddr) (*data.PowerState, error)
+	SetPower(ctx context.Context, mac net.HardwareAddr, state data.PowerState) error
 	// Cycle power on a device.
 	PowerCycle(ctx context.Context, mac net.HardwareAddr) error
 }
@@ -39,11 +40,4 @@ type BackendPower interface {
 type BackendSyncer interface {
 	// Sync the backend with the file.
 	Sync(ctx context.Context) error
-}
-
-type BackendStore interface {
-	BackendReader
-	BackendWriter
-	BackendPower
-	BackendSyncer
 }

@@ -27,12 +27,11 @@ type mockBackend struct {
 func (m *mockBackend) GetByIP(
 	ctx context.Context,
 	ip net.IP,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	args := m.Called(ctx, ip)
 	dhcp := args.Get(0)
 	netboot := args.Get(1)
-	power := args.Get(2)
-	err := args.Error(3)
+	err := args.Error(2)
 
 	var dhcpPtr *data.DHCP
 	if dhcp != nil {
@@ -44,21 +43,16 @@ func (m *mockBackend) GetByIP(
 		netbootPtr = netboot.(*data.Netboot)
 	}
 
-	var powerPtr *data.Power
-	if power != nil {
-		powerPtr = power.(*data.Power)
-	}
-
-	return dhcpPtr, netbootPtr, powerPtr, err
+	return dhcpPtr, netbootPtr, err
 }
 
 func (m *mockBackend) GetByMac(
 	ctx context.Context,
 	mac net.HardwareAddr,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	args := m.Called(ctx, mac)
-	return args.Get(0).(*data.DHCP), args.Get(1).(*data.Netboot), args.Get(2).(*data.Power), args.Error(
-		3,
+	return args.Get(0).(*data.DHCP), args.Get(1).(*data.Netboot), args.Error(
+		2,
 	)
 }
 

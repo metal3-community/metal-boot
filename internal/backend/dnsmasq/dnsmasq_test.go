@@ -136,12 +136,12 @@ func TestBackendIntegration(t *testing.T) {
 		AllowNetboot: true,
 	}
 
-	if err := backend.Put(ctx, mac, dhcpData, netbootData, nil); err != nil {
+	if err := backend.Put(ctx, mac, dhcpData, netbootData); err != nil {
 		t.Fatal(err)
 	}
 
 	// Test retrieval
-	retrievedDHCP, retrievedNetboot, _, err := backend.GetByMac(ctx, mac)
+	retrievedDHCP, retrievedNetboot, err := backend.GetByMac(ctx, mac)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -156,12 +156,12 @@ func TestBackendIntegration(t *testing.T) {
 
 	// Test disabling netboot
 	netbootData.AllowNetboot = false
-	if err := backend.Put(ctx, mac, nil, netbootData, nil); err != nil {
+	if err := backend.Put(ctx, mac, nil, netbootData); err != nil {
 		t.Fatal(err)
 	}
 
 	// Test retrieval after disabling
-	_, retrievedNetboot, _, err = backend.GetByMac(ctx, mac)
+	_, retrievedNetboot, err = backend.GetByMac(ctx, mac)
 	if err != nil {
 		t.Fatal(err)
 	}

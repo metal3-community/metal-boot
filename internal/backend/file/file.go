@@ -118,7 +118,7 @@ func NewWatcher(l logr.Logger, f string) (*Watcher, error) {
 func (w *Watcher) GetByMac(
 	ctx context.Context,
 	mac net.HardwareAddr,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.file.GetByMac")
 	defer span.End()
@@ -133,30 +133,30 @@ func (w *Watcher) GetByMac(
 		w.Log.Error(err, "failed to unmarshal file data")
 		span.SetStatus(codes.Error, err.Error())
 
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	for k, v := range r {
 		if strings.EqualFold(k, mac.String()) {
 			// found a record for this mac address
 			v.MACAddress = mac
-			d, n, p, err := w.translate(v)
+			d, n, err := w.translate(v)
 			if err != nil {
 				span.SetStatus(codes.Error, err.Error())
 
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			span.SetAttributes(d.EncodeToAttributes()...)
 			span.SetAttributes(n.EncodeToAttributes()...)
 			span.SetStatus(codes.Ok, "")
 
-			return d, n, p, nil
+			return d, n, nil
 		}
 	}
 
 	err := fmt.Errorf("%w: %s", errRecordNotFound, mac.String())
 	span.SetStatus(codes.Error, err.Error())
 
-	return nil, nil, nil, err
+	return nil, nil, err
 }
 
 // GetByIP is the implementation of the Backend interface.
@@ -164,7 +164,7 @@ func (w *Watcher) GetByMac(
 func (w *Watcher) GetByIP(
 	ctx context.Context,
 	ip net.IP,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.file.GetByIP")
 	defer span.End()
@@ -179,7 +179,7 @@ func (w *Watcher) GetByIP(
 		w.Log.Error(err, "failed to unmarshal file data")
 		span.SetStatus(codes.Error, err.Error())
 
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 	for k, v := range r {
 		if v.IPAddress == ip.String() {
@@ -191,27 +191,27 @@ func (w *Watcher) GetByIP(
 				w.Log.Error(err, "failed to parse mac address")
 				span.SetStatus(codes.Error, err.Error())
 
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			v.MACAddress = mac
-			d, n, p, err := w.translate(v)
+			d, n, err := w.translate(v)
 			if err != nil {
 				span.SetStatus(codes.Error, err.Error())
 
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 			span.SetAttributes(d.EncodeToAttributes()...)
 			span.SetAttributes(n.EncodeToAttributes()...)
 			span.SetStatus(codes.Ok, "")
 
-			return d, n, p, nil
+			return d, n, nil
 		}
 	}
 
 	err := fmt.Errorf("%w: %s", errRecordNotFound, ip.String())
 	span.SetStatus(codes.Error, err.Error())
 
-	return nil, nil, nil, err
+	return nil, nil, err
 }
 
 func (w *Watcher) Put(
@@ -219,7 +219,6 @@ func (w *Watcher) Put(
 	mac net.HardwareAddr,
 	d *data.DHCP,
 	n *data.Netboot,
-	p *data.Power,
 ) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.file.Put")
@@ -255,7 +254,7 @@ func (w *Watcher) Put(
 	if v, ok := r[mac.String()]; ok {
 		// found a record for this mac address
 		v.MACAddress = mac
-		d, n, p, err := w.translate(v)
+		d, n, err := w.translate(v)
 		if err != nil {
 			span.SetStatus(codes.Error, err.Error())
 		}
@@ -322,21 +321,6 @@ func (w *Watcher) Put(
 			}
 			if n.Facility != "" && n.Facility != v.Netboot.Facility {
 				v.Netboot.Facility = n.Facility
-			}
-		}
-
-		if p != nil {
-			if p.State != "" && p.State != v.Power.State {
-				v.Power.State = p.State
-			}
-			if p.Port != 0 && p.Port != v.Power.Port {
-				v.Power.Port = p.Port
-			}
-			if p.DeviceId != "" && p.DeviceId != v.Power.DeviceId {
-				v.Power.DeviceId = p.DeviceId
-			}
-			if p.Mode != "" && p.Mode != v.Power.Mode {
-				v.Power.Mode = p.Mode
 			}
 		}
 
@@ -467,23 +451,22 @@ func (w *Watcher) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
 }
 
 // translate converts the data from the file into a data.DHCP and data.Netboot structs.
-func (w *Watcher) translate(r dhcp) (*data.DHCP, *data.Netboot, *data.Power, error) {
+func (w *Watcher) translate(r dhcp) (*data.DHCP, *data.Netboot, error) {
 	d := new(data.DHCP)
 	n := new(data.Netboot)
-	p := new(data.Power)
 
 	d.MACAddress = r.MACAddress
 	// ip address, required
 	ip, err := netip.ParseAddr(r.IPAddress)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("%w: %w", err, errParseIP)
+		return nil, nil, fmt.Errorf("%w: %w", err, errParseIP)
 	}
 	d.IPAddress = ip
 
 	// subnet mask, required
 	sm := net.ParseIP(r.SubnetMask)
 	if sm == nil {
-		return nil, nil, nil, errParseSubnet
+		return nil, nil, errParseSubnet
 	}
 	d.SubnetMask = net.IPMask(sm.To4())
 
@@ -565,7 +548,7 @@ func (w *Watcher) translate(r dhcp) (*data.DHCP, *data.Netboot, *data.Power, err
 	if r.Netboot.IPXEScriptURL != "" {
 		u, err := url.Parse(r.Netboot.IPXEScriptURL)
 		if err != nil {
-			return nil, nil, nil, fmt.Errorf("%w: %w", err, errParseURL)
+			return nil, nil, fmt.Errorf("%w: %w", err, errParseURL)
 		}
 		n.IPXEScriptURL = u
 	}
@@ -585,19 +568,7 @@ func (w *Watcher) translate(r dhcp) (*data.DHCP, *data.Netboot, *data.Power, err
 		n.Facility = r.Netboot.Facility
 	}
 
-	if p.State != "" {
-		p.State = r.Power.State
-	}
-
-	if p.Port != 0 {
-		p.Port = r.Power.Port
-	}
-
-	if p.DeviceId != "" {
-		p.DeviceId = r.Power.DeviceId
-	}
-
-	return d, n, p, nil
+	return d, n, nil
 }
 
 func (w *Watcher) Sync(ctx context.Context) error {

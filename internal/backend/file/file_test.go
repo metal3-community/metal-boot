@@ -279,7 +279,7 @@ func TestTranslate(t *testing.T) {
 		Facility:      "onprem",
 	}
 	w := &Watcher{Log: logr.Discard()}
-	gotDHCP, gotNetboot, _, err := w.translate(input)
+	gotDHCP, gotNetboot, err := w.translate(input)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -341,7 +341,7 @@ func TestTranslateErrors(t *testing.T) {
 	for name, tt := range tests {
 		t.Run(name, func(t *testing.T) {
 			w := &Watcher{Log: stdr.New(log.New(os.Stdout, "", log.Lshortfile))}
-			if _, _, _, err := w.translate(tt.input); !errors.Is(err, tt.wantErr) {
+			if _, _, err := w.translate(tt.input); !errors.Is(err, tt.wantErr) {
 				t.Errorf("translate() = %T, want %T", err, tt.wantErr)
 			}
 		})
@@ -384,7 +384,7 @@ func TestGetByMac(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _, _, err = w.GetByMac(context.Background(), tt.mac)
+			_, _, err = w.GetByMac(context.Background(), tt.mac)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatal(err)
 			}
@@ -418,7 +418,7 @@ func TestGetByIP(t *testing.T) {
 			if err != nil {
 				t.Fatal(err)
 			}
-			_, _, _, err = w.GetByIP(context.Background(), tt.ip)
+			_, _, err = w.GetByIP(context.Background(), tt.ip)
 			if !errors.Is(err, tt.wantErr) {
 				t.Fatal(err)
 			}

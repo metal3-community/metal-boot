@@ -54,8 +54,15 @@ func main() {
 	logger := cfg.Log
 	logger.Info("PiBMC starting", "version", GitRev, "start_time", startTime)
 
-	// Create backend
-	backend, err := createBackend(context.Background(), logger, cfg)
+	// Create readerBackend
+	readerBackend, err := createReaderBackend(context.Background(), logger, cfg)
+	if err != nil {
+		logger.Error(err, "failed to create reader backend")
+		os.Exit(1)
+	}
+
+	// Create pwrBackend
+	pwrBackend, err := createPowerBackend(context.Background(), logger, cfg)
 	if err != nil {
 		logger.Error(err, "failed to create backend")
 		os.Exit(1)
@@ -71,7 +78,7 @@ func main() {
 	defer cancel()
 
 	// Start all services
-	if err := startServices(ctx, cfg, logger, backend); err != nil {
+	if err := startServices(ctx, cfg, logger, readerBackend, pwrBackend); err != nil {
 		logger.Error(err, "failed to start services")
 		os.Exit(1)
 	}
@@ -79,18 +86,37 @@ func main() {
 	logger.Info("PiBMC shutdown complete")
 }
 
-// createBackend initializes and starts the backend service.
-func createBackend(
+// createPowerBackend initializes and starts the backend service.
+func createPowerBackend(
 	ctx context.Context,
 	log logr.Logger,
 	cfg *config.Config,
-) (backend.BackendStore, error) {
-	backend, err := remote.NewRemote(log, cfg)
+) (backend.BackendPower, error) {
+	backend, err := remote.NewRemote(ctx, log, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backend: %w", err)
 	}
+	return backend, nil
+}
 
-	go backend.Start(ctx)
+func createReaderBackend(
+	ctx context.Context,
+	log logr.Logger,
+	cfg *config.Config,
+) (backend.BackendReader, error) {
+	backend, err := dnsmasq.NewBackend(log, dnsmasq.Config{
+		RootDir:    cfg.Dnsmasq.RootDir,
+		TFTPServer: cfg.Dhcp.TftpAddress,
+		HTTPServer: cfg.IpxeHttpScript.HookURL,
+	})
+	if err != nil {
+		log.Error(err, "failed to create dnsmasq backend")
+		return nil, fmt.Errorf("failed to create dnsmasq backend: %w", err)
+	}
+	if err := backend.Sync(ctx); err != nil {
+		log.Error(err, "failed to sync dnsmasq backend")
+		return nil, fmt.Errorf("failed to sync dnsmasq backend: %w", err)
+	}
 	return backend, nil
 }
 
@@ -99,29 +125,20 @@ func startServices(
 	ctx context.Context,
 	cfg *config.Config,
 	logger logr.Logger,
-	backend backend.BackendStore,
+	readerBackend backend.BackendReader,
+	pwrBackend backend.BackendPower,
 ) error {
 	g, ctx := errgroup.WithContext(ctx)
 
 	// Start HTTP API server
-	if err := startHTTPServer(ctx, g, cfg, logger, backend); err != nil {
+	if err := startHTTPServer(ctx, g, cfg, logger, readerBackend, pwrBackend); err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
-	}
-
-	dnsmasqBackend, err := dnsmasq.NewBackend(logger, dnsmasq.Config{
-		RootDir:    cfg.Dnsmasq.RootDir,
-		TFTPServer: cfg.Dhcp.TftpAddress,
-		HTTPServer: cfg.IpxeHttpScript.HookURL,
-	})
-	if err != nil {
-		logger.Error(err, "failed to create dnsmasq backend")
-		return fmt.Errorf("failed to create dnsmasq backend: %w", err)
 	}
 
 	// Start TFTP server if enabled
 	if cfg.Tftp.Enabled {
 		logger.Info("TFTP server enabled", "root_directory", cfg.Tftp.RootDirectory)
-		startTFTPServer(ctx, g, cfg, logger, dnsmasqBackend)
+		startTFTPServer(ctx, g, cfg, logger, readerBackend)
 	}
 
 	// Start DHCP server if enabled
@@ -133,7 +150,7 @@ func startServices(
 			"address",
 			cfg.Dhcp.Address,
 		)
-		if err := startDHCPServer(ctx, g, cfg, logger, dnsmasqBackend); err != nil {
+		if err := startDHCPServer(ctx, g, cfg, logger, readerBackend); err != nil {
 			return fmt.Errorf("failed to start DHCP server: %w", err)
 		}
 	}
@@ -152,7 +169,8 @@ func startHTTPServer(
 	g *errgroup.Group,
 	cfg *config.Config,
 	logger logr.Logger,
-	backend backend.BackendStore,
+	readerBackend backend.BackendReader,
+	pwrBackend backend.BackendPower,
 ) error {
 	// Create structured logger for HTTP server
 	slogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
@@ -163,7 +181,7 @@ func startHTTPServer(
 	apiServer := api.New(cfg, slogger)
 
 	// Configure API handlers
-	configureAPIHandlers(apiServer, cfg, logger, backend, slogger)
+	configureAPIHandlers(apiServer, cfg, logger, readerBackend, pwrBackend, slogger)
 
 	// Start the server in a goroutine
 	bindAddr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
@@ -209,7 +227,8 @@ func configureAPIHandlers(
 	apiServer *api.Api,
 	cfg *config.Config,
 	logger logr.Logger,
-	backend backend.BackendStore,
+	readerBackend backend.BackendReader,
+	pwrBackend backend.BackendPower,
 	slogger *slog.Logger,
 ) {
 	// Add health check handler
@@ -221,18 +240,18 @@ func configureAPIHandlers(
 	logger.V(1).Info("registered metrics handler", "path", "/metrics")
 
 	// Add Redfish handler
-	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, backend))
+	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, readerBackend, pwrBackend))
 	logger.V(1).Info("registered Redfish handler", "path", "/redfish/v1/")
 
 	// Add iPXE handlers if enabled
 	if cfg.IpxeHttpScript.Enabled {
-		apiServer.AddHandler("/", ipxe.New(slogger, cfg, backend))
+		apiServer.AddHandler("/", ipxe.New(slogger, cfg, readerBackend))
 		logger.Info("iPXE HTTP script handler enabled", "path", "/")
 	}
 
 	// Add ISO handler if enabled
 	if cfg.Iso.Enabled {
-		apiServer.AddHandler("/iso/", iso.New(logger, cfg, backend))
+		apiServer.AddHandler("/iso/", iso.New(logger, cfg, readerBackend))
 		logger.Info("ISO handler enabled", "path", "/iso/")
 	}
 }
@@ -243,7 +262,7 @@ func startTFTPServer(
 	g *errgroup.Group,
 	cfg *config.Config,
 	logger logr.Logger,
-	backend backend.BackendStore,
+	backend backend.BackendReader,
 ) {
 	ts := &tftp.Server{
 		Logger:        logger.WithName("tftp"),

@@ -131,7 +131,7 @@ func (h *scriptHandler) getByMac(ctx context.Context, mac net.HardwareAddr) (dat
 	if h.backend == nil {
 		return data{}, errors.New("backend is nil")
 	}
-	d, n, _, err := h.backend.GetByMac(ctx, mac)
+	d, n, err := h.backend.GetByMac(ctx, mac)
 	if err != nil {
 		return data{}, err
 	}
@@ -154,7 +154,7 @@ func (h *scriptHandler) getByIP(ctx context.Context, ip net.IP) (data, error) {
 	if h.backend == nil {
 		return data{}, errors.New("backend is nil")
 	}
-	d, n, _, err := h.backend.GetByIP(ctx, ip)
+	d, n, err := h.backend.GetByIP(ctx, ip)
 	if err != nil {
 		return data{}, err
 	}

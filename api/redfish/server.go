@@ -103,7 +103,8 @@ type RedfishServer struct {
 
 	Log logr.Logger
 
-	backend backend.BackendStore
+	reader backend.BackendReader
+	power  backend.BackendPower
 
 	firmwarePath string
 }
@@ -135,11 +136,11 @@ func (f *RedfishServer) GetEdk2FirmwareManager(
 	return firmwareMgr, nil
 }
 
-func NewRedfishServer(cfg *config.Config, backend backend.BackendStore) *RedfishServer {
+func NewRedfishServer(cfg *config.Config, backend backend.BackendReader) *RedfishServer {
 	server := &RedfishServer{
 		Config:       cfg,
 		Log:          cfg.Log.WithName("redfish-server"),
-		backend:      backend,
+		reader:       backend,
 		firmwarePath: cfg.FirmwarePath,
 	}
 
@@ -148,17 +149,7 @@ func NewRedfishServer(cfg *config.Config, backend backend.BackendStore) *Redfish
 		"port", cfg.Port,
 		"firmware", cfg.FirmwarePath)
 
-	server.refreshSystems(context.Background())
-
 	return server
-}
-
-func (s *RedfishServer) refreshSystems(ctx context.Context) (err error) {
-	s.Log.Info("refreshing systems", "backend", s.backend)
-
-	s.backend.Sync(ctx)
-
-	return
 }
 
 // CreateVirtualDisk implements ServerInterface.
@@ -465,13 +456,6 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 	_, span := tracer.Start(ctx, "redfish.RedfishServer.GetSystem")
 	defer span.End()
 
-	err := s.refreshSystems(ctx)
-	if err != nil {
-		w.WriteHeader(http.StatusInternalServerError)
-		s.Log.Error(err, "error refreshing systems", "system", systemId)
-		return
-	}
-
 	s.Log.Info("getting system", "system", systemId)
 
 	systemIdAddr, err := net.ParseMAC(systemId)
@@ -481,23 +465,37 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 		return
 	}
 
-	dhcp, _, pwr, err := s.backend.GetByMac(ctx, systemIdAddr)
+	dhcp, _, err := s.reader.GetByMac(ctx, systemIdAddr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error getting system by mac", "system", systemId)
 		return
 	}
 
+	pwr, err := s.power.GetPower(ctx, systemIdAddr)
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		s.Log.Error(err, "error getting system power state", "system", systemId)
+		return
+	}
+	if pwr == nil {
+		w.WriteHeader(http.StatusNotFound)
+		s.Log.Error(err, "power state not found", "system", systemId)
+		return
+	}
+
 	defaultName := fmt.Sprintf("System %s", systemId)
 
-	pwrState := Off
-	switch pwr.State {
-	case "auto":
+	var pwrState PowerState
+	switch *pwr {
+	case data.PowerOn:
 		pwrState = On
-	case "off":
+	case data.PowerOff:
 		pwrState = Off
-	default:
-		pwrState = Off
+	case data.PoweringOn:
+		pwrState = PoweringOn
+	case data.PoweringOff:
+		pwrState = PoweringOff
 	}
 
 	if dhcp != nil {
@@ -507,7 +505,7 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 	}
 	resp := ComputerSystem{
 		Id:         &systemId,
-		PowerState: (*PowerState)(&pwrState),
+		PowerState: &pwrState,
 		Links: &SystemLinks{
 			Chassis:   &[]IdRef{{OdataId: util.Ptr("/redfish/v1/Chassis/1")}},
 			ManagedBy: &[]IdRef{{OdataId: util.Ptr("/redfish/v1/Managers/1")}},
@@ -527,6 +525,7 @@ func (s *RedfishServer) GetSystem(w http.ResponseWriter, r *http.Request, system
 					ResetTypeOn,
 					ResetTypeForceOn,
 					ResetTypeForceOff,
+					ResetTypeGracefulShutdown,
 					ResetTypePowerCycle,
 				},
 				Target: util.Ptr(
@@ -910,7 +909,7 @@ func (s *RedfishServer) ListSystems(w http.ResponseWriter, r *http.Request) {
 
 	ids := make([]IdRef, 0)
 
-	keys, err := s.backend.GetKeys(r.Context())
+	keys, err := s.reader.GetKeys(r.Context())
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error getting keys")
@@ -969,7 +968,7 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		return
 	}
 
-	_, _, pwr, err := s.backend.GetByMac(ctx, systemIdAddr)
+	pwr, err := s.power.GetPower(ctx, systemIdAddr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error getting system by mac")
@@ -987,8 +986,11 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		resetType = *req.ResetType
 	}
 
-	if resetType == ResetTypePowerCycle {
-		err := s.backend.PowerCycle(ctx, systemIdAddr)
+	var desiredResetState data.PowerState
+
+	switch resetType {
+	case ResetTypePowerCycle:
+		err := s.power.PowerCycle(ctx, systemIdAddr)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			s.Log.Error(err, "error power cycling system", "system", systemId)
@@ -996,47 +998,21 @@ func (s *RedfishServer) ResetSystem(w http.ResponseWriter, r *http.Request, syst
 		}
 		w.WriteHeader(http.StatusNoContent)
 		return
+	case ResetTypeForceOff:
+		desiredResetState = data.PowerOff
+	case ResetTypeForceOn, ResetTypeOn:
+		desiredResetState = data.PowerOn
 	}
 
-	state := "off"
-	if pwr.State == "off" {
-		state = "auto"
+	if desiredResetState != *pwr {
+		err := s.power.SetPower(ctx, systemIdAddr, desiredResetState)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			s.Log.Error(err, "error forcing on system", "system", systemId)
+			return
+		}
 	}
-
-	if resetType == ResetTypeForceOff {
-		state = "off"
-	}
-
-	err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-		State:    state,
-		Port:     pwr.Port,
-		DeviceId: pwr.DeviceId,
-		SiteId:   pwr.SiteId,
-	})
-	if err != nil {
-		s.Log.Error(err, "error setting power state", "system", systemId)
-		w.WriteHeader(http.StatusInternalServerError)
-		return
-	}
-
-	if state == "off" && resetType != ResetTypeForceOff {
-		defer func() {
-			time.Sleep(time.Duration(s.Config.ResetDelaySec) * time.Second)
-			err = s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-				State:    "auto",
-				Port:     pwr.Port,
-				DeviceId: pwr.DeviceId,
-				SiteId:   pwr.SiteId,
-			})
-			if err != nil {
-				s.Log.Error(err, "error setting power state", "system", systemId)
-				w.WriteHeader(http.StatusInternalServerError)
-				return
-			}
-		}()
-	}
-
-	w.WriteHeader(http.StatusNoContent)
+	w.WriteHeader(http.StatusOK)
 }
 
 // SetSystem implements ServerInterface.
@@ -1062,7 +1038,7 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		return
 	}
 
-	_, _, pwr, err := s.backend.GetByMac(ctx, systemIdAddr)
+	pwr, err := s.power.GetPower(ctx, systemIdAddr)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		s.Log.Error(err, "error getting system by mac")
@@ -1139,23 +1115,27 @@ func (s *RedfishServer) SetSystem(w http.ResponseWriter, r *http.Request, system
 		}
 	}
 
-	powerState := On
+	var powerState PowerState
 	if req.PowerState != nil {
 		powerState = *req.PowerState
 	}
 
-	poeState := "auto"
-	if powerState == Off || powerState == PoweringOff {
-		poeState = "off"
+	var targetPowerState data.PowerState
+
+	switch powerState {
+	case On:
+		targetPowerState = data.PowerOn
+	case Off:
+		targetPowerState = data.PowerOff
+	case PoweringOn:
+		targetPowerState = data.PoweringOn
+	case PoweringOff:
+		targetPowerState = data.PoweringOff
 	}
 
-	if pwr.State != poeState {
-		err := s.backend.Put(ctx, systemIdAddr, nil, nil, &data.Power{
-			State:    poeState,
-			Port:     pwr.Port,
-			DeviceId: pwr.DeviceId,
-			SiteId:   pwr.SiteId,
-		})
+	if targetPowerState != data.PoweringOn && targetPowerState != data.PoweringOff &&
+		targetPowerState != *pwr {
+		err := s.power.SetPower(ctx, systemIdAddr, targetPowerState)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			s.Log.Error(err, "error setting power state", "system", systemId)

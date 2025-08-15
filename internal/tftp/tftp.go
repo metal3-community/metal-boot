@@ -182,7 +182,7 @@ func (h *Handler) getDHCPInfo(r any) (*data.DHCP, *data.Netboot, error) {
 		return nil, nil, err
 	}
 
-	dhcpInfo, netboot, _, err := h.backend.GetByIP(h.ctx, ip)
+	dhcpInfo, netboot, err := h.backend.GetByIP(h.ctx, ip)
 	if err != nil {
 		return nil, nil, fmt.Errorf("failed to get info by IP %s: %w", ip, err)
 	}

@@ -21,11 +21,11 @@ func (h noop) GetKeys(context.Context) ([]net.HardwareAddr, error) {
 func (h noop) GetByMac(
 	_ context.Context,
 	_ net.HardwareAddr,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
-	return nil, nil, nil, errors.New("no backend specified, please specify a backend")
+) (*data.DHCP, *data.Netboot, error) {
+	return nil, nil, errors.New("no backend specified, please specify a backend")
 }
 
 // GetByIP returns an error.
-func (h noop) GetByIP(_ context.Context, _ net.IP) (*data.DHCP, *data.Netboot, *data.Power, error) {
-	return nil, nil, nil, errors.New("no backend specified, please specify a backend")
+func (h noop) GetByIP(_ context.Context, _ net.IP) (*data.DHCP, *data.Netboot, error) {
+	return nil, nil, errors.New("no backend specified, please specify a backend")
 }

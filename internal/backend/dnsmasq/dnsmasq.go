@@ -89,7 +89,7 @@ func (b *Backend) loadData() error {
 func (b *Backend) GetByMac(
 	ctx context.Context,
 	mac net.HardwareAddr,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.dnsmasq.GetByMac")
 	defer span.End()
@@ -101,34 +101,31 @@ func (b *Backend) GetByMac(
 	if !exists {
 		err := fmt.Errorf("%w: %s", errRecordNotFound, mac.String())
 		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Convert lease to DHCP data
 	dhcpData, err := b.leaseToDHCP(lease)
 	if err != nil {
 		span.SetStatus(codes.Error, err.Error())
-		return nil, nil, nil, err
+		return nil, nil, err
 	}
 
 	// Get netboot options from config
 	netbootData := b.getNetbootData(mac)
 
-	// Power data is not supported in DNSMasq format
-	powerData := &data.Power{}
-
 	span.SetAttributes(dhcpData.EncodeToAttributes()...)
 	span.SetAttributes(netbootData.EncodeToAttributes()...)
 	span.SetStatus(codes.Ok, "")
 
-	return dhcpData, netbootData, powerData, nil
+	return dhcpData, netbootData, nil
 }
 
 // GetByIP implements BackendReader.GetByIP.
 func (b *Backend) GetByIP(
 	ctx context.Context,
 	ip net.IP,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.DHCP, *data.Netboot, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.dnsmasq.GetByIP")
 	defer span.End()
@@ -143,23 +140,22 @@ func (b *Backend) GetByIP(
 			dhcpData, err := b.leaseToDHCP(lease)
 			if err != nil {
 				span.SetStatus(codes.Error, err.Error())
-				return nil, nil, nil, err
+				return nil, nil, err
 			}
 
 			netbootData := b.getNetbootData(lease.MAC)
-			powerData := &data.Power{}
 
 			span.SetAttributes(dhcpData.EncodeToAttributes()...)
 			span.SetAttributes(netbootData.EncodeToAttributes()...)
 			span.SetStatus(codes.Ok, "")
 
-			return dhcpData, netbootData, powerData, nil
+			return dhcpData, netbootData, nil
 		}
 	}
 
 	err := fmt.Errorf("%w: %s", errRecordNotFound, ip.String())
 	span.SetStatus(codes.Error, err.Error())
-	return nil, nil, nil, err
+	return nil, nil, err
 }
 
 // GetKeys implements BackendReader.GetKeys.
@@ -188,7 +184,6 @@ func (b *Backend) Put(
 	mac net.HardwareAddr,
 	d *data.DHCP,
 	n *data.Netboot,
-	p *data.Power,
 ) error {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.dnsmasq.Put")

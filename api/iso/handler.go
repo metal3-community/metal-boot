@@ -74,7 +74,7 @@ type isoHandler struct {
 func New(
 	logger logr.Logger,
 	cfg *config.Config,
-	backend backend.BackendStore,
+	backend backend.BackendReader,
 ) http.Handler {
 	return &isoHandler{
 		Backend:           backend,
@@ -343,7 +343,7 @@ func (h *isoHandler) getFacility(
 		return "", nil, errors.New("backend is nil")
 	}
 
-	d, n, _, err := br.GetByMac(ctx, mac)
+	d, n, err := br.GetByMac(ctx, mac)
 	if err != nil {
 		return "", nil, err
 	}

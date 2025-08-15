@@ -68,17 +68,24 @@ type OSIE struct {
 	Initrd string
 }
 
-type Power struct {
-	// State is the power state of the machine.
-	State string
-	// DeviceId is the device ID of the machine.
-	DeviceId string
-	// SiteId is the site ID of the machine.
-	SiteId string
-	// Port is the port of the machine.
-	Port int
-	// Mode
-	Mode string
+type PowerState int
+
+const (
+	PowerOff PowerState = iota
+	PowerOn
+	PoweringOff
+	PoweringOn
+)
+
+var stateName = map[PowerState]string{
+	PowerOff:    "off",
+	PowerOn:     "on",
+	PoweringOff: "powering off",
+	PoweringOn:  "powering on",
+}
+
+func (ps PowerState) String() string {
+	return stateName[ps]
 }
 
 // EncodeToAttributes returns a slice of opentelemetry attributes that can be used to set span.SetAttributes.
@@ -160,20 +167,5 @@ func (o *OSIE) EncodeToAttributes() []attribute.KeyValue {
 		attribute.String("OSIE.BaseURL", s),
 		attribute.String("OSIE.Kernel", o.Kernel),
 		attribute.String("OSIE.Initrd", o.Initrd),
-	}
-}
-
-// EncodeToAttributes returns a slice of opentelemetry attributes that can be used to set span.SetAttributes.
-func (p *Power) EncodeToAttributes() []attribute.KeyValue {
-	if p == nil {
-		return []attribute.KeyValue{}
-	}
-
-	return []attribute.KeyValue{
-		attribute.String("Power.State", p.State),
-		attribute.String("Power.DeviceID", p.DeviceId),
-		attribute.String("Power.SiteID", p.SiteId),
-		attribute.Int("Power.Port", p.Port),
-		attribute.String("Power.Mode", p.Mode),
 	}
 }

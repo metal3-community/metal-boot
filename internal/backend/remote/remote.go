@@ -6,30 +6,22 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
-	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
-	"net/netip"
-	"os"
-	"path"
-	"path/filepath"
 	"slices"
-	"sync"
 	"time"
 
+	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/config"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
 	"github.com/ubiquiti-community/go-unifi/unifi"
 	"go.opentelemetry.io/otel"
-	"gopkg.in/yaml.v2"
 )
 
 const tracerName = "github.com/bmcpi/pibmc/backend/remote"
-
-var errRecordNotFound = fmt.Errorf("record not found")
 
 // Remote represents the backend for watching a file for changes and updating the in memory DHCP data.
 type Remote struct {
@@ -42,15 +34,15 @@ type Remote struct {
 
 	jar *cookiejar.Jar
 
-	// Maps protected by mutex to prevent concurrent access
-	mu      sync.RWMutex
-	dhcp    map[string]data.DHCP
-	netboot map[string]data.Netboot
-	power   map[string]data.Power
+	power map[string]data.PowerState
 }
 
 // NewRemote creates a new file watcher.
-func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
+func NewRemote(
+	ctx context.Context,
+	l logr.Logger,
+	config *config.Config,
+) (backend.BackendPower, error) {
 	client := unifi.Client{}
 
 	if err := client.SetBaseURL(config.Unifi.Endpoint); err != nil {
@@ -83,238 +75,125 @@ func NewRemote(l logr.Logger, config *config.Config) (*Remote, error) {
 		panic(fmt.Sprintf("failed to set http client: %s", err))
 	}
 
-	if err := client.Login(context.Background(), config.Unifi.Username, config.Unifi.Password); err != nil {
+	if err := client.Login(ctx, config.Unifi.Username, config.Unifi.Password); err != nil {
 		panic(fmt.Sprintf("failed to login: %s", err))
 	}
 
 	backend := &Remote{
-		Log:     l,
-		client:  &client,
-		config:  config,
-		jar:     jar,
-		dhcp:    map[string]data.DHCP{},
-		netboot: map[string]data.Netboot{},
-		power:   map[string]data.Power{},
+		Log:    l,
+		client: &client,
+		config: config,
+		jar:    jar,
 	}
-
-	backend.loadConfigs()
 
 	return backend, nil
 }
 
-func (w *Remote) getNetBoot(mac net.HardwareAddr) *data.Netboot {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	if w.netboot != nil {
-		if netboot, ok := w.netboot[mac.String()]; ok {
-			return &netboot
+func (w *Remote) getClient(ctx context.Context, mac net.HardwareAddr) (*unifi.ClientInfo, error) {
+	client, err := w.client.GetClientLocal(
+		ctx,
+		w.config.Unifi.Site,
+		mac.String(),
+	)
+	if err != nil {
+		var notFoundErr *unifi.NotFoundError
+		if errors.As(err, &notFoundErr) {
+			return nil, &NotFoundError{}
 		}
+		return nil, err
 	}
-
-	return &data.Netboot{
-		AllowNetboot: true,
-		OSIE:         data.OSIE{},
-	}
+	return client, nil
 }
 
-func (w *Remote) loadConfigs() error {
-	w.mu.Lock()
-	defer w.mu.Unlock()
-
-	errors := []error{}
-
-	configs := map[string]any{
-		"dhcp":    &w.dhcp,
-		"netboot": &w.netboot,
-		"power":   &w.power,
+func (w *Remote) getDevice(ctx context.Context, mac net.HardwareAddr) (*unifi.Device, error) {
+	client, err := w.getClient(ctx, mac)
+	if err != nil {
+		return nil, err
+	}
+	var deviceMac string
+	if client.UplinkMac != "" {
+		deviceMac = client.UplinkMac
+	} else if client.LastUplinkMac != "" {
+		deviceMac = client.LastUplinkMac
+	} else {
+		return nil, fmt.Errorf("no uplink mac found for client %s", mac.String())
 	}
 
-	for k, v := range configs {
-		backendDir := path.Dir(w.config.BackendFilePath)
-		configFile := filepath.Join(backendDir, fmt.Sprintf("%s.yaml", k))
-
-		if util.Exists(configFile) {
-			f, err := os.OpenFile(configFile, os.O_RDONLY, 0o644)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-			defer f.Close()
-
-			b, err := io.ReadAll(f)
-			if err != nil {
-				errors = append(errors, err)
-				continue
-			}
-
-			if err := yaml.Unmarshal(b, v); err != nil {
-				errors = append(errors, err)
-			}
-		}
+	device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, deviceMac)
+	if err != nil {
+		return nil, err
 	}
 
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to load configs: %v", errors)
-	}
-
-	return nil
+	return device, nil
 }
 
-func (w *Remote) saveConfigs() error {
-	w.mu.RLock()
-	defer w.mu.RUnlock()
-
-	errors := []error{}
-
-	configs := map[string]any{
-		"dhcp":    w.dhcp,
-		"netboot": w.netboot,
-		"power":   w.power,
+func (w *Remote) getPortIdx(
+	mac net.HardwareAddr,
+	device *unifi.Device,
+) (int, error) {
+	i := slices.IndexFunc(device.PortTable, func(i unifi.DevicePortTable) bool {
+		return i.LastConnection.MAC == mac.String()
+	})
+	if i == -1 {
+		return -1, fmt.Errorf("no port found for mac %s", mac.String())
 	}
+	return device.PortTable[i].PortIdx, nil
+}
 
-	for k, v := range configs {
-		b, err := yaml.Marshal(v)
-		if err != nil {
-			errors = append(errors, err)
-			continue
-		}
-
-		backendDir := path.Dir(w.config.BackendFilePath)
-		configFile := filepath.Join(backendDir, fmt.Sprintf("%s.yaml", k))
-
-		if err := os.WriteFile(configFile, b, 0o644); err != nil {
-			errors = append(errors, err)
-		}
+func (w *Remote) getPortTable(
+	ctx context.Context,
+	mac net.HardwareAddr,
+	device *unifi.Device,
+) (*unifi.DevicePortTable, error) {
+	i := slices.IndexFunc(device.PortTable, func(i unifi.DevicePortTable) bool {
+		return i.LastConnection.MAC == mac.String()
+	})
+	if i == -1 {
+		return nil, fmt.Errorf("no port found for mac %s", mac.String())
 	}
-
-	if len(errors) > 0 {
-		return fmt.Errorf("failed to save configs: %v", errors)
-	}
-
-	return nil
+	return &device.PortTable[i], nil
 }
 
 // GetByMac is the implementation of the Backend interface.
 // It reads a given file from the in memory data (w.data).
-func (w *Remote) GetByMac(
+func (w *Remote) GetPower(
 	ctx context.Context,
 	mac net.HardwareAddr,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
+) (*data.PowerState, error) {
 	tracer := otel.Tracer(tracerName)
 	_, span := tracer.Start(ctx, "backend.remote.GetByMac")
 	defer span.End()
 
-	// First, try to get existing data with read lock
-	w.mu.RLock()
-	dhcp, dhcpExists := w.dhcp[mac.String()]
-	power, powerExists := w.power[mac.String()]
-	w.mu.RUnlock()
-
-	// If data doesn't exist, initialize with write lock
-	if !dhcpExists {
-		w.mu.Lock()
-		// Double-check after acquiring write lock
-		if _, exists := w.dhcp[mac.String()]; !exists {
-			dhcp = data.DHCP{}
-			w.dhcp[mac.String()] = dhcp
-		} else {
-			dhcp = w.dhcp[mac.String()]
-		}
-		w.mu.Unlock()
+	device, err := w.getDevice(ctx, mac)
+	if err != nil {
+		return nil, err
 	}
 
-	if !powerExists {
-		w.mu.Lock()
-		// Double-check after acquiring write lock
-		if _, exists := w.power[mac.String()]; !exists {
-			power = data.Power{}
-			w.power[mac.String()] = power
-		} else {
-			power = w.power[mac.String()]
-		}
-		w.mu.Unlock()
+	pt, err := w.getPortTable(ctx, mac, device)
+	if err != nil {
+		return nil, err
 	}
 
-	dhcp.MACAddress = mac
-	netboot := w.getNetBoot(mac)
+	currentPower := pt.PoeEnable
+	poePower := pt.PoeMode == "auto"
 
-	if activeClient, err := w.getActiveClientByMac(ctx, mac); err == nil {
-		power.Port = activeClient.SwPort
-
-		if ipAddr, err := netip.ParseAddr(activeClient.IP); err == nil {
-			dhcp.IPAddress = ipAddr
-		}
-
-		dhcp.Hostname = activeClient.Hostname
-		if activeClient.VirtualNetworkOverrideID != "" {
-			dhcp.VLANID = activeClient.VirtualNetworkOverrideID
-		}
-		dhcp.LeaseTime = 604800
-		dhcp.Arch = "arm64"
-		dhcp.Disabled = false
-
-		networkId := activeClient.NetworkID
-		if networkId == "" {
-			networkId = activeClient.LastConnectionNetworkID
-		}
-
-		if network, err := w.client.GetNetwork(ctx, w.config.Unifi.Site, networkId); err == nil {
-			if _, cidr, err := net.ParseCIDR(network.IPSubnet); err == nil {
-				dhcp.SubnetMask = cidr.Mask
-			}
-
-			if network.DHCPDGateway != "" {
-				if dhcpGateway, err := netip.ParseAddr(network.DHCPDGateway); err == nil {
-					dhcp.DefaultGateway = dhcpGateway
-				}
-			}
-
-			dhcp.NameServers = []net.IP{}
-
-			if network.DHCPDDNS1 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS1))
-			}
-			if network.DHCPDDNS2 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS2))
-			}
-			if network.DHCPDDNS3 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS3))
-			}
-			if network.DHCPDDNS4 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS4))
-			}
-
-			dhcp.NTPServers = []net.IP{}
-
-			if network.DHCPDNtp1 != "" {
-				dhcp.NTPServers = append(dhcp.NTPServers, net.ParseIP(network.DHCPDNtp1))
-			}
-			if network.DHCPDNtp2 != "" {
-				dhcp.NTPServers = append(dhcp.NTPServers, net.ParseIP(network.DHCPDNtp2))
-			}
+	var power data.PowerState
+	if poePower {
+		// If POE is enabled, we need to check the power state
+		if currentPower {
+			power = data.PowerOn
 		} else {
-			w.Log.Error(err, "failed to get network")
+			power = data.PoweringOn
 		}
 	} else {
-		w.Log.Error(err, "failed to get active client by mac")
+		if currentPower {
+			power = data.PoweringOff
+		} else {
+			power = data.PowerOff
+		}
 	}
 
-	if portOverrides, err := w.getPortOverride(ctx, power.Port); err == nil {
-		power.State = portOverrides.PoeMode
-		power.DeviceId = w.config.Unifi.Device
-		power.SiteId = w.config.Unifi.Site
-		power.Port = portOverrides.PortIDX
-
-		// Update the power map with write lock
-		w.mu.Lock()
-		w.power[mac.String()] = power
-		w.mu.Unlock()
-	} else {
-		w.Log.Error(err, "failed to get port override")
-	}
-
-	return &dhcp, netboot, &power, nil
+	return &power, nil
 }
 
 type NotFoundError struct{}
@@ -323,304 +202,53 @@ func (e *NotFoundError) Error() string {
 	return "no client found"
 }
 
-func (w *Remote) getActiveClientByMac(
-	ctx context.Context,
-	mac net.HardwareAddr,
-) (*unifi.ClientInfo, error) {
-	filteredClients, err := w.getActiveClientsForDevice(ctx)
+func (w *Remote) SetPower(ctx context.Context, mac net.HardwareAddr, state data.PowerState) error {
+	tracer := otel.Tracer(tracerName)
+	_, span := tracer.Start(ctx, "backend.remote.SetPower")
+	defer span.End()
+
+	device, err := w.getDevice(ctx, mac)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	i := slices.IndexFunc(filteredClients, func(i unifi.ClientInfo) bool {
-		if macAddr, err := net.ParseMAC(i.Mac); err == nil && macAddr != nil &&
-			macAddr.String() != "" {
-			return macAddr.String() == mac.String()
-		} else {
-			return false
-		}
-	})
-	if i == -1 {
-		return nil, &NotFoundError{}
-	}
-
-	return &filteredClients[i], nil
-}
-
-func (w *Remote) getActiveClientsForDevice(ctx context.Context) (unifi.ClientList, error) {
-	filteredClients := unifi.ClientList{}
-
-	if devices, err := w.client.ListDevice(ctx, w.config.Unifi.Site); err == nil {
-		for _, device := range devices {
-			if device.Type == "usw" {
-				for _, portTable := range device.PortTable {
-					if portTable.LastConnection.Mac != "" {
-						if hw, err := net.ParseMAC(portTable.LastConnection.Mac); err == nil {
-							if util.IsRaspberryPI(hw) {
-								client, err := w.client.GetClientLocal(
-									ctx,
-									w.config.Unifi.Site,
-									hw.String(),
-								)
-								if err != nil {
-									var notFoundErr *unifi.NotFoundError
-									if errors.As(err, &notFoundErr) {
-										// Client not found, continue
-										continue
-									}
-									return nil, err
-								}
-								if client.SwPort == 0 {
-									client.SwPort = portTable.PortIdx
-								}
-								filteredClients = append(filteredClients, *client)
-							}
-						}
-					}
-				}
-			}
-		}
-	} else {
-		w.Log.Error(err, "failed to list devices")
-		return nil, err
-	}
-
-	return filteredClients, nil
-}
-
-func (w *Remote) getActiveClientByIP(ctx context.Context, ip net.IP) (*unifi.ClientInfo, error) {
-	clients, err := w.getActiveClientsForDevice(ctx)
+	port, err := w.getPortIdx(mac, device)
 	if err != nil {
-		return nil, err
+		return err
 	}
 
-	i := slices.IndexFunc(clients, func(i unifi.ClientInfo) bool {
-		ipAddr, err := netip.ParseAddr(i.IP)
-		if err != nil {
-			return false
-		}
-
-		return ipAddr.String() == ip.String()
-	})
-	if i == -1 {
-		return nil, fmt.Errorf("no client found")
-	}
-
-	return &clients[i], nil
-}
-
-func (w *Remote) getPortOverride(
-	ctx context.Context,
-	port int,
-) (*unifi.DevicePortOverrides, error) {
-	device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, w.config.Unifi.Device)
-	if err != nil {
-		return nil, err
-	}
-
-	idx := slices.IndexFunc(device.PortOverrides, func(i unifi.DevicePortOverrides) bool {
+	i := slices.IndexFunc(device.PortOverrides, func(i unifi.DevicePortOverrides) bool {
 		return i.PortIDX == port
 	})
-	if idx == -1 {
-		return nil, fmt.Errorf("no port %d found", port)
+	if i == -1 {
+		return fmt.Errorf("no port %d found", port)
 	}
 
-	return &device.PortOverrides[idx], nil
-}
-
-// GetByIP is the implementation of the Backend interface.
-// It reads a given file from the in memory data (w.data).
-func (w *Remote) GetByIP(
-	ctx context.Context,
-	ip net.IP,
-) (*data.DHCP, *data.Netboot, *data.Power, error) {
-	tracer := otel.Tracer(tracerName)
-	_, span := tracer.Start(ctx, "backend.remote.GetByIP")
-	defer span.End()
-
-	var ipAddr netip.Addr
-
-	if addr, ok := netip.AddrFromSlice(ip); !ok {
-		addr, err := netip.ParseAddr(ip.String())
-		if err != nil {
-		} else {
-			ipAddr = addr
-		}
+	var poeMode string
+	if state == data.PowerOn || state == data.PoweringOn {
+		poeMode = "auto"
 	} else {
-		ipAddr = addr
+		poeMode = "off"
 	}
 
-	dhcp := data.DHCP{
-		IPAddress: ipAddr,
-	}
+	if device.PortOverrides[i].PoeMode != poeMode {
+		device.PortOverrides[i].PoeMode = poeMode
 
-	power := data.Power{}
-
-	netboot := w.getNetBoot(dhcp.MACAddress)
-
-	if activeClient, err := w.getActiveClientByIP(ctx, ip); err == nil {
-		power.Port = activeClient.SwPort
-
-		if ipAddr, err := netip.ParseAddr(activeClient.IP); err == nil {
-			dhcp.IPAddress = ipAddr
-		} else if ipAddr, err := netip.ParseAddr(activeClient.FixedIP); err == nil {
-			dhcp.IPAddress = ipAddr
-		}
-
-		if macAddress, err := net.ParseMAC(activeClient.Mac); err == nil {
-			dhcp.MACAddress = macAddress
-		}
-
-		dhcp.Hostname = activeClient.Hostname
-		if activeClient.VirtualNetworkOverrideID != "" {
-			dhcp.VLANID = activeClient.VirtualNetworkOverrideID
-		}
-		dhcp.LeaseTime = 604800
-		dhcp.Arch = "arm64"
-		dhcp.Disabled = false
-
-		if network, err := w.client.GetNetwork(ctx, w.config.Unifi.Site, activeClient.NetworkID); err == nil {
-			if _, cidr, err := net.ParseCIDR(network.IPSubnet); err == nil {
-				dhcp.SubnetMask = cidr.Mask
-			}
-
-			if defaultGateway, err := netip.ParseAddr(network.DHCPDGateway); err == nil {
-				dhcp.DefaultGateway = defaultGateway
-			}
-
-			dhcp.NameServers = []net.IP{}
-
-			if network.DHCPDDNS1 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS1))
-			}
-			if network.DHCPDDNS2 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS2))
-			}
-			if network.DHCPDDNS3 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS3))
-			}
-			if network.DHCPDDNS4 != "" {
-				dhcp.NameServers = append(dhcp.NameServers, net.ParseIP(network.DHCPDDNS4))
-			}
-
-			dhcp.NTPServers = []net.IP{}
-
-			if network.DHCPDNtp1 != "" {
-				dhcp.NTPServers = append(dhcp.NTPServers, net.ParseIP(network.DHCPDNtp1))
-			}
-			if network.DHCPDNtp2 != "" {
-				dhcp.NTPServers = append(dhcp.NTPServers, net.ParseIP(network.DHCPDNtp2))
-			}
-		} else {
-			return nil, nil, nil, err
-		}
-	} else {
-		return nil, nil, nil, err
-	}
-
-	if dhcp.MACAddress.String() == "" {
-		return nil, nil, nil, errRecordNotFound
-	}
-
-	if portOverrides, err := w.getPortOverride(ctx, power.Port); err == nil {
-		power.State = portOverrides.PoeMode
-		power.DeviceId = w.config.Unifi.Device
-		power.SiteId = w.config.Unifi.Site
-		power.Port = portOverrides.PortIDX
-	} else {
-		return nil, nil, nil, err
-	}
-
-	return &dhcp, netboot, &power, nil
-}
-
-func (w *Remote) Put(
-	ctx context.Context,
-	mac net.HardwareAddr,
-	d *data.DHCP,
-	n *data.Netboot,
-	p *data.Power,
-) error {
-	tracer := otel.Tracer(tracerName)
-	_, span := tracer.Start(ctx, "backend.remote.Put")
-	defer span.End()
-
-	if p != nil {
-		w.mu.Lock()
-
-		pwr := data.Power{}
-		if pd, ok := w.power[mac.String()]; ok {
-			pwr = pd
-		}
-
-		if p.DeviceId != "" {
-			pwr.DeviceId = p.DeviceId
-		}
-
-		if p.SiteId != "" {
-			pwr.SiteId = p.SiteId
-		}
-
-		if p.Port != 0 {
-			pwr.Port = p.Port
-		}
-
-		if p.State != "" {
-			pwr.State = p.State
-		}
-
-		w.power[mac.String()] = pwr
-		w.mu.Unlock()
-
-		device, err := w.client.GetDeviceByMAC(ctx, w.config.Unifi.Site, w.config.Unifi.Device)
-		if err != nil {
+		if dev, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, device); err != nil {
 			return err
-		}
+		} else {
+			i := slices.IndexFunc(dev.PortOverrides, func(i unifi.DevicePortOverrides) bool {
+				return i.PortIDX == port
+			})
+			if i != -1 {
+				portOverride := dev.PortOverrides[i]
 
-		portOverrides := device.PortOverrides
-
-		i := slices.IndexFunc(portOverrides, func(i unifi.DevicePortOverrides) bool {
-			return i.PortIDX == pwr.Port
-		})
-		if i == -1 {
-			return fmt.Errorf("no port %d found", pwr.Port)
-		}
-
-		if portOverrides[i].PoeMode != pwr.State {
-			portOverrides[i].PoeMode = pwr.State
-			portOverrides[i].PortPoe = util.Ptr(pwr.State == "auto")
-			portOverrides[i].QOSProfile = nil
-
-			device.PortOverrides = portOverrides
-
-			if _, err := w.client.UpdateDevice(ctx, w.config.Unifi.Site, device); err != nil {
-				return err
+				w.Log.Info("POE mode changed", "device", dev.ID, "port", port, "mode", portOverride.PoeMode)
 			}
 		}
 	}
 
 	return nil
-}
-
-func (w *Remote) GetKeys(ctx context.Context) ([]net.HardwareAddr, error) {
-	tracer := otel.Tracer(tracerName)
-	_, span := tracer.Start(ctx, "backend.remote.GetKeys")
-	defer span.End()
-
-	var keys []net.HardwareAddr
-
-	clients, err := w.getActiveClientsForDevice(ctx)
-	if err != nil {
-		return nil, err
-	}
-
-	for _, client := range clients {
-		if mac, err := net.ParseMAC(client.Mac); err == nil {
-			keys = append(keys, mac)
-		}
-	}
-
-	return keys, nil
 }
 
 // PowerCycle is the implementation of the Backend interface.
@@ -630,84 +258,22 @@ func (w *Remote) PowerCycle(ctx context.Context, mac net.HardwareAddr) error {
 	_, span := tracer.Start(ctx, "backend.remote.PowerCycle")
 	defer span.End()
 
-	w.mu.RLock()
-	pwr, ok := w.power[mac.String()]
-	w.mu.RUnlock()
-
-	if pwr.Port == 0 || !ok {
-		pwr = data.Power{}
-
-		activeClient, err := w.getActiveClientByMac(ctx, mac)
-		if err != nil {
-			if _, ok := err.(*NotFoundError); ok {
-				localClient, err := w.client.GetClientLocal(ctx, w.config.Unifi.Site, mac.String())
-				if err != nil {
-					return err
-				}
-				pwr.DeviceId = localClient.LastUplinkMac
-				pwr.SiteId = w.config.Unifi.Site
-				pwr.Port = localClient.SwPort
-				pwr.Mode = "auto"
-			}
-		} else {
-			if activeClient.SwPort == 0 {
-				return fmt.Errorf("no port found")
-			}
-			pwr.Port = activeClient.SwPort
-			pwr.DeviceId = w.config.Unifi.Device
-			pwr.SiteId = w.config.Unifi.Site
-			pwr.Mode = "auto"
-		}
-
-		w.mu.Lock()
-		w.power[mac.String()] = pwr
-		w.mu.Unlock()
-	}
-
-	if _, err := w.client.ExecuteCmd(ctx, w.config.Unifi.Site, "devmgr", unifi.Cmd{
-		Command: "power-cycle",
-		MAC:     w.config.Unifi.Device,
-		PortIDX: util.Ptr(pwr.Port),
-	}); err != nil {
-		w.Log.Error(err, "failed to power cycle")
-		return err
-	}
-
-	return nil
-}
-
-// Start starts watching a file for changes and updates the in memory data (w.data) on changew.
-// Start is a blocking method. Use a context cancellation to exit.
-func (w *Remote) Start(ctx context.Context) {
-	for range ctx.Done() {
-		w.Log.Info("stopping remote")
-		w.Log.Info("saving dhcp")
-		if err := w.saveConfigs(); err != nil {
-			w.Log.Error(err, "failed to save configs")
-		} else {
-			w.Log.Info("configs saved")
-		}
-	}
-}
-
-func (w *Remote) Sync(ctx context.Context) error {
-	k, err := w.GetKeys(ctx)
+	device, err := w.getDevice(ctx, mac)
 	if err != nil {
 		return err
 	}
 
-	for _, key := range k {
-		_, _, _, err := w.GetByMac(ctx, key)
-		if err != nil {
-			return err
-		}
+	port, err := w.getPortIdx(mac, device)
+	if err != nil {
+		return err
 	}
 
-	return nil
-}
-
-func (w *Remote) Close() error {
-	if err := w.saveConfigs(); err != nil {
+	if _, err := w.client.ExecuteCmd(ctx, w.config.Unifi.Site, "devmgr", unifi.Cmd{
+		Command: "power-cycle",
+		Mac:     device.MAC,
+		PortIdx: util.Ptr(port),
+	}); err != nil {
+		w.Log.Error(err, "failed to power cycle")
 		return err
 	}
 

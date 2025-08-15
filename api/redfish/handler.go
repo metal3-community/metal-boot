@@ -12,15 +12,17 @@ import (
 func New(
 	logger *slog.Logger,
 	cfg *config.Config,
-	backend backend.BackendStore,
+	reader backend.BackendReader,
+	pwrBackend backend.BackendPower,
 ) http.Handler {
 	mux := http.NewServeMux()
 
 	server := &RedfishServer{
 		Config:       cfg,
 		Log:          cfg.Log.WithName("redfish-server"),
-		backend:      backend,
+		reader:       reader,
 		firmwarePath: cfg.FirmwarePath,
+		power:        pwrBackend,
 	}
 
 	options := StdHTTPServerOptions{
