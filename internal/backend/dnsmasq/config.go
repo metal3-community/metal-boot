@@ -35,7 +35,7 @@ type ConfigManager struct {
 	RootDir string
 	// HostsDir is the hosts directory under RootDir
 	HostsDir string
-	// OptsDir is the opts directory under RootDir  
+	// OptsDir is the opts directory under RootDir
 	OptsDir string
 	// options stores the parsed DHCP options
 	options []*DHCPOption

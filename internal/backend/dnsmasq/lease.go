@@ -41,9 +41,9 @@ type LeaseManager struct {
 	// Log is the logger to be used in the LeaseManager
 	Log logr.Logger
 
-	dataMu  sync.RWMutex         // protects leases
-	leases  map[string]*Lease    // leases maps MAC addresses to lease entries
-	watcher *fsnotify.Watcher    // file system watcher
+	dataMu  sync.RWMutex      // protects leases
+	leases  map[string]*Lease // leases maps MAC addresses to lease entries
+	watcher *fsnotify.Watcher // file system watcher
 }
 
 // NewLeaseManager creates a new lease manager with file watching capabilities.

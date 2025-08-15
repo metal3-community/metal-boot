@@ -3,6 +3,8 @@ package dnsmasq
 
 import (
 	"context"
+	"crypto/md5"
+	"encoding/binary"
 	"fmt"
 	"net"
 	"net/netip"
@@ -36,6 +38,16 @@ type Backend struct {
 	rootDir    string
 	tftpServer string
 	httpServer string
+
+	// Automatic lease assignment
+	autoAssignEnabled bool
+	ipPoolStart       net.IP
+	ipPoolEnd         net.IP
+	defaultLeaseTime  uint32
+	defaultGateway    string
+	defaultSubnet     string
+	defaultDNS        []string
+	defaultDomain     string
 }
 
 // Config holds configuration for the DNSMasq backend.
@@ -43,6 +55,16 @@ type Config struct {
 	RootDir    string
 	TFTPServer string
 	HTTPServer string
+
+	// Automatic lease assignment configuration
+	AutoAssignEnabled bool
+	IPPoolStart       string
+	IPPoolEnd         string
+	DefaultLeaseTime  uint32
+	DefaultGateway    string
+	DefaultSubnet     string
+	DefaultDNS        []string
+	DefaultDomain     string
 }
 
 // NewBackend creates a new DNSMasq backend.
@@ -61,6 +83,40 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 		rootDir:       config.RootDir,
 		tftpServer:    config.TFTPServer,
 		httpServer:    config.HTTPServer,
+
+		// Auto assignment settings
+		autoAssignEnabled: config.AutoAssignEnabled,
+		defaultLeaseTime:  config.DefaultLeaseTime,
+		defaultGateway:    config.DefaultGateway,
+		defaultSubnet:     config.DefaultSubnet,
+		defaultDNS:        config.DefaultDNS,
+		defaultDomain:     config.DefaultDomain,
+	}
+
+	// Parse IP pool range if auto assignment is enabled
+	if config.AutoAssignEnabled {
+		if config.IPPoolStart != "" {
+			ipStart := net.ParseIP(config.IPPoolStart)
+			if ipStart == nil {
+				leaseManager.Close()
+				return nil, fmt.Errorf("invalid IP pool start address: %s", config.IPPoolStart)
+			}
+			backend.ipPoolStart = ipStart
+		}
+
+		if config.IPPoolEnd != "" {
+			ipEnd := net.ParseIP(config.IPPoolEnd)
+			if ipEnd == nil {
+				leaseManager.Close()
+				return nil, fmt.Errorf("invalid IP pool end address: %s", config.IPPoolEnd)
+			}
+			backend.ipPoolEnd = ipEnd
+		}
+
+		// Set default lease time if not specified
+		if backend.defaultLeaseTime == 0 {
+			backend.defaultLeaseTime = 604800 // 1 week default
+		}
 	}
 
 	// Load existing data
@@ -95,9 +151,37 @@ func (b *Backend) GetByMac(
 	defer span.End()
 
 	b.mu.RLock()
-	defer b.mu.RUnlock()
-
 	lease, exists := b.leaseManager.GetLease(mac)
+	b.mu.RUnlock()
+
+	if !exists && b.autoAssignEnabled {
+		// Automatically assign a lease for unknown MAC addresses
+		b.log.Info("MAC address not found, auto-assigning lease", "mac", mac.String())
+
+		assignedIP, err := b.assignIPForMAC(mac)
+		if err != nil {
+			err = fmt.Errorf("failed to auto-assign IP for MAC %s: %w", mac.String(), err)
+			span.SetStatus(codes.Error, err.Error())
+			return nil, nil, err
+		}
+
+		// Create and store the new lease
+		hostname := fmt.Sprintf("auto-%s", mac.String())
+		b.mu.Lock()
+		b.leaseManager.AddLease(mac, assignedIP, hostname, b.defaultLeaseTime)
+		b.mu.Unlock()
+
+		// Save the lease immediately
+		if err := b.save(); err != nil {
+			b.log.Error(err, "failed to save auto-assigned lease", "mac", mac.String(), "ip", assignedIP.String())
+		}
+
+		// Get the newly created lease
+		b.mu.RLock()
+		lease, exists = b.leaseManager.GetLease(mac)
+		b.mu.RUnlock()
+	}
+
 	if !exists {
 		err := fmt.Errorf("%w: %s", errRecordNotFound, mac.String())
 		span.SetStatus(codes.Error, err.Error())
@@ -332,4 +416,160 @@ func (b *Backend) Close() error {
 		return fmt.Errorf("failed to close lease manager: %w", err)
 	}
 	return nil
+}
+
+// assignIPForMAC assigns an IP address from the pool for a given MAC address.
+// It uses a deterministic hash-based approach to ensure the same MAC gets the same IP.
+func (b *Backend) assignIPForMAC(mac net.HardwareAddr) (net.IP, error) {
+	if !b.autoAssignEnabled || b.ipPoolStart == nil || b.ipPoolEnd == nil {
+		return nil, fmt.Errorf("automatic IP assignment not configured")
+	}
+
+	// Convert IP addresses to integers for calculation
+	startInt := ipToInt(b.ipPoolStart)
+	endInt := ipToInt(b.ipPoolEnd)
+
+	if startInt > endInt {
+		return nil, fmt.Errorf("invalid IP pool range: start %s > end %s", b.ipPoolStart.String(), b.ipPoolEnd.String())
+	}
+
+	poolSize := endInt - startInt + 1
+
+	// Use MD5 hash of MAC address to get a deterministic offset
+	macBytes := []byte(mac.String())
+	hasher := md5.New()
+	hasher.Write(macBytes)
+	hash := hasher.Sum(nil)
+
+	// Use first 4 bytes of hash as offset seed
+	var offsetSeed uint32
+	offsetSeed = binary.BigEndian.Uint32(hash[:4])
+
+	// Calculate offset within the pool
+	offset := offsetSeed % poolSize
+	assignedInt := startInt + offset
+
+	// Check if this IP is already assigned to a different MAC
+	activeLeases := b.leaseManager.GetActiveLeases()
+
+	// Try the calculated IP first, then search sequentially if occupied
+	for i := uint32(0); i < poolSize; i++ {
+		currentInt := assignedInt + i
+		if currentInt > endInt {
+			currentInt = startInt + (currentInt - endInt - 1) // wrap around
+		}
+
+		testIP := intToIP(currentInt)
+
+		// Check if this IP is available
+		occupied := false
+		for _, lease := range activeLeases {
+			if lease.IP.Equal(testIP) && lease.MAC.String() != mac.String() {
+				occupied = true
+				break
+			}
+		}
+
+		if !occupied {
+			return testIP, nil
+		}
+	}
+
+	// If we get here, the pool is full
+	return nil, fmt.Errorf("IP pool exhausted: no available IPs in range %s-%s",
+		b.ipPoolStart.String(), b.ipPoolEnd.String())
+}
+
+// ipToInt converts an IPv4 address to a uint32.
+func ipToInt(ip net.IP) uint32 {
+	ip = ip.To4()
+	if ip == nil {
+		return 0
+	}
+	return binary.BigEndian.Uint32(ip)
+}
+
+// intToIP converts a uint32 to an IPv4 address.
+func intToIP(i uint32) net.IP {
+	ip := make(net.IP, 4)
+	binary.BigEndian.PutUint32(ip, i)
+	return ip
+}
+
+// NewConfigFromDnsmasqConfig creates a Backend Config from a DnsmasqConfig.
+func NewConfigFromDnsmasqConfig(dnsmasqConfig interface{}) (Config, error) {
+	// Use type assertion to access the fields
+	// This allows the backend to be independent of the main config package
+	config := Config{}
+
+	// Use reflection or type switches to extract values
+	// For now, we'll define a simple interface that the caller must satisfy
+	if cfg, ok := dnsmasqConfig.(map[string]interface{}); ok {
+		if rootDir, exists := cfg["root_directory"]; exists {
+			if s, ok := rootDir.(string); ok {
+				config.RootDir = s
+			}
+		}
+		if tftpServer, exists := cfg["tftp_server"]; exists {
+			if s, ok := tftpServer.(string); ok {
+				config.TFTPServer = s
+			}
+		}
+		if httpServer, exists := cfg["http_server"]; exists {
+			if s, ok := httpServer.(string); ok {
+				config.HTTPServer = s
+			}
+		}
+		if autoAssign, exists := cfg["auto_assign_enabled"]; exists {
+			if b, ok := autoAssign.(bool); ok {
+				config.AutoAssignEnabled = b
+			}
+		}
+		if poolStart, exists := cfg["ip_pool_start"]; exists {
+			if s, ok := poolStart.(string); ok {
+				config.IPPoolStart = s
+			}
+		}
+		if poolEnd, exists := cfg["ip_pool_end"]; exists {
+			if s, ok := poolEnd.(string); ok {
+				config.IPPoolEnd = s
+			}
+		}
+		if leaseTime, exists := cfg["default_lease_time"]; exists {
+			if i, ok := leaseTime.(uint32); ok {
+				config.DefaultLeaseTime = i
+			} else if i, ok := leaseTime.(int); ok {
+				config.DefaultLeaseTime = uint32(i)
+			}
+		}
+		if gateway, exists := cfg["default_gateway"]; exists {
+			if s, ok := gateway.(string); ok {
+				config.DefaultGateway = s
+			}
+		}
+		if subnet, exists := cfg["default_subnet"]; exists {
+			if s, ok := subnet.(string); ok {
+				config.DefaultSubnet = s
+			}
+		}
+		if dns, exists := cfg["default_dns"]; exists {
+			if slice, ok := dns.([]string); ok {
+				config.DefaultDNS = slice
+			} else if slice, ok := dns.([]interface{}); ok {
+				config.DefaultDNS = make([]string, len(slice))
+				for i, v := range slice {
+					if s, ok := v.(string); ok {
+						config.DefaultDNS[i] = s
+					}
+				}
+			}
+		}
+		if domain, exists := cfg["default_domain"]; exists {
+			if s, ok := domain.(string); ok {
+				config.DefaultDomain = s
+			}
+		}
+	}
+
+	return config, nil
 }

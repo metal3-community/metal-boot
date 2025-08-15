@@ -134,10 +134,18 @@ type StaticConfig struct {
 }
 
 type DnsmasqConfig struct {
-	Enabled       bool   `mapstructure:"enabled"`
-	RootDirectory string `mapstructure:"root_directory"`
-	TFTPServer    string `mapstructure:"tftp_server"`
-	HTTPServer    string `mapstructure:"http_server"`
+	Enabled           bool     `mapstructure:"enabled"`
+	RootDirectory     string   `mapstructure:"root_directory"`
+	TFTPServer        string   `mapstructure:"tftp_server"`
+	HTTPServer        string   `mapstructure:"http_server"`
+	AutoAssignEnabled bool     `mapstructure:"auto_assign_enabled"`
+	IPPoolStart       string   `mapstructure:"ip_pool_start"`
+	IPPoolEnd         string   `mapstructure:"ip_pool_end"`
+	DefaultLeaseTime  uint32   `mapstructure:"default_lease_time"`
+	DefaultGateway    string   `mapstructure:"default_gateway"`
+	DefaultSubnet     string   `mapstructure:"default_subnet"`
+	DefaultDNS        []string `mapstructure:"default_dns"`
+	DefaultDomain     string   `mapstructure:"default_domain"`
 }
 
 type Config struct {
@@ -300,6 +308,14 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dnsmasq.root_directory", "/shared/dnsmasq")
 	viper.SetDefault("dnsmasq.tftp_server", netInfo.ExternalIP)
 	viper.SetDefault("dnsmasq.http_server", netInfo.ExternalIP)
+	viper.SetDefault("dnsmasq.auto_assign_enabled", false)
+	viper.SetDefault("dnsmasq.ip_pool_start", "192.168.1.100")
+	viper.SetDefault("dnsmasq.ip_pool_end", "192.168.1.200")
+	viper.SetDefault("dnsmasq.default_lease_time", 604800) // 1 week
+	viper.SetDefault("dnsmasq.default_gateway", "192.168.1.1")
+	viper.SetDefault("dnsmasq.default_subnet", "255.255.255.0")
+	viper.SetDefault("dnsmasq.default_dns", []string{"8.8.8.8", "8.8.4.4"})
+	viper.SetDefault("dnsmasq.default_domain", "local")
 
 	viper.SetDefault("ipxe_http_script.enabled", true)
 	viper.SetDefault("ipxe_http_script.retries", 3)

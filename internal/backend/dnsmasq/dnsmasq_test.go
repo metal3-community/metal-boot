@@ -7,6 +7,7 @@ import (
 	"net/netip"
 	"os"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -168,6 +169,124 @@ func TestBackendIntegration(t *testing.T) {
 
 	if retrievedNetboot.AllowNetboot {
 		t.Error("Expected netboot to be disabled")
+	}
+}
+
+func TestAutomaticLeaseAssignment(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "dnsmasq-auto-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create backend with automatic assignment enabled
+	config := Config{
+		RootDir:           tmpDir,
+		TFTPServer:        "192.168.1.1",
+		HTTPServer:        "192.168.1.1",
+		AutoAssignEnabled: true,
+		IPPoolStart:       "192.168.1.100",
+		IPPoolEnd:         "192.168.1.110",
+		DefaultLeaseTime:  3600,
+	}
+
+	logger := logr.Discard()
+	backend, err := NewBackend(logger, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+
+	// Test automatic assignment for unknown MAC
+	unknownMAC, _ := net.ParseMAC("bb:bb:cc:dd:ee:ff")
+
+	// Should automatically assign an IP
+	dhcpData, _, err := backend.GetByMac(ctx, unknownMAC)
+	if err != nil {
+		t.Fatalf("Expected automatic assignment to succeed, got error: %v", err)
+	}
+
+	if dhcpData == nil {
+		t.Fatal("Expected DHCP data to be returned")
+	}
+
+	// Verify IP is within the configured range
+	assignedIP := dhcpData.IPAddress
+	startIP, _ := netip.ParseAddr("192.168.1.100")
+	endIP, _ := netip.ParseAddr("192.168.1.110")
+
+	if assignedIP.Compare(startIP) < 0 || assignedIP.Compare(endIP) > 0 {
+		t.Errorf("Assigned IP %s is outside the configured range %s-%s",
+			assignedIP.String(), startIP.String(), endIP.String())
+	}
+
+	// Verify hostname is auto-generated
+	expectedHostname := fmt.Sprintf("auto-%s", unknownMAC.String())
+	if dhcpData.Hostname != expectedHostname {
+		t.Errorf("Expected hostname %s, got %s", expectedHostname, dhcpData.Hostname)
+	}
+
+	// Test that the same MAC gets the same IP on subsequent calls
+	dhcpData2, _, err := backend.GetByMac(ctx, unknownMAC)
+	if err != nil {
+		t.Fatalf("Second call should succeed: %v", err)
+	}
+
+	if dhcpData.IPAddress.Compare(dhcpData2.IPAddress) != 0 {
+		t.Errorf("Expected same IP on second call: got %s then %s",
+			dhcpData.IPAddress.String(), dhcpData2.IPAddress.String())
+	}
+
+	// Test that different MACs get different IPs
+	anotherMAC, _ := net.ParseMAC("cc:cc:cc:dd:ee:ff")
+	dhcpData3, _, err := backend.GetByMac(ctx, anotherMAC)
+	if err != nil {
+		t.Fatalf("Assignment for different MAC should succeed: %v", err)
+	}
+
+	if dhcpData.IPAddress.Compare(dhcpData3.IPAddress) == 0 {
+		t.Errorf("Different MACs should get different IPs, both got %s",
+			dhcpData.IPAddress.String())
+	}
+}
+
+func TestAutomaticAssignmentDisabled(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "dnsmasq-no-auto-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create backend with automatic assignment disabled (default)
+	config := Config{
+		RootDir:    tmpDir,
+		TFTPServer: "192.168.1.1",
+		HTTPServer: "192.168.1.1",
+	}
+
+	logger := logr.Discard()
+	backend, err := NewBackend(logger, config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+
+	// Test that unknown MAC returns error when auto-assignment is disabled
+	unknownMAC, _ := net.ParseMAC("dd:dd:dd:dd:ee:ff")
+
+	_, _, err = backend.GetByMac(ctx, unknownMAC)
+	if err == nil {
+		t.Fatal("Expected error for unknown MAC when auto-assignment is disabled")
+	}
+
+	if !strings.Contains(err.Error(), "record not found") {
+		t.Errorf("Expected 'record not found' error, got: %v", err)
 	}
 }
 

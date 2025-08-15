@@ -44,6 +44,10 @@ func (s *Server) ListenAndServe(
 	addr netip.AddrPort,
 	backend backend.BackendReader,
 ) error {
+	if backend == nil {
+		return fmt.Errorf("(tftp) backend cannot be nil")
+	}
+
 	handler := &Handler{
 		ctx:           ctx,
 		RootDirectory: s.RootDirectory,
@@ -59,6 +63,10 @@ func (s *Server) ListenAndServe(
 	}
 
 	tftpServer := tftp.NewServer(handler.HandleRead, handler.HandleWrite)
+	if tftpServer == nil {
+		return fmt.Errorf("(tftp) failed to create TFTP server")
+	}
+
 	tftpServer.SetHook(handler)
 
 	a, err := net.ResolveUDPAddr("udp", addr.String())
@@ -77,6 +85,8 @@ func (s *Server) ListenAndServe(
 		tftpServer.Shutdown()
 	}()
 
+	s.Logger.Info("(tftp) starting TFTP server", "address", addr.String())
+
 	if err := tftpServer.Serve(conn); err != nil && !errors.Is(err, http.ErrServerClosed) {
 		s.Logger.Error(err, "(tftp) TFTP server error")
 		return err
@@ -94,13 +104,59 @@ func (h *Handler) OnFailure(stats tftp.TransferStats, err error) {
 }
 
 // HandleRead handles TFTP GET requests.
-func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
+func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) {
+	// Add panic recovery to prevent crashes
+	defer func() {
+		if r := recover(); r != nil {
+			h.Log.Error(
+				fmt.Errorf("panic in HandleRead: %v", r),
+				"recovered from panic",
+				"path",
+				fullfilepath,
+			)
+			err = fmt.Errorf("internal error during TFTP read")
+		}
+	}()
+
+	if rf == nil {
+		h.Log.Error(nil, "HandleRead called with nil ReaderFrom", "path", fullfilepath)
+		return fmt.Errorf("nil ReaderFrom parameter")
+	}
+
 	dhcpInfo, netboot, err := h.getDHCPInfo(rf)
 	if err != nil {
 		h.Log.Info("could not get DHCP info, proceeding without it", "error", err)
 	}
 
 	filename := filepath.Base(fullfilepath)
+
+	if filename == "RPI_EFI.fd" {
+		if dhcpInfo == nil {
+			h.Log.Error(nil, "(tftp) cannot serve firmware without DHCP info")
+			return fmt.Errorf("DHCP info required for firmware")
+		}
+
+		mac := dhcpInfo.MACAddress
+
+		mgr, err := manager.NewSimpleFirmwareManager(h.Log)
+		if err != nil {
+			h.Log.Error(err, "(tftp) failed to create firmware manager")
+			return err
+		}
+		reader, err := mgr.GetFirmwareReader(mac)
+		if err != nil {
+			h.Log.Error(err, "(tftp) failed to get firmware reader")
+			return err
+		}
+
+		if rf == nil {
+			h.Log.Error(nil, "(tftp) ReaderFrom is nil when serving firmware")
+			return fmt.Errorf("nil ReaderFrom parameter")
+		}
+
+		_, err = rf.ReadFrom(reader)
+		return err
+	}
 
 	// Serve iPXE binaries if requested
 	if content, ok := binary.Files[filename]; ok {
@@ -123,6 +179,10 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
 
 	if file, err := root.Open(resolvedPath); err == nil {
 		defer file.Close()
+		if rf == nil {
+			h.Log.Error(nil, "(tftp) ReaderFrom is nil when serving file", "path", resolvedPath)
+			return fmt.Errorf("nil ReaderFrom parameter")
+		}
 		_, err := rf.ReadFrom(file)
 		return err
 	}
@@ -148,7 +208,25 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) error {
 }
 
 // HandleWrite handles TFTP PUT requests.
-func (h *Handler) HandleWrite(fullfilepath string, wt io.WriterTo) error {
+func (h *Handler) HandleWrite(fullfilepath string, wt io.WriterTo) (err error) {
+	// Add panic recovery to prevent crashes
+	defer func() {
+		if r := recover(); r != nil {
+			h.Log.Error(
+				fmt.Errorf("panic in HandleWrite: %v", r),
+				"recovered from panic",
+				"path",
+				fullfilepath,
+			)
+			err = fmt.Errorf("internal error during TFTP write")
+		}
+	}()
+
+	if wt == nil {
+		h.Log.Error(nil, "HandleWrite called with nil WriterTo", "path", fullfilepath)
+		return fmt.Errorf("nil WriterTo parameter")
+	}
+
 	dhcpInfo, _, err := h.getDHCPInfo(wt)
 	if err != nil {
 		h.Log.Info("could not get DHCP info, proceeding without it", "error", err)
@@ -185,9 +263,21 @@ func (h *Handler) HandleWrite(fullfilepath string, wt io.WriterTo) error {
 }
 
 func (h *Handler) getDHCPInfo(r any) (*data.DHCP, *data.Netboot, error) {
+	if r == nil {
+		return nil, nil, fmt.Errorf("transfer object is nil")
+	}
+
+	if h.backend == nil {
+		return nil, nil, fmt.Errorf("backend is nil")
+	}
+
 	ip, err := getRemoteIP(r)
 	if err != nil {
 		return nil, nil, err
+	}
+
+	if ip == nil {
+		return nil, nil, fmt.Errorf("remote IP is nil")
 	}
 
 	dhcpInfo, netboot, err := h.backend.GetByIP(h.ctx, ip)
@@ -211,20 +301,17 @@ func (h *Handler) resolvePath(fullfilepath string, dhcpInfo *data.DHCP) string {
 	prefix := parts[0]
 	filename := parts[len(parts)-1]
 
-	mac := dhcpInfo.MACAddress.String()
-
-	macAddr, err := net.ParseMAC(mac)
-	if err != nil {
-		h.Log.Error(err, "failed to parse MAC address", "mac", mac)
+	// Handle case where dhcpInfo is nil
+	if dhcpInfo == nil {
 		return fullfilepath
 	}
 
+	mac := dhcpInfo.MACAddress.String()
 	macDir := strings.ReplaceAll(mac, ":", "-")
 
 	isSerial, _ := regexp.MatchString(`^\d{2}[a-z]\d{5}$`, prefix)
-	if isSerial && dhcpInfo != nil {
+	if isSerial {
 		if filename == "RPI_EFI.fd" {
-			h.firmware.GetFirmwareReader(macAddr)
 			return strings.Replace(fullfilepath, prefix, macDir, 1)
 		} else {
 			return strings.Join(parts[1:], "/")
@@ -248,6 +335,11 @@ func (h *Handler) serveIPXE(rf io.ReaderFrom, content []byte, patch string) erro
 }
 
 func (h *Handler) serveContent(rf io.ReaderFrom, content []byte) error {
+	if rf == nil {
+		h.Log.Error(nil, "serveContent called with nil ReaderFrom")
+		return fmt.Errorf("nil ReaderFrom parameter")
+	}
+
 	_, err := rf.ReadFrom(bytes.NewReader(content))
 	if err != nil {
 		h.Log.Error(err, "failed to serve content")
@@ -256,6 +348,10 @@ func (h *Handler) serveContent(rf io.ReaderFrom, content []byte) error {
 }
 
 func getRemoteIP(r any) (net.IP, error) {
+	if r == nil {
+		return nil, fmt.Errorf("transfer object is nil")
+	}
+
 	var remoteAddr net.Addr
 	switch v := r.(type) {
 	case tftp.OutgoingTransfer:
@@ -268,9 +364,18 @@ func getRemoteIP(r any) (net.IP, error) {
 		return nil, fmt.Errorf("invalid TFTP transfer type: %T", r)
 	}
 
+	if remoteAddr == nil {
+		return nil, fmt.Errorf("remote address is nil")
+	}
+
 	udpAddr, ok := remoteAddr.(*net.UDPAddr)
 	if !ok {
 		return nil, fmt.Errorf("address is not a UDP address: %T", remoteAddr)
 	}
+
+	if udpAddr.IP == nil {
+		return nil, fmt.Errorf("UDP address IP is nil")
+	}
+
 	return udpAddr.IP, nil
 }
