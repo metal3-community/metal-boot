@@ -11,6 +11,7 @@ import (
 	"os"
 	"os/signal"
 	"path"
+	"path/filepath"
 	"syscall"
 	"time"
 
@@ -414,11 +415,19 @@ func dhcpHandler(
 			AutoProxyEnabled: true,
 		}
 	} else {
+		leaseBackend, err := dnsmasq.NewLeaseManager(
+			log,
+			filepath.Join(c.Dnsmasq.RootDirectory, "dnsmasq.leases"),
+		)
+		if err != nil {
+			return nil, fmt.Errorf("failed to create lease manager: %w", err)
+		}
 		// Use reservation handler with lease management
 		reservationHandler := &reservation.Handler{
-			Backend: backend,
-			IPAddr:  pktIP,
-			Log:     log,
+			Backend:      backend,
+			LeaseBackend: leaseBackend,
+			IPAddr:       pktIP,
+			Log:          log,
 			Netboot: reservation.Netboot{
 				IPXEBinServerTFTP: tftpIP,
 				IPXEBinServerHTTP: httpBinaryURL,

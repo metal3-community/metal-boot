@@ -294,7 +294,7 @@ func TestBootfile(t *testing.T) {
 			args: args{
 				ipxeTFTPBinServer: netip.MustParseAddrPort("1.2.3.4:69"),
 			},
-			want: "tftp://1.2.3.4:69/01:02:03:04:05:06/undionly.kpxe",
+			want: "tftp://1.2.3.4:69/01-02-03-04-05-06/undionly.kpxe",
 		},
 		"no user class": {
 			info: Info{

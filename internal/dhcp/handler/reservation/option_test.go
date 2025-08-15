@@ -167,7 +167,7 @@ func TestBootfileAndNextServer(t *testing.T) {
 				},
 				ipxe: &url.URL{Scheme: "http", Host: "127.0.0.1:8181"},
 			},
-			wantBootFile: "http://127.0.0.1:8181/01:02:03:04:05:06/snp.efi",
+			wantBootFile: "http://127.0.0.1:8181/01-02-03-04-05-06/snp.efi",
 			wantNextSrv:  net.IPv4(127, 0, 0, 1),
 		},
 		"success userclass iPXE": {
@@ -182,7 +182,7 @@ func TestBootfileAndNextServer(t *testing.T) {
 				},
 				tftp: netip.MustParseAddrPort("192.168.6.5:69"),
 			},
-			wantBootFile: "tftp://192.168.6.5:69/01:02:03:04:05:07/undionly.kpxe",
+			wantBootFile: "tftp://192.168.6.5:69/01-02-03-04-05-07/undionly.kpxe",
 			wantNextSrv:  net.ParseIP("192.168.6.5"),
 		},
 		"success userclass iPXE with otel": {
@@ -199,7 +199,7 @@ func TestBootfileAndNextServer(t *testing.T) {
 				tftp: netip.MustParseAddrPort("192.168.6.5:69"),
 				ipxe: &url.URL{Scheme: "tftp", Host: "192.168.6.5:69"},
 			},
-			wantBootFile: "tftp://192.168.6.5:69/01:02:03:04:05:07/undionly.kpxe-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
+			wantBootFile: "tftp://192.168.6.5:69/01-02-03-04-05-07/undionly.kpxe-00-23b1e307bb35484f535a1f772c06910e-d887dc3912240434-01",
 			wantNextSrv:  net.ParseIP("192.168.6.5"),
 		},
 		"success default": {
@@ -296,7 +296,7 @@ func TestSetNetworkBootOpts(t *testing.T) {
 					return &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "/01:02:03:04:05:06/auto.ipxe",
+						Path:   "/01-02-03-04-05-06/auto.ipxe",
 					}
 				}},
 			},
@@ -315,12 +315,12 @@ func TestSetNetworkBootOpts(t *testing.T) {
 					IPXEScriptURL: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "/01:02:03:04:05:06/auto.ipxe",
+						Path:   "/01-02-03-04-05-06/auto.ipxe",
 					},
 				},
 			},
 			want: &dhcpv4.DHCPv4{
-				BootFileName: "http://localhost:8181/01:02:03:04:05:06/auto.ipxe",
+				BootFileName: "http://localhost:8181/01-02-03-04-05-06/auto.ipxe",
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, dhcpv4.Options{
 						6:  []byte{8},
@@ -337,7 +337,7 @@ func TestSetNetworkBootOpts(t *testing.T) {
 					return &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "/01:02:03:04:05:06/auto.ipxe",
+						Path:   "/01-02-03-04-05-06/auto.ipxe",
 					}
 				}},
 			},

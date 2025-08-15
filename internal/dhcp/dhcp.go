@@ -264,9 +264,22 @@ func (i Info) Bootfile(
 
 	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Tinkerbell userclass (option 77).
 	switch { // order matters here.
-	case i.UserClass == IPXE,
+	case i.UserClass == Tinkerbell,
+		i.UserClass == IPXE,
 		(customUC != "" && i.UserClass == customUC): // this case gets us out of an ipxe boot loop.
-		if ipxeScript != nil {
+		if i.UserClass == Tinkerbell && ipxeScript != nil {
+			bootfile = ipxeScript.String()
+		} else if i.UserClass == IPXE {
+			// For IPXE user class, return TFTP URL with MAC address
+			if ipxeTFTPBinServer.IsValid() {
+				paths := []string{i.IPXEBinary}
+				if i.Mac != nil {
+					macFixed := strings.ReplaceAll(i.Mac.String(), ":", "-")
+					paths = append([]string{macFixed}, paths...)
+				}
+				bootfile = fmt.Sprintf("tftp://%s/%s", ipxeTFTPBinServer.String(), strings.Join(paths, "/"))
+			}
+		} else if ipxeScript != nil {
 			bootfile = ipxeScript.String()
 		}
 	case i.ClientType == HTTPClient: // Check the client type from option 60.

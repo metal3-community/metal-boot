@@ -122,7 +122,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			setupBackend: func(mb *mockBackend) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+					Return(dhcp, (*data.Netboot)(nil), nil)
 			},
 			rootDirectory: tempDir,
 		},
@@ -133,7 +133,7 @@ func TestHandler_HandleRead(t *testing.T) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				netboot := &data.Netboot{IPXEScript: "custom script"}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, netboot, (*data.Power)(nil), nil)
+					Return(dhcp, netboot, nil)
 			},
 			rootDirectory: tempDir,
 		},
@@ -143,7 +143,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			setupBackend: func(mb *mockBackend) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+					Return(dhcp, (*data.Netboot)(nil), nil)
 			},
 			expectedData:  testContent,
 			rootDirectory: tempDir,
@@ -154,7 +154,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			setupBackend: func(mb *mockBackend) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+					Return(dhcp, (*data.Netboot)(nil), nil)
 			},
 			rootDirectory: tempDir,
 		},
@@ -164,7 +164,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			setupBackend: func(mb *mockBackend) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+					Return(dhcp, (*data.Netboot)(nil), nil)
 			},
 			expectedError: os.ErrNotExist,
 			rootDirectory: tempDir,
@@ -174,7 +174,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			fullfilepath: "test.txt",
 			setupBackend: func(mb *mockBackend) {
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return((*data.DHCP)(nil), (*data.Netboot)(nil), (*data.Power)(nil), errors.New("backend error"))
+					Return((*data.DHCP)(nil), (*data.Netboot)(nil), errors.New("backend error"))
 			},
 			expectedData:  testContent,
 			rootDirectory: tempDir,
@@ -185,7 +185,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			setupBackend: func(mb *mockBackend) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+					Return(dhcp, (*data.Netboot)(nil), nil)
 			},
 			rootDirectory: "/nonexistent/path",
 		},
@@ -195,7 +195,7 @@ func TestHandler_HandleRead(t *testing.T) {
 			setupBackend: func(mb *mockBackend) {
 				dhcp := &data.DHCP{MACAddress: mac}
 				mb.On("GetByIP", mock.Anything, mock.Anything).
-					Return(dhcp, (*data.Netboot)(nil), (*data.Power)(nil), nil)
+					Return(dhcp, (*data.Netboot)(nil), nil)
 			},
 			expectedError: os.ErrNotExist,
 			rootDirectory: tempDir,
@@ -265,7 +265,7 @@ func TestHandler_HandleRead_iPXEBinary(t *testing.T) {
 	dhcp := &data.DHCP{MACAddress: mac}
 	netboot := &data.Netboot{IPXEScript: "custom script content"}
 	mockBackend.On("GetByIP", mock.Anything, mock.Anything).
-		Return(dhcp, netboot, (*data.Power)(nil), nil)
+		Return(dhcp, netboot, nil)
 
 	handler := &Handler{
 		ctx:           context.Background(),

@@ -400,7 +400,7 @@ func TestHandle(t *testing.T) {
 			con := ipv4.NewPacketConn(conn)
 			con.SetControlMessage(ipv4.FlagInterface, true)
 
-			n, err := net.InterfaceByName("lo")
+			n, err := net.InterfaceByName("lo0")
 			if err != nil {
 				t.Fatal(err)
 			}

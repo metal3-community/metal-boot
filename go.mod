@@ -5,7 +5,7 @@ go 1.24.4
 toolchain go1.24.5
 
 require (
-	github.com/bmcpi/uefi-firmware-manager v0.0.0-20250815052339-109114927295
+	github.com/bmcpi/uefi-firmware-manager v0.0.0-20250815084340-f4846fe24a50
 	github.com/ccoveille/go-safecast v1.5.0
 	github.com/diskfs/go-diskfs v1.5.1
 	github.com/fsnotify/fsnotify v1.7.0
@@ -14,6 +14,7 @@ require (
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.6.0
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
+	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/prometheus/client_golang v1.17.0
@@ -62,6 +63,8 @@ require (
 	github.com/magiconair/properties v1.8.7 // indirect
 	github.com/mailru/easyjson v0.7.7 // indirect
 	github.com/matttproud/golang_protobuf_extensions/v2 v2.0.0 // indirect
+	github.com/mdlayher/ethernet v0.0.0-20220221185849-529eae5b6118 // indirect
+	github.com/mdlayher/packet v1.1.2 // indirect
 	github.com/mdlayher/socket v0.5.0 // indirect
 	github.com/mitchellh/mapstructure v1.5.0 // indirect
 	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd // indirect

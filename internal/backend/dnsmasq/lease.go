@@ -29,6 +29,10 @@ type Lease struct {
 	Hostname string
 	// ClientID is the DHCP client identifier (optional)
 	ClientID string
+	// Declined indicates if this IP was declined by a client
+	Declined bool
+	// DeclineTime is when the IP was declined (Unix timestamp)
+	DeclineTime int64
 }
 
 // LeaseManager handles DHCP lease file operations in DNSMasq format with file watching.
@@ -208,6 +212,62 @@ func (m *LeaseManager) RemoveLease(mac net.HardwareAddr) {
 	m.dataMu.Lock()
 	delete(m.leases, mac.String())
 	m.dataMu.Unlock()
+}
+
+// MarkIPDeclined marks an IP address as declined by a client.
+// The IP will be excluded from assignment for a cooldown period.
+func (m *LeaseManager) MarkIPDeclined(ip string) error {
+	m.dataMu.Lock()
+	defer m.dataMu.Unlock()
+
+	for _, lease := range m.leases {
+		if lease.IP.Equal(net.ParseIP(ip)) {
+			lease.Declined = true
+			lease.DeclineTime = time.Now().Unix()
+		}
+	}
+
+	return nil
+}
+
+// IsIPDeclined checks if an IP address is currently in decline cooldown.
+// Returns true if the IP was recently declined and is still in cooldown.
+func (m *LeaseManager) IsIPDeclined(ip string) bool {
+	m.dataMu.RLock()
+	defer m.dataMu.RUnlock()
+
+	now := time.Now().Unix()
+	cooldownPeriod := int64(5 * 60) // 5 minutes cooldown
+
+	for _, lease := range m.leases {
+		if lease.IP.Equal(net.ParseIP(ip)) && lease.Declined {
+			if lease.DeclineTime > 0 && (now-lease.DeclineTime) < cooldownPeriod {
+				return true
+			}
+		}
+	}
+	return false
+}
+
+// ClearDeclinedIPs removes declined status from IPs that have passed cooldown.
+func (m *LeaseManager) ClearDeclinedIPs() error {
+	m.dataMu.Lock()
+	defer m.dataMu.Unlock()
+
+	now := time.Now().Unix()
+	cooldownPeriod := int64(5 * 60) // 5 minutes cooldown
+
+	for mac, lease := range m.leases {
+		if lease.Declined && lease.DeclineTime > 0 {
+			if (now - lease.DeclineTime) >= cooldownPeriod {
+				// Clear declined status but keep the lease
+				lease.Declined = false
+				lease.DeclineTime = 0
+				m.Log.Info("cleared declined status", "mac", mac, "ip", lease.IP.String())
+			}
+		}
+	}
+	return nil
 }
 
 // SaveLeases writes all leases to the lease file in DNSMasq format.

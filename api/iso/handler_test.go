@@ -35,7 +35,7 @@ func TestReqPathInvalid(t *testing.T) {
 			statusCode: http.StatusBadRequest,
 		},
 		"no script or url": {
-			isoURL:     "http://10.10.10.10:8080/aa:aa:aa:aa:aa:aa/invalid.iso",
+			isoURL:     "http://10.10.10.10:8080/aa-aa-aa-aa-aa-aa/invalid.iso",
 			statusCode: http.StatusInternalServerError,
 		},
 	}
@@ -157,7 +157,7 @@ menuentry 'LinuxKit ISO Image' {
 	// h.Logger = logr.FromSlogHandler(slog.NewTextHandler(os.Stdout, &slog.HandlerOptions{AddSource: true}))
 
 	w := httptest.NewRecorder()
-	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/iso/de:ed:be:ef:fe:ed/output.iso", nil))
+	h.ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/iso/de-ed-be-ef-fe-ed/output.iso", nil))
 
 	res := w.Result()
 	defer res.Body.Close()

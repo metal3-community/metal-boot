@@ -2,11 +2,13 @@
 package reservation
 
 import (
+	"net"
 	"net/netip"
 	"net/url"
 
 	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/dhcp"
+	"github.com/bmcpi/pibmc/internal/dhcp/arp"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
 )
@@ -15,6 +17,14 @@ import (
 type Handler struct {
 	// Backend is the backend to use for getting DHCP data.
 	Backend backend.BackendReader
+
+	// LeaseBackend provides lease management functionality for tracking declined IPs.
+	// This should typically be the same instance as Backend if it implements lease management.
+	LeaseBackend LeaseManager
+
+	// ARPDetector provides ARP-based IP conflict detection.
+	// If nil, ARP conflict detection will be disabled.
+	ARPDetector *arp.ConflictDetector
 
 	// IPAddr is the IP address to use in DHCP responses.
 	// Option 54 and the sname DHCP header.
@@ -36,6 +46,33 @@ type Handler struct {
 
 	// SyslogAddr is the address to send syslog messages to. DHCP Option 7.
 	SyslogAddr netip.Addr
+
+	// Interface name for ARP operations. If empty, ARP detection is disabled.
+	InterfaceName string
+}
+
+// LeaseManager provides methods for lease management and IP conflict tracking.
+type LeaseManager interface {
+	// MarkIPDeclined marks an IP as declined with the current timestamp
+	MarkIPDeclined(ip string) error
+
+	// IsIPDeclined checks if an IP is currently declined (within cooldown period)
+	IsIPDeclined(ip string) bool
+
+	// ClearDeclinedIPs removes declined status from IPs past the cooldown period
+	ClearDeclinedIPs() error
+}
+
+// DNSMasqLeaseManager provides the interface for DNSMasq-compatible lease management.
+type DNSMasqLeaseManager interface {
+	// MarkIPDeclined marks an IP address as declined by a client
+	MarkIPDeclined(mac net.HardwareAddr, ip net.IP)
+
+	// IsIPDeclined checks if an IP address is currently in decline cooldown
+	IsIPDeclined(ip net.IP) bool
+
+	// ClearDeclinedIPs removes declined status from IPs that have passed cooldown
+	ClearDeclinedIPs()
 }
 
 // Netboot holds the netboot configuration details used in running a DHCP server.

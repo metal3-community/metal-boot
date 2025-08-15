@@ -14,6 +14,7 @@ import (
 	"time"
 
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
+	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
@@ -74,7 +75,11 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 		return nil, fmt.Errorf("failed to create lease manager: %w", err)
 	}
 
-	configManager := NewConfigManager(config.RootDir)
+	configManager, err := NewConfigManager(log, config.RootDir)
+	if err != nil {
+		leaseManager.Close() // Clean up on error
+		return nil, fmt.Errorf("failed to create config manager: %w", err)
+	}
 
 	backend := &Backend{
 		leaseManager:  leaseManager,
@@ -121,7 +126,8 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 
 	// Load existing data
 	if err := backend.loadData(); err != nil {
-		leaseManager.Close() // Clean up on error
+		leaseManager.Close()     // Clean up on error
+		configManager.Close()    // Clean up on error
 		return nil, fmt.Errorf("failed to load existing data: %w", err)
 	}
 
@@ -169,11 +175,26 @@ func (b *Backend) GetByMac(
 		hostname := fmt.Sprintf("auto-%s", mac.String())
 		b.mu.Lock()
 		b.leaseManager.AddLease(mac, assignedIP, hostname, b.defaultLeaseTime)
+
+		// Set up netboot configuration for auto-assigned devices with architecture-specific boot file
+		bootFile := "ipxe.efi" // Default for x86_64
+		if util.IsRaspberryPI(mac) {
+			bootFile = "snp.efi" // ARM64 Raspberry Pi
+		}
+		b.configManager.AddNetbootOptionsWithBootFile(mac, b.tftpServer, b.httpServer, bootFile)
+
 		b.mu.Unlock()
 
 		// Save the lease immediately
 		if err := b.save(); err != nil {
-			b.log.Error(err, "failed to save auto-assigned lease", "mac", mac.String(), "ip", assignedIP.String())
+			b.log.Error(
+				err,
+				"failed to save auto-assigned lease",
+				"mac",
+				mac.String(),
+				"ip",
+				assignedIP.String(),
+			)
 		}
 
 		// Get the newly created lease
@@ -293,7 +314,12 @@ func (b *Backend) Put(
 
 	// Update netboot configuration
 	if n != nil && n.AllowNetboot {
-		b.configManager.AddNetbootOptions(mac, b.tftpServer, b.httpServer)
+		// Use architecture-specific boot file
+		bootFile := "ipxe.efi" // Default for x86_64
+		if util.IsRaspberryPI(mac) {
+			bootFile = "snp.efi" // ARM64 Raspberry Pi
+		}
+		b.configManager.AddNetbootOptionsWithBootFile(mac, b.tftpServer, b.httpServer, bootFile)
 	} else if n != nil && !n.AllowNetboot {
 		// Disable netboot for this MAC
 		b.configManager.DisableNetboot(mac)
@@ -405,6 +431,9 @@ func (b *Backend) Start(ctx context.Context) {
 	// Start the lease file watcher in a goroutine
 	go b.leaseManager.Start(ctx)
 
+	// Start the config file watcher in a goroutine
+	go b.configManager.Start(ctx)
+
 	// Wait for context cancellation
 	<-ctx.Done()
 	b.log.Info("stopping dnsmasq backend")
@@ -412,9 +441,20 @@ func (b *Backend) Start(ctx context.Context) {
 
 // Close closes all file watchers and cleans up resources.
 func (b *Backend) Close() error {
+	var errs []error
+
 	if err := b.leaseManager.Close(); err != nil {
-		return fmt.Errorf("failed to close lease manager: %w", err)
+		errs = append(errs, fmt.Errorf("failed to close lease manager: %w", err))
 	}
+
+	if err := b.configManager.Close(); err != nil {
+		errs = append(errs, fmt.Errorf("failed to close config manager: %w", err))
+	}
+
+	if len(errs) > 0 {
+		return fmt.Errorf("errors closing backend: %v", errs)
+	}
+
 	return nil
 }
 
@@ -430,7 +470,11 @@ func (b *Backend) assignIPForMAC(mac net.HardwareAddr) (net.IP, error) {
 	endInt := ipToInt(b.ipPoolEnd)
 
 	if startInt > endInt {
-		return nil, fmt.Errorf("invalid IP pool range: start %s > end %s", b.ipPoolStart.String(), b.ipPoolEnd.String())
+		return nil, fmt.Errorf(
+			"invalid IP pool range: start %s > end %s",
+			b.ipPoolStart.String(),
+			b.ipPoolEnd.String(),
+		)
 	}
 
 	poolSize := endInt - startInt + 1
@@ -497,14 +541,14 @@ func intToIP(i uint32) net.IP {
 }
 
 // NewConfigFromDnsmasqConfig creates a Backend Config from a DnsmasqConfig.
-func NewConfigFromDnsmasqConfig(dnsmasqConfig interface{}) (Config, error) {
+func NewConfigFromDnsmasqConfig(dnsmasqConfig any) (Config, error) {
 	// Use type assertion to access the fields
 	// This allows the backend to be independent of the main config package
 	config := Config{}
 
 	// Use reflection or type switches to extract values
 	// For now, we'll define a simple interface that the caller must satisfy
-	if cfg, ok := dnsmasqConfig.(map[string]interface{}); ok {
+	if cfg, ok := dnsmasqConfig.(map[string]any); ok {
 		if rootDir, exists := cfg["root_directory"]; exists {
 			if s, ok := rootDir.(string); ok {
 				config.RootDir = s
@@ -555,7 +599,7 @@ func NewConfigFromDnsmasqConfig(dnsmasqConfig interface{}) (Config, error) {
 		if dns, exists := cfg["default_dns"]; exists {
 			if slice, ok := dns.([]string); ok {
 				config.DefaultDNS = slice
-			} else if slice, ok := dns.([]interface{}); ok {
+			} else if slice, ok := dns.([]any); ok {
 				config.DefaultDNS = make([]string, len(slice))
 				for i, v := range slice {
 					if s, ok := v.(string); ok {

@@ -5,8 +5,10 @@ import (
 	"errors"
 	"fmt"
 	"net"
+	"net/netip"
 
 	"github.com/bmcpi/pibmc/internal/dhcp"
+	"github.com/bmcpi/pibmc/internal/dhcp/arp"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	oteldhcp "github.com/bmcpi/pibmc/internal/dhcp/otel"
 	"github.com/go-logr/logr"
@@ -28,6 +30,14 @@ func (h *Handler) setDefaults() {
 	}
 	if h.Log.GetSink() == nil {
 		h.Log = logr.Discard()
+	}
+	// Initialize ARP detector if interface is configured
+	if h.ARPDetector == nil && h.InterfaceName != "" {
+		h.ARPDetector = arp.NewConflictDetector(h.InterfaceName, h.Log)
+	}
+	// Initialize lease manager from backend if not already set
+	if h.LeaseBackend == nil {
+		h.LeaseBackend = CreateLeaseManagerFromBackend(h.Backend)
 	}
 }
 
@@ -109,6 +119,18 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 
 			return
 		}
+
+		// Check for IP conflicts before offering the IP
+		if h.hasIPConflict(ctx, d.IPAddress) {
+			log.Info(
+				"IP address conflict detected, declining offer",
+				"ip", d.IPAddress.String(),
+				"type", p.Pkt.MessageType().String(),
+			)
+			span.SetStatus(codes.Ok, "IP conflict detected, no offer sent")
+			return
+		}
+
 		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
 		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeOffer)
 		log = log.WithValues("type", dhcpv4.MessageTypeOffer.String())
@@ -134,9 +156,27 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 
 			return
 		}
-		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
-		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeAck)
-		log = log.WithValues("type", dhcpv4.MessageTypeAck.String())
+
+		// Check for IP conflicts before acknowledging the request
+		if h.hasIPConflict(ctx, d.IPAddress) {
+			log.Info(
+				"IP address conflict detected, sending NAK",
+				"ip", d.IPAddress.String(),
+				"type", p.Pkt.MessageType().String(),
+			)
+			// Send DHCP NAK to inform client of conflict
+			reply = h.createNAK(p.Pkt, "IP address conflict detected")
+			log = log.WithValues("type", dhcpv4.MessageTypeNak.String())
+		} else {
+			log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
+			reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeAck)
+			log = log.WithValues("type", dhcpv4.MessageTypeAck.String())
+		}
+	case dhcpv4.MessageTypeDecline:
+		// Handle DHCP DECLINE properly
+		h.handleDecline(ctx, p.Pkt, log)
+		span.SetStatus(codes.Ok, "processed decline, no response required")
+		return
 	case dhcpv4.MessageTypeRelease:
 		// Since the design of this DHCP server is that all IP addresses are
 		// Host reservations, when a client releases an address, the server
@@ -266,4 +306,97 @@ func hardwareNotFound(err error) bool {
 	}
 	te, ok := err.(hardwareNotFound)
 	return ok && te.NotFound()
+}
+
+// hasIPConflict checks if an IP address has conflicts using both lease tracking and ARP detection.
+func (h *Handler) hasIPConflict(ctx context.Context, ip netip.Addr) bool {
+	h.setDefaults()
+
+	ipStr := ip.String()
+
+	// First check if IP is marked as declined in our lease manager
+	if h.LeaseBackend != nil && h.LeaseBackend.IsIPDeclined(ipStr) {
+		h.Log.V(1).Info("IP is marked as declined", "ip", ipStr)
+		return true
+	}
+
+	// Then check for active ARP conflicts
+	if h.ARPDetector != nil {
+		if h.ARPDetector.IsIPInUse(ip.AsSlice()) {
+			h.Log.Info("ARP conflict detected for IP", "ip", ipStr)
+			// Mark this IP as declined for future reference
+			if h.LeaseBackend != nil {
+				if err := h.LeaseBackend.MarkIPDeclined(ipStr); err != nil {
+					h.Log.Error(err, "failed to mark IP as declined", "ip", ipStr)
+				}
+			}
+			return true
+		}
+	}
+
+	return false
+}
+
+// handleDecline processes DHCP DECLINE messages by marking the IP as declined.
+func (h *Handler) handleDecline(ctx context.Context, pkt *dhcpv4.DHCPv4, log logr.Logger) {
+	h.setDefaults()
+
+	// Extract requested IP from option 50 (Requested IP Address)
+	requestedIP := pkt.RequestedIPAddress()
+	if requestedIP == nil {
+		log.Info("DHCP DECLINE received but no requested IP found")
+		return
+	}
+
+	ipStr := requestedIP.String()
+	log.Info(
+		"processing DHCP DECLINE",
+		"declined_ip",
+		ipStr,
+		"client_mac",
+		pkt.ClientHWAddr.String(),
+	)
+
+	// Mark the IP as declined in our lease manager
+	if h.LeaseBackend != nil {
+		if err := h.LeaseBackend.MarkIPDeclined(ipStr); err != nil {
+			log.Error(err, "failed to mark IP as declined", "ip", ipStr)
+			return
+		}
+		log.Info("marked IP as declined", "ip", ipStr)
+	} else {
+		log.Info("no lease backend configured, cannot track declined IP", "ip", ipStr)
+	}
+
+	// Optionally verify the conflict with ARP
+	if h.ARPDetector != nil {
+		if addr, err := netip.ParseAddr(ipStr); err == nil {
+			if h.ARPDetector.IsIPInUse(addr.AsSlice()) {
+				log.Info("ARP conflict confirmed for declined IP", "ip", ipStr)
+			} else {
+				log.Info("no ARP conflict detected for declined IP (possible client quirk)", "ip", ipStr)
+			}
+		}
+	}
+}
+
+// createNAK creates a DHCP NAK response to reject a client's request.
+func (h *Handler) createNAK(pkt *dhcpv4.DHCPv4, message string) *dhcpv4.DHCPv4 {
+	h.setDefaults()
+
+	mods := []dhcpv4.Modifier{
+		dhcpv4.WithMessageType(dhcpv4.MessageTypeNak),
+		dhcpv4.WithGeneric(dhcpv4.OptionServerIdentifier, h.IPAddr.AsSlice()),
+		dhcpv4.WithServerIP(h.IPAddr.AsSlice()),
+	}
+
+	// Add an error message if supported
+	if message != "" {
+		mods = append(mods, dhcpv4.WithGeneric(dhcpv4.OptionMessage, []byte(message)))
+	}
+
+	// Create NAK response using client's transaction ID
+	reply, _ := dhcpv4.NewReplyFromRequest(pkt, mods...)
+
+	return reply
 }

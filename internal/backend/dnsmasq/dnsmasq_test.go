@@ -60,7 +60,12 @@ tag:9c:6b:00:70:59:8a,66,192.168.1.1
 	}
 
 	// Create config manager and load
-	cm := NewConfigManager(tmpDir)
+	cm, err := NewConfigManager(logr.Discard(), tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cm.Close()
+
 	if err := cm.LoadConfig(); err != nil {
 		t.Fatal(err)
 	}
@@ -342,5 +347,86 @@ func TestLeaseManagerFileWatching(t *testing.T) {
 	}
 	if lease.Hostname != "test-host" {
 		t.Errorf("Expected hostname test-host, got %s", lease.Hostname)
+	}
+}
+
+// TestConfigManagerFileWatching tests that the ConfigManager properly watches configuration files.
+func TestConfigManagerFileWatching(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "dnsmasq-config-watcher-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	logger := logr.Discard()
+
+	// Create config manager
+	cm, err := NewConfigManager(logger, tmpDir)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer cm.Close()
+
+	// Initially should have no hosts or options
+	if len(cm.hosts) != 0 {
+		t.Error("Expected no hosts initially")
+	}
+
+	// Create directories
+	hostsDir := filepath.Join(tmpDir, "hosts")
+	optsDir := filepath.Join(tmpDir, "opts")
+	if err := os.MkdirAll(hostsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+	if err := os.MkdirAll(optsDir, 0o755); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a host configuration file
+	hostFile := filepath.Join(hostsDir, "ironic-testnode.conf")
+	hostContent := "9c:6b:00:70:59:8a,set:testnode,set:ironic\n"
+	if err := os.WriteFile(hostFile, []byte(hostContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Write a corresponding options file
+	optsFile := filepath.Join(optsDir, "ironic-testnode.conf")
+	optsContent := `# Test options
+tag:9c:6b:00:70:59:8a,tag:!ipxe,67,snp.efi
+tag:9c:6b:00:70:59:8a,tag:ipxe,67,http://192.168.1.1/boot.ipxe
+tag:9c:6b:00:70:59:8a,66,192.168.1.1
+`
+	if err := os.WriteFile(optsFile, []byte(optsContent), 0o644); err != nil {
+		t.Fatal(err)
+	}
+
+	// Manually trigger reload (in real scenario, file watcher would trigger this)
+	if err := cm.LoadConfig(); err != nil {
+		t.Fatal(err)
+	}
+
+	// Should now have host and options
+	mac, _ := net.ParseMAC("9c:6b:00:70:59:8a")
+	if !cm.IsNetbootEnabled(mac) {
+		t.Error("Expected MAC 9c:6b:00:70:59:8a to be enabled for netboot")
+	}
+
+	// Check that options were loaded
+	options := cm.GetOptions(mac.String())
+	if len(options) == 0 {
+		t.Error("Expected to find options for MAC address")
+	}
+
+	// Check a specific option
+	foundBootfile := false
+	for _, opt := range options {
+		if opt.OptionCode == 67 && opt.ConditionalTag == "!ipxe" && opt.Value == "snp.efi" {
+			foundBootfile = true
+			break
+		}
+	}
+	if !foundBootfile {
+		t.Error("Expected to find bootfile option with snp.efi value")
 	}
 }

@@ -3,11 +3,16 @@ package dnsmasq
 
 import (
 	"bufio"
+	"context"
 	"fmt"
 	"net"
 	"os"
 	"path/filepath"
 	"strings"
+	"sync"
+
+	"github.com/fsnotify/fsnotify"
+	"github.com/go-logr/logr"
 )
 
 // DHCPOption represents a single DHCP option configuration entry.
@@ -29,7 +34,7 @@ type HostEntry struct {
 	ShouldBoot bool
 }
 
-// ConfigManager handles DNSMasq DHCP option configuration files.
+// ConfigManager handles DNSMasq DHCP option configuration files with file watching.
 type ConfigManager struct {
 	// RootDir is the dnsmasq configuration root directory
 	RootDir string
@@ -37,27 +42,88 @@ type ConfigManager struct {
 	HostsDir string
 	// OptsDir is the opts directory under RootDir
 	OptsDir string
+
+	// Logger for the ConfigManager
+	Log logr.Logger
+
+	// Data protection
+	dataMu sync.RWMutex // protects options and hosts
+
 	// options stores the parsed DHCP options
 	options []*DHCPOption
 	// hosts stores the parsed host entries
 	hosts map[string]*HostEntry
+
+	// File watching
+	watcher   *fsnotify.Watcher
+	watcherMu sync.RWMutex // protects watcher operations
 }
 
-// NewConfigManager creates a new configuration manager.
-func NewConfigManager(rootDir string) *ConfigManager {
-	return &ConfigManager{
+// NewConfigManager creates a new configuration manager with file watching capabilities.
+func NewConfigManager(log logr.Logger, rootDir string) (*ConfigManager, error) {
+	watcher, err := fsnotify.NewWatcher()
+	if err != nil {
+		return nil, fmt.Errorf("failed to create file watcher: %w", err)
+	}
+
+	cm := &ConfigManager{
 		RootDir:  rootDir,
 		HostsDir: filepath.Join(rootDir, "hosts"),
 		OptsDir:  filepath.Join(rootDir, "opts"),
+		Log:      log,
 		options:  make([]*DHCPOption, 0),
 		hosts:    make(map[string]*HostEntry),
+		watcher:  watcher,
 	}
+
+	// Load initial data
+	if err := cm.LoadConfig(); err != nil {
+		watcher.Close()
+		return nil, fmt.Errorf("failed to load initial config data: %w", err)
+	}
+
+	// Add directories to watcher if they exist
+	if err := cm.setupWatchers(); err != nil {
+		watcher.Close()
+		return nil, fmt.Errorf("failed to setup file watchers: %w", err)
+	}
+
+	return cm, nil
+}
+
+// setupWatchers adds directories to the file watcher.
+func (c *ConfigManager) setupWatchers() error {
+	c.watcherMu.Lock()
+	defer c.watcherMu.Unlock()
+
+	// Watch hosts directory
+	if _, err := os.Stat(c.HostsDir); err == nil {
+		if err := c.watcher.Add(c.HostsDir); err != nil {
+			return fmt.Errorf("failed to add hosts directory to watcher: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check hosts directory: %w", err)
+	}
+
+	// Watch opts directory
+	if _, err := os.Stat(c.OptsDir); err == nil {
+		if err := c.watcher.Add(c.OptsDir); err != nil {
+			return fmt.Errorf("failed to add opts directory to watcher: %w", err)
+		}
+	} else if !os.IsNotExist(err) {
+		return fmt.Errorf("failed to check opts directory: %w", err)
+	}
+
+	return nil
 }
 
 // LoadConfig reads host configurations and DHCP options from the directory structure.
 // It reads ironic-*.conf files from the hosts directory and corresponding option files
 // from the opts directory.
 func (c *ConfigManager) LoadConfig() error {
+	c.dataMu.Lock()
+	defer c.dataMu.Unlock()
+
 	// Clear existing data
 	c.options = make([]*DHCPOption, 0)
 	c.hosts = make(map[string]*HostEntry)
@@ -122,6 +188,7 @@ func (c *ConfigManager) loadHostFile(filename string) error {
 // parseHostLine parses a host configuration line.
 // Format 1: ${mac},set:${node_id},set:ironic
 // Format 2: ${mac},ignore
+// Do not boot when ignore.
 func (c *ConfigManager) parseHostLine(line string) (*HostEntry, error) {
 	parts := strings.Split(line, ",")
 	if len(parts) < 2 {
@@ -208,7 +275,13 @@ func (c *ConfigManager) loadOptionFile(filename, macTag string) error {
 
 		option, err := c.parseOptionLine(line)
 		if err != nil {
-			fmt.Fprintf(os.Stderr, "Warning: failed to parse option line %d in %s: %v\n", lineNum, filename, err)
+			fmt.Fprintf(
+				os.Stderr,
+				"Warning: failed to parse option line %d in %s: %v\n",
+				lineNum,
+				filename,
+				err,
+			)
 			continue
 		}
 
@@ -271,6 +344,9 @@ func parseInt(s string) (int, error) {
 
 // AddOption adds a new DHCP option.
 func (c *ConfigManager) AddOption(tag, conditionalTag string, optionCode int, value string) {
+	c.dataMu.Lock()
+	defer c.dataMu.Unlock()
+
 	option := &DHCPOption{
 		Tag:            tag,
 		ConditionalTag: conditionalTag,
@@ -282,6 +358,9 @@ func (c *ConfigManager) AddOption(tag, conditionalTag string, optionCode int, va
 
 // GetOptions returns all configured DHCP options for a specific tag.
 func (c *ConfigManager) GetOptions(tag string) []*DHCPOption {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
+
 	var result []*DHCPOption
 	for _, option := range c.options {
 		if option.Tag == tag {
@@ -293,6 +372,9 @@ func (c *ConfigManager) GetOptions(tag string) []*DHCPOption {
 
 // RemoveOptionsForTag removes all DHCP options for a specific tag.
 func (c *ConfigManager) RemoveOptionsForTag(tag string) {
+	c.dataMu.Lock()
+	defer c.dataMu.Unlock()
+
 	var filtered []*DHCPOption
 	for _, option := range c.options {
 		if option.Tag != tag {
@@ -304,6 +386,9 @@ func (c *ConfigManager) RemoveOptionsForTag(tag string) {
 
 // SaveConfig writes host configurations and DHCP options to the directory structure.
 func (c *ConfigManager) SaveConfig() error {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
+
 	// Create directories if they don't exist
 	if err := os.MkdirAll(c.HostsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create hosts directory: %w", err)
@@ -311,6 +396,9 @@ func (c *ConfigManager) SaveConfig() error {
 	if err := os.MkdirAll(c.OptsDir, 0o755); err != nil {
 		return fmt.Errorf("failed to create opts directory: %w", err)
 	}
+
+	// Add directories to watcher if they were just created
+	c.setupWatchersIfNeeded()
 
 	// Save host files
 	if err := c.saveHostFiles(); err != nil {
@@ -323,6 +411,22 @@ func (c *ConfigManager) SaveConfig() error {
 	}
 
 	return nil
+}
+
+// setupWatchersIfNeeded adds directories to watcher if they weren't being watched.
+func (c *ConfigManager) setupWatchersIfNeeded() {
+	c.watcherMu.Lock()
+	defer c.watcherMu.Unlock()
+
+	// Try to add hosts directory if not already watching
+	if _, err := os.Stat(c.HostsDir); err == nil {
+		c.watcher.Add(c.HostsDir) // Ignore errors as directory might already be watched
+	}
+
+	// Try to add opts directory if not already watching
+	if _, err := os.Stat(c.OptsDir); err == nil {
+		c.watcher.Add(c.OptsDir) // Ignore errors as directory might already be watched
+	}
 }
 
 // saveHostFiles writes host configuration files.
@@ -426,10 +530,21 @@ func (c *ConfigManager) saveOptionFile(filename string, options []*DHCPOption) e
 
 // AddNetbootOptions adds standard netboot DHCP options for a MAC address.
 func (c *ConfigManager) AddNetbootOptions(mac net.HardwareAddr, tftpServer, httpServer string) {
+	c.AddNetbootOptionsWithBootFile(mac, tftpServer, httpServer, "ipxe.efi")
+}
+
+// AddNetbootOptionsWithBootFile adds standard netboot DHCP options for a MAC address with a specific boot file.
+func (c *ConfigManager) AddNetbootOptionsWithBootFile(
+	mac net.HardwareAddr,
+	tftpServer, httpServer, bootFile string,
+) {
+	c.dataMu.Lock()
+	defer c.dataMu.Unlock()
+
 	macStr := mac.String()
 
 	// Remove existing options for this MAC
-	c.RemoveOptionsForTag(macStr)
+	c.removeOptionsForTagUnsafe(macStr)
 
 	// Create or update host entry
 	if host, exists := c.hosts[macStr]; exists {
@@ -446,22 +561,53 @@ func (c *ConfigManager) AddNetbootOptions(mac net.HardwareAddr, tftpServer, http
 		}
 	}
 
-	// Add standard netboot options
-	c.AddOption(macStr, "!ipxe", 67, "ipxe.efi")
-	c.AddOption(macStr, "ipxe", 67, fmt.Sprintf("http://%s/boot.ipxe", httpServer))
-	c.AddOption(macStr, "", 66, tftpServer)
-	c.AddOption(macStr, "", 150, tftpServer)
-	c.AddOption(macStr, "", 255, tftpServer)
-	c.AddOption(macStr, "!ipxe6", 59, fmt.Sprintf("tftp://%s/ipxe.efi", tftpServer))
-	c.AddOption(macStr, "ipxe6", 59, fmt.Sprintf("http://%s/boot.ipxe", httpServer))
+	// Add standard netboot options with the specified boot file
+	c.addOptionUnsafe(macStr, "!ipxe", 67, bootFile)
+	c.addOptionUnsafe(macStr, "ipxe", 67, fmt.Sprintf("http://%s/boot.ipxe", httpServer))
+	c.addOptionUnsafe(macStr, "", 66, tftpServer)
+	c.addOptionUnsafe(macStr, "", 150, tftpServer)
+	c.addOptionUnsafe(macStr, "", 255, tftpServer)
+
+	// For ARM64 devices, use snp.efi for IPv6 as well
+	if bootFile == "snp.efi" {
+		c.addOptionUnsafe(macStr, "!ipxe6", 59, fmt.Sprintf("tftp://%s/snp.efi", tftpServer))
+	} else {
+		c.addOptionUnsafe(macStr, "!ipxe6", 59, fmt.Sprintf("tftp://%s/ipxe.efi", tftpServer))
+	}
+	c.addOptionUnsafe(macStr, "ipxe6", 59, fmt.Sprintf("http://%s/boot.ipxe", httpServer))
+}
+
+// addOptionUnsafe adds an option without acquiring mutex (for internal use when mutex already held).
+func (c *ConfigManager) addOptionUnsafe(tag, conditionalTag string, optionCode int, value string) {
+	option := &DHCPOption{
+		Tag:            tag,
+		ConditionalTag: conditionalTag,
+		OptionCode:     optionCode,
+		Value:          value,
+	}
+	c.options = append(c.options, option)
+}
+
+// removeOptionsForTagUnsafe removes options without acquiring mutex (for internal use when mutex already held).
+func (c *ConfigManager) removeOptionsForTagUnsafe(tag string) {
+	var filtered []*DHCPOption
+	for _, option := range c.options {
+		if option.Tag != tag {
+			filtered = append(filtered, option)
+		}
+	}
+	c.options = filtered
 }
 
 // DisableNetboot disables netbooting for a MAC address.
 func (c *ConfigManager) DisableNetboot(mac net.HardwareAddr) {
+	c.dataMu.Lock()
+	defer c.dataMu.Unlock()
+
 	macStr := mac.String()
 
 	// Remove options for this MAC
-	c.RemoveOptionsForTag(macStr)
+	c.removeOptionsForTagUnsafe(macStr)
 
 	// Update or create host entry to disable boot
 	if host, exists := c.hosts[macStr]; exists {
@@ -476,6 +622,9 @@ func (c *ConfigManager) DisableNetboot(mac net.HardwareAddr) {
 
 // IsNetbootEnabled checks if netboot is enabled for a MAC address.
 func (c *ConfigManager) IsNetbootEnabled(mac net.HardwareAddr) bool {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
+
 	if host, exists := c.hosts[mac.String()]; exists {
 		return host.ShouldBoot
 	}
@@ -484,5 +633,48 @@ func (c *ConfigManager) IsNetbootEnabled(mac net.HardwareAddr) bool {
 
 // GetAllOptions returns all configured DHCP options.
 func (c *ConfigManager) GetAllOptions() []*DHCPOption {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
+
 	return c.options
+}
+
+// Start starts watching the configuration directories for changes and updates the in-memory data on changes.
+// Start is a blocking method. Use a context cancellation to exit.
+func (c *ConfigManager) Start(ctx context.Context) {
+	for {
+		select {
+		case <-ctx.Done():
+			c.Log.Info("stopping config file watcher")
+			return
+		case event, ok := <-c.watcher.Events:
+			if !ok {
+				continue
+			}
+			if event.Has(fsnotify.Write) ||
+				event.Has(fsnotify.Create) ||
+				event.Has(fsnotify.Remove) {
+				c.Log.Info("config file changed, updating cache", "file", event.Name)
+				if err := c.LoadConfig(); err != nil {
+					c.Log.Error(err, "failed to reload config files", "file", event.Name)
+				}
+			}
+		case err, ok := <-c.watcher.Errors:
+			if !ok {
+				continue
+			}
+			c.Log.Error(err, "error watching config files")
+		}
+	}
+}
+
+// Close closes the file watcher and cleans up resources.
+func (c *ConfigManager) Close() error {
+	c.watcherMu.Lock()
+	defer c.watcherMu.Unlock()
+
+	if c.watcher != nil {
+		return c.watcher.Close()
+	}
+	return nil
 }
