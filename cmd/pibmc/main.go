@@ -105,7 +105,7 @@ func createReaderBackend(
 	cfg *config.Config,
 ) (backend.BackendReader, error) {
 	backend, err := dnsmasq.NewBackend(log, dnsmasq.Config{
-		RootDir:    cfg.Dnsmasq.RootDir,
+		RootDir:    cfg.Dnsmasq.RootDirectory,
 		TFTPServer: cfg.Dhcp.TftpAddress,
 		HTTPServer: cfg.IpxeHttpScript.HookURL,
 	})

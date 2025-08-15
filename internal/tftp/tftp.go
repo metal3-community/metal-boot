@@ -17,6 +17,7 @@ import (
 	"github.com/bmcpi/pibmc/internal/backend"
 	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/bmcpi/uefi-firmware-manager/edk2"
+	"github.com/bmcpi/uefi-firmware-manager/manager"
 	"github.com/go-logr/logr"
 	"github.com/pin/tftp/v3"
 	"github.com/tinkerbell/ipxedust/binary"
@@ -34,6 +35,7 @@ type Handler struct {
 	Patch         string
 	Log           logr.Logger
 	backend       backend.BackendReader
+	firmware      *manager.SimpleFirmwareManager
 }
 
 // ListenAndServe sets up the listener and serves TFTP requests.
@@ -48,6 +50,12 @@ func (s *Server) ListenAndServe(
 		Patch:         s.Patch,
 		Log:           s.Logger,
 		backend:       backend,
+	}
+
+	var err error
+	handler.firmware, err = manager.NewSimpleFirmwareManager(handler.Log)
+	if err != nil {
+		return fmt.Errorf("(tftp) failed to create firmware manager: %w", err)
 	}
 
 	tftpServer := tftp.NewServer(handler.HandleRead, handler.HandleWrite)
@@ -204,12 +212,20 @@ func (h *Handler) resolvePath(fullfilepath string, dhcpInfo *data.DHCP) string {
 	filename := parts[len(parts)-1]
 
 	mac := dhcpInfo.MACAddress.String()
-	mac = strings.ReplaceAll(mac, ":", "-")
+
+	macAddr, err := net.ParseMAC(mac)
+	if err != nil {
+		h.Log.Error(err, "failed to parse MAC address", "mac", mac)
+		return fullfilepath
+	}
+
+	macDir := strings.ReplaceAll(mac, ":", "-")
 
 	isSerial, _ := regexp.MatchString(`^\d{2}[a-z]\d{5}$`, prefix)
 	if isSerial && dhcpInfo != nil {
 		if filename == "RPI_EFI.fd" {
-			return strings.Replace(fullfilepath, prefix, mac, 1)
+			h.firmware.GetFirmwareReader(macAddr)
+			return strings.Replace(fullfilepath, prefix, macDir, 1)
 		} else {
 			return strings.Join(parts[1:], "/")
 		}

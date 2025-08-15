@@ -134,10 +134,10 @@ type StaticConfig struct {
 }
 
 type DnsmasqConfig struct {
-	Enabled    bool   `mapstructure:"enabled"`
-	RootDir    string `mapstructure:"root_dir"`
-	TFTPServer string `mapstructure:"tftp_server"`
-	HTTPServer string `mapstructure:"http_server"`
+	Enabled       bool   `mapstructure:"enabled"`
+	RootDirectory string `mapstructure:"root_directory"`
+	TFTPServer    string `mapstructure:"tftp_server"`
+	HTTPServer    string `mapstructure:"http_server"`
 }
 
 type Config struct {
@@ -297,7 +297,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("static.root_directory", "/shared/html")
 
 	viper.SetDefault("dnsmasq.enabled", true)
-	viper.SetDefault("dnsmasq.root_dir", "/shared/dnsmasq")
+	viper.SetDefault("dnsmasq.root_directory", "/shared/dnsmasq")
 	viper.SetDefault("dnsmasq.tftp_server", netInfo.ExternalIP)
 	viper.SetDefault("dnsmasq.http_server", netInfo.ExternalIP)
 

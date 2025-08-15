@@ -5,7 +5,7 @@ go 1.24.4
 toolchain go1.24.5
 
 require (
-	github.com/bmcpi/uefi-firmware-manager v0.0.0-20250812085239-15e82bc54eb5
+	github.com/bmcpi/uefi-firmware-manager v0.0.0-20250815052339-109114927295
 	github.com/ccoveille/go-safecast v1.5.0
 	github.com/diskfs/go-diskfs v1.5.1
 	github.com/fsnotify/fsnotify v1.7.0
