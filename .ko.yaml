@@ -1,0 +1,8 @@
+defaultPlatforms:
+  - linux/arm64
+  - linux/amd64
+defaultBaseImage: docker.io/chainguard/static:latest
+builds:
+  - dir: ./cmd/pibmc
+    main: .
+    id: pibmc

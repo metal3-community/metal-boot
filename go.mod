@@ -1,8 +1,6 @@
 module github.com/metal3-community/metal-boot
 
-go 1.24.4
-
-toolchain go1.24.5
+go 1.24.5
 
 require (
 	github.com/ccoveille/go-safecast v1.5.0
@@ -12,9 +10,10 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.6.0
+	github.com/google/gopacket v1.1.19
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
-	github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816054819-138463a3594c
+	github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816110302-8e53665a98ee
 	github.com/oapi-codegen/runtime v1.1.1
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/prometheus/client_golang v1.17.0
@@ -39,7 +38,6 @@ require (
 require (
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
-	github.com/bmcpi/uefi-firmware-manager v0.0.0-20250815084340-f4846fe24a50 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc // indirect
@@ -118,5 +116,7 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.4.2 // indirect
 	sigs.k8s.io/yaml v1.4.0 // indirect
 )
+
+replace github.com/bmcpi/uefi-firmware-manager => github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816054819-138463a3594c
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen
