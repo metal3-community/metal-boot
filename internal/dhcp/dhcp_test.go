@@ -8,11 +8,11 @@ import (
 	"net/url"
 	"testing"
 
-	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/iana"
+	"github.com/metal3-community/metal-boot/internal/util"
 )
 
 const (

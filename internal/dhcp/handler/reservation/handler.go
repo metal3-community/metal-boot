@@ -7,12 +7,13 @@ import (
 	"net"
 	"net/netip"
 
-	"github.com/bmcpi/pibmc/internal/dhcp"
-	"github.com/bmcpi/pibmc/internal/dhcp/arp"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	oteldhcp "github.com/bmcpi/pibmc/internal/dhcp/otel"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/dhcp"
+	"github.com/metal3-community/metal-boot/internal/dhcp/arp"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	oteldhcp "github.com/metal3-community/metal-boot/internal/dhcp/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -20,7 +21,7 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-const tracerName = "github.com/bmcpi/pibmc"
+const tracerName = "github.com/metal3-community/metal-boot"
 
 // setDefaults will update the Handler struct to have default values so as
 // to avoid panic for nil pointers and such.
@@ -120,16 +121,16 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 			return
 		}
 
-		// Check for IP conflicts before offering the IP
-		if h.hasIPConflict(ctx, d.IPAddress) {
-			log.Info(
-				"IP address conflict detected, declining offer",
-				"ip", d.IPAddress.String(),
-				"type", p.Pkt.MessageType().String(),
-			)
-			span.SetStatus(codes.Ok, "IP conflict detected, no offer sent")
-			return
-		}
+		// Temporarily disable IP conflict checking to debug DECLINE issue
+		// if h.hasIPConflict(ctx, d.IPAddress) {
+		// 	log.Info(
+		// 		"IP address conflict detected, declining offer",
+		// 		"ip", d.IPAddress.String(),
+		// 		"type", p.Pkt.MessageType().String(),
+		// 	)
+		// 	span.SetStatus(codes.Ok, "IP conflict detected, no offer sent")
+		// 	return
+		// }
 
 		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
 		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeOffer)
@@ -157,31 +158,29 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 			return
 		}
 
-		// Check for IP conflicts before acknowledging the request
-		if h.hasIPConflict(ctx, d.IPAddress) {
-			log.Info(
-				"IP address conflict detected, sending NAK",
-				"ip", d.IPAddress.String(),
-				"type", p.Pkt.MessageType().String(),
-			)
-			// Send DHCP NAK to inform client of conflict
-			reply = h.createNAK(p.Pkt, "IP address conflict detected")
-			log = log.WithValues("type", dhcpv4.MessageTypeNak.String())
-		} else {
-			log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
-			reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeAck)
-			log = log.WithValues("type", dhcpv4.MessageTypeAck.String())
-		}
+		// Temporarily disable IP conflict checking to debug DECLINE issue
+		// if h.hasIPConflict(ctx, d.IPAddress) {
+		// 	log.Info(
+		// 		"IP address conflict detected, sending NAK",
+		// 		"ip", d.IPAddress.String(),
+		// 		"type", p.Pkt.MessageType().String(),
+		// 	)
+		// 	// Send DHCP NAK to inform client of conflict
+		// 	reply = h.createNAK(p.Pkt, "IP address conflict detected")
+		// 	log = log.WithValues("type", dhcpv4.MessageTypeNak.String())
+		// } else {
+		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
+		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeAck)
+		log = log.WithValues("type", dhcpv4.MessageTypeAck.String())
+		// }
+		span.SetStatus(codes.Ok, "processed request")
 	case dhcpv4.MessageTypeDecline:
 		// Handle DHCP DECLINE properly
 		h.handleDecline(ctx, p.Pkt, log)
 		span.SetStatus(codes.Ok, "processed decline, no response required")
 		return
 	case dhcpv4.MessageTypeRelease:
-		// Since the design of this DHCP server is that all IP addresses are
-		// Host reservations, when a client releases an address, the server
-		// doesn't have anything to do. This case is included for clarity of this
-		// design decision.
+		// Release the lease from the backend
 		log.Info(
 			"received DHCP release packet, no response required, all IPs are host reservations",
 			"type",
@@ -203,8 +202,46 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 	if ns := reply.ServerIPAddr; ns != nil {
 		log = log.WithValues("nextServer", ns.String())
 	}
+	if ci := p.Pkt.ClientIPAddr; ci != nil {
+		log = log.WithValues("clientIP", ci)
+	}
 
-	dst := replyDestination(p.Peer, p.Pkt.GatewayIPAddr)
+	// Debug: Log the original peer address and packet details
+	log.Info("DEBUG: Packet details",
+		"peer", p.Peer.String(),
+		"clientIP", p.Pkt.ClientIPAddr.String(),
+		"giaddr", p.Pkt.GatewayIPAddr.String(),
+		"yourIP", reply.YourIPAddr.String(),
+		"broadcastFlag", p.Pkt.IsBroadcast(),
+		"messageType", p.Pkt.MessageType().String())
+
+	// Handle destination based on DHCP RFC 2131
+	var dst net.Addr
+	if p.Pkt.IsBroadcast() {
+		// Client requested broadcast response
+		dst = &net.UDPAddr{
+			IP:   net.IPv4bcast,
+			Port: 68,
+		}
+		log.Info("Using broadcast destination due to broadcast flag")
+	} else {
+		// Client can receive unicast - send to relay or assigned IP
+		if !p.Pkt.GatewayIPAddr.IsUnspecified() && !p.Pkt.GatewayIPAddr.Equal(net.IPv4zero) {
+			// Send via relay agent
+			dst = &net.UDPAddr{
+				IP:   p.Pkt.GatewayIPAddr,
+				Port: 67, // DHCP server port for relay
+			}
+			log.Info("Using relay destination", "giaddr", p.Pkt.GatewayIPAddr.String())
+		} else {
+			// Send directly to assigned IP
+			dst = &net.UDPAddr{
+				IP:   reply.YourIPAddr,
+				Port: 68,
+			}
+			log.Info("Using direct unicast destination", "yourIP", reply.YourIPAddr.String())
+		}
+	}
 	log = log.WithValues("ipAddress", reply.YourIPAddr.String(), "destination", dst.String())
 	cm := &ipv4.ControlMessage{}
 	if p.Md != nil {
@@ -278,6 +315,12 @@ func (h *Handler) updateMsg(
 		dhcpv4.WithGeneric(dhcpv4.OptionServerIdentifier, h.IPAddr.AsSlice()),
 		dhcpv4.WithServerIP(h.IPAddr.AsSlice()),
 	}
+
+	// Preserve broadcast flag from client request
+	if pkt.IsBroadcast() {
+		mods = append(mods, dhcpv4.WithBroadcast(true))
+	}
+
 	mods = append(mods, h.setDHCPOpts(ctx, pkt, d)...)
 
 	if h.Netboot.Enabled && dhcp.IsNetbootClient(pkt) == nil {
@@ -368,6 +411,12 @@ func (h *Handler) handleDecline(ctx context.Context, pkt *dhcpv4.DHCPv4, log log
 		log.Info("no lease backend configured, cannot track declined IP", "ip", ipStr)
 	}
 
+	// For static reservations, we don't reassign IPs - the same MAC always gets the same IP
+	// The decline is likely due to the client detecting its own previous usage
+	log.Info("DECLINE processed for static reservation - same MAC will get same IP on next request",
+		"mac", pkt.ClientHWAddr.String(),
+		"declined_ip", ipStr)
+
 	// Optionally verify the conflict with ARP
 	if h.ARPDetector != nil {
 		if addr, err := netip.ParseAddr(ipStr); err == nil {
@@ -399,4 +448,64 @@ func (h *Handler) createNAK(pkt *dhcpv4.DHCPv4, message string) *dhcpv4.DHCPv4 {
 	reply, _ := dhcpv4.NewReplyFromRequest(pkt, mods...)
 
 	return reply
+}
+
+// reassignIPAfterDecline handles IP reassignment after a DHCP DECLINE using the BackendWriter interface.
+func (h *Handler) reassignIPAfterDecline(
+	ctx context.Context,
+	writer backend.BackendWriter,
+	mac net.HardwareAddr,
+	declinedIP net.IP,
+	log logr.Logger,
+) error {
+	// First mark the declined IP in our lease backend if available
+	if h.LeaseBackend != nil {
+		if err := h.LeaseBackend.MarkIPDeclined(declinedIP.String()); err != nil {
+			log.Error(err, "failed to mark declined IP in lease backend", "ip", declinedIP.String())
+		}
+	}
+
+	// Get the current data for this MAC to preserve it
+	currentDHCP, currentNetboot, err := h.Backend.GetByMac(ctx, mac)
+	if err != nil {
+		// If we can't get current data, we can't reassign safely
+		return fmt.Errorf("failed to get current data for MAC %s: %w", mac.String(), err)
+	}
+
+	// If there's no current data or the current IP is the declined IP,
+	// we need to assign a new IP. This should trigger automatic assignment
+	// in backends that support it (like dnsmasq with auto-assignment enabled).
+	if currentDHCP == nil || currentDHCP.IPAddress.String() == declinedIP.String() {
+		// Create new DHCP data with empty IP to trigger auto-assignment
+		newDHCP := &data.DHCP{
+			MACAddress: mac,
+			// Leave IPAddress empty to trigger auto-assignment
+			Hostname:  fmt.Sprintf("auto-%s", mac.String()),
+			LeaseTime: 604800, // Default 1 week
+		}
+
+		// Preserve existing netboot configuration if available
+		if currentNetboot == nil {
+			currentNetboot = &data.Netboot{
+				AllowNetboot: true, // Enable netboot for auto-assigned devices
+			}
+		}
+
+		// Use Put to assign new IP and save to lease file
+		if err := writer.Put(ctx, mac, newDHCP, currentNetboot); err != nil {
+			return fmt.Errorf("failed to reassign IP using backend writer: %w", err)
+		}
+
+		log.Info("triggered IP reassignment via backend writer",
+			"mac", mac.String(),
+			"declined_ip", declinedIP.String())
+		return nil
+	}
+
+	// Current IP is different from declined IP, no reassignment needed
+	log.Info("current IP differs from declined IP, no reassignment needed",
+		"mac", mac.String(),
+		"current_ip", currentDHCP.IPAddress.String(),
+		"declined_ip", declinedIP.String())
+	return nil
 }

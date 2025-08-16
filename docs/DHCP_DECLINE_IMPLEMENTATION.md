@@ -44,9 +44,9 @@ import (
     "context"
     "net/netip"
     
-    "github.com/bmcpi/pibmc/internal/dhcp/handler/reservation"
-    "github.com/bmcpi/pibmc/internal/dhcp/arp"
-    "github.com/bmcpi/pibmc/internal/backend/dnsmasq"
+    "github.com/metal3-community/metal-boot/internal/dhcp/handler/reservation"
+    "github.com/metal3-community/metal-boot/internal/dhcp/arp"
+    "github.com/metal3-community/metal-boot/internal/backend/dnsmasq"
     "github.com/go-logr/logr"
 )
 

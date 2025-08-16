@@ -14,11 +14,11 @@ import (
 	"regexp"
 	"strings"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	"github.com/bmcpi/uefi-firmware-manager/edk2"
-	"github.com/bmcpi/uefi-firmware-manager/manager"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	"github.com/metal3-community/uefi-firmware-manager/edk2"
+	"github.com/metal3-community/uefi-firmware-manager/manager"
 	"github.com/pin/tftp/v3"
 	"github.com/tinkerbell/ipxedust/binary"
 )

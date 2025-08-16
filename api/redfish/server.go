@@ -13,15 +13,15 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/config"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	"github.com/bmcpi/pibmc/internal/util"
-	"github.com/bmcpi/uefi-firmware-manager/edk2"
-	"github.com/bmcpi/uefi-firmware-manager/manager"
-	"github.com/bmcpi/uefi-firmware-manager/types"
-	"github.com/bmcpi/uefi-firmware-manager/varstore"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/config"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	"github.com/metal3-community/metal-boot/internal/util"
+	"github.com/metal3-community/uefi-firmware-manager/edk2"
+	"github.com/metal3-community/uefi-firmware-manager/manager"
+	"github.com/metal3-community/uefi-firmware-manager/types"
+	"github.com/metal3-community/uefi-firmware-manager/varstore"
 	"go.opentelemetry.io/otel"
 )
 
@@ -43,7 +43,7 @@ func (s *PowerState) GetPoeMode() string {
 	}
 }
 
-const tracerName = "github.com/bmcpi/pibmc/api/redfish"
+const tracerName = "github.com/metal3-community/metal-boot/api/redfish"
 
 type RedfishServerConfig struct {
 	Insecure      bool

@@ -10,9 +10,9 @@ import (
 	"path/filepath"
 	"testing"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"

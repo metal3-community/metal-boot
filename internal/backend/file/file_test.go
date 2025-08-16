@@ -14,12 +14,12 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/fsnotify/fsnotify"
 	"github.com/go-logr/logr"
 	"github.com/go-logr/stdr"
 	"github.com/google/go-cmp/cmp"
 	"github.com/google/go-cmp/cmp/cmpopts"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 )
 
 func TestNewWatcher(t *testing.T) {

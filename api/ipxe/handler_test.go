@@ -7,7 +7,7 @@ import (
 	"os"
 	"testing"
 
-	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/metal3-community/metal-boot/internal/config"
 )
 
 func TestNew(t *testing.T) {

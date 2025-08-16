@@ -17,10 +17,10 @@ import (
 	"path/filepath"
 	"strings"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/config"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/config"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 )
 

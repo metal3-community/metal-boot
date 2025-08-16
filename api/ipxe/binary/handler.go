@@ -12,7 +12,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/metal3-community/metal-boot/internal/config"
 	"github.com/tinkerbell/ipxedust/binary"
 )
 

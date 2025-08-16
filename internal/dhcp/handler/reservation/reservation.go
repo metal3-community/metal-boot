@@ -6,11 +6,11 @@ import (
 	"net/netip"
 	"net/url"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/dhcp"
-	"github.com/bmcpi/pibmc/internal/dhcp/arp"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/dhcp"
+	"github.com/metal3-community/metal-boot/internal/dhcp/arp"
 )
 
 // Handler holds the configuration details for the running the DHCP server.

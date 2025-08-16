@@ -15,23 +15,24 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/bmcpi/pibmc/api"
-	"github.com/bmcpi/pibmc/api/health"
-	"github.com/bmcpi/pibmc/api/ipxe"
-	"github.com/bmcpi/pibmc/api/iso"
-	"github.com/bmcpi/pibmc/api/metrics"
-	"github.com/bmcpi/pibmc/api/redfish"
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/backend/dnsmasq"
-	"github.com/bmcpi/pibmc/internal/backend/remote"
-	"github.com/bmcpi/pibmc/internal/config"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
-	"github.com/bmcpi/pibmc/internal/dhcp/handler/reservation"
-	dhcpServer "github.com/bmcpi/pibmc/internal/dhcp/server"
-	"github.com/bmcpi/pibmc/internal/tftp"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
+	"github.com/metal3-community/metal-boot/api"
+	"github.com/metal3-community/metal-boot/api/health"
+	"github.com/metal3-community/metal-boot/api/ipxe"
+	"github.com/metal3-community/metal-boot/api/iso"
+	"github.com/metal3-community/metal-boot/api/metrics"
+	"github.com/metal3-community/metal-boot/api/redfish"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq"
+	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq/lease"
+	"github.com/metal3-community/metal-boot/internal/backend/unifi"
+	"github.com/metal3-community/metal-boot/internal/config"
+	"github.com/metal3-community/metal-boot/internal/dhcp/handler/proxy"
+	"github.com/metal3-community/metal-boot/internal/dhcp/handler/reservation"
+	dhcpServer "github.com/metal3-community/metal-boot/internal/dhcp/server"
+	"github.com/metal3-community/metal-boot/internal/tftp"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -93,7 +94,7 @@ func createPowerBackend(
 	log logr.Logger,
 	cfg *config.Config,
 ) (backend.BackendPower, error) {
-	backend, err := remote.NewRemote(ctx, log, cfg)
+	backend, err := unifi.NewRemote(ctx, log, cfg)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create backend: %w", err)
 	}
@@ -415,7 +416,7 @@ func dhcpHandler(
 			AutoProxyEnabled: true,
 		}
 	} else {
-		leaseBackend, err := dnsmasq.NewLeaseManager(
+		leaseBackend, err := lease.NewLeaseManager(
 			log,
 			filepath.Join(c.Dnsmasq.RootDirectory, "dnsmasq.leases"),
 		)

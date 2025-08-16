@@ -1,5 +1,5 @@
-// Package dnsmasq provides DNSMasq-compatible DHCP lease file management.
-package dnsmasq
+// Package leases provides DNSMasq-compatible DHCP lease file management.
+package lease
 
 import (
 	"bufio"
@@ -48,6 +48,10 @@ type LeaseManager struct {
 	dataMu  sync.RWMutex      // protects leases
 	leases  map[string]*Lease // leases maps MAC addresses to lease entries
 	watcher *fsnotify.Watcher // file system watcher
+
+	// selfWrite tracks when we're writing to prevent unnecessary reloads
+	selfWriteMu   sync.RWMutex
+	selfWriteTime time.Time
 }
 
 // NewLeaseManager creates a new lease manager with file watching capabilities.
@@ -192,6 +196,7 @@ func (m *LeaseManager) AddLease(
 		MAC:      mac,
 		IP:       ip,
 		Hostname: hostname,
+		ClientID: mac.String(),
 	}
 
 	m.dataMu.Lock()
@@ -272,6 +277,11 @@ func (m *LeaseManager) ClearDeclinedIPs() error {
 
 // SaveLeases writes all leases to the lease file in DNSMasq format.
 func (m *LeaseManager) SaveLeases() error {
+	// Record that we're writing to the file
+	m.selfWriteMu.Lock()
+	m.selfWriteTime = time.Now()
+	m.selfWriteMu.Unlock()
+
 	// Create directory if it doesn't exist
 	if dir := filepath.Dir(m.LeaseFile); dir != "." {
 		if err := os.MkdirAll(dir, 0o755); err != nil {

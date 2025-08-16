@@ -4,7 +4,7 @@ import (
 	"fmt"
 	"net"
 
-	"github.com/bmcpi/pibmc/internal/util"
+	"github.com/metal3-community/metal-boot/internal/util"
 )
 
 func main() {

@@ -4,7 +4,7 @@ import (
 	"log/slog"
 	"net/http"
 
-	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/metal3-community/metal-boot/internal/config"
 )
 
 // handler handles static file requests.

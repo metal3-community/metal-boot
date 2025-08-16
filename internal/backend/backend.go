@@ -5,7 +5,7 @@ import (
 	"context"
 	"net"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 )
 
 // BackendReader is the interface for getting data from a backend.

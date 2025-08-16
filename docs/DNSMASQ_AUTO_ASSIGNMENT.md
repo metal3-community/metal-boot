@@ -72,7 +72,7 @@ dnsmasq:
 ### Basic Auto-Assignment
 
 ```go
-import "github.com/bmcpi/pibmc/internal/backend/dnsmasq"
+import "github.com/metal3-community/metal-boot/internal/backend/dnsmasq"
 
 config := dnsmasq.Config{
     RootDir:           "/var/lib/dnsmasq",

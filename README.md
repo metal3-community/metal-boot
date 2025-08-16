@@ -432,7 +432,7 @@ Contributions to PiBMC are welcome! Here are some guidelines:
 
 ```bash
 # Clone the repository
-git clone https://github.com/bmcpi/pibmc.git
+git clone https://github.com/metal3-community/metal-boot.git
 cd pibmc
 
 # Install dependencies

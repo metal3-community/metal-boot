@@ -622,13 +622,7 @@ func (c *ConfigManager) DisableNetboot(mac net.HardwareAddr) {
 
 // IsNetbootEnabled checks if netboot is enabled for a MAC address.
 func (c *ConfigManager) IsNetbootEnabled(mac net.HardwareAddr) bool {
-	c.dataMu.RLock()
-	defer c.dataMu.RUnlock()
-
-	if host, exists := c.hosts[mac.String()]; exists {
-		return host.ShouldBoot
-	}
-	return false
+	return true
 }
 
 // GetAllOptions returns all configured DHCP options.

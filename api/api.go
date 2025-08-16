@@ -8,7 +8,7 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/metal3-community/metal-boot/internal/config"
 	sloghttp "github.com/samber/slog-http"
 	"github.com/sebest/xff"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"

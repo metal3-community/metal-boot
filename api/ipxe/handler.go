@@ -6,11 +6,11 @@ import (
 	"net/http"
 	"path/filepath"
 
-	"github.com/bmcpi/pibmc/api/ipxe/binary"
-	"github.com/bmcpi/pibmc/api/ipxe/script"
-	"github.com/bmcpi/pibmc/api/ipxe/static"
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/metal3-community/metal-boot/api/ipxe/binary"
+	"github.com/metal3-community/metal-boot/api/ipxe/script"
+	"github.com/metal3-community/metal-boot/api/ipxe/static"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/config"
 )
 
 // handler routes iPXE requests to the appropriate sub-handlers.

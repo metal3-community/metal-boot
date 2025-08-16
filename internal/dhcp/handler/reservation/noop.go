@@ -6,7 +6,7 @@ import (
 	"errors"
 	"net"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 )
 
 // Handler is a noop backend.

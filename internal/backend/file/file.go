@@ -12,16 +12,16 @@ import (
 	"strings"
 	"sync"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/ccoveille/go-safecast"
 	"github.com/fsnotify/fsnotify"
 	"github.com/ghodss/yaml"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 )
 
-const tracerName = "github.com/bmcpi/pibmc/dhcp"
+const tracerName = "github.com/metal3-community/metal-boot/dhcp"
 
 // Errors used by the file watcher.
 var (

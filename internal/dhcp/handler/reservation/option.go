@@ -8,20 +8,27 @@ import (
 	"net/url"
 	"strings"
 
-	"github.com/bmcpi/pibmc/internal/dhcp"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	dhcpotel "github.com/bmcpi/pibmc/internal/dhcp/otel"
-	"github.com/bmcpi/pibmc/internal/otel"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/metal3-community/metal-boot/internal/dhcp"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	dhcpotel "github.com/metal3-community/metal-boot/internal/dhcp/otel"
+	"github.com/metal3-community/metal-boot/internal/otel"
 )
 
 // setDHCPOpts takes a client dhcp packet and data (typically from a backend) and creates a slice of DHCP packet modifiers.
 // m is the DHCP request from a client. d is the data to use to create the DHCP packet modifiers.
 // This is most likely the place where we would have any business logic for determining DHCP option setting.
-func (h *Handler) setDHCPOpts(_ context.Context, _ *dhcpv4.DHCPv4, d *data.DHCP) []dhcpv4.Modifier {
+func (h *Handler) setDHCPOpts(
+	_ context.Context,
+	pkt *dhcpv4.DHCPv4,
+	d *data.DHCP,
+) []dhcpv4.Modifier {
 	mods := []dhcpv4.Modifier{
 		dhcpv4.WithLeaseTime(d.LeaseTime),
 		dhcpv4.WithYourIP(d.IPAddress.AsSlice()),
+		dhcpv4.WithClientIP(pkt.ClientIPAddr),
+		dhcpv4.WithGeneric(dhcpv4.OptionTFTPServerName, []byte(pkt.ServerIPAddr)),
+		dhcpv4.WithGeneric(dhcpv4.OptionBootfileName, []byte("snp.efi")),
 	}
 	if len(d.NameServers) > 0 {
 		mods = append(mods, dhcpv4.WithDNS(d.NameServers...))
@@ -49,6 +56,9 @@ func (h *Handler) setDHCPOpts(_ context.Context, _ *dhcpv4.DHCPv4, d *data.DHCP)
 	}
 	if d.DefaultGateway.Compare(netip.Addr{}) != 0 {
 		mods = append(mods, dhcpv4.WithRouter(d.DefaultGateway.AsSlice()))
+	}
+	if d.ClientID != "" {
+		mods = append(mods, dhcpv4.WithGeneric(dhcpv4.OptionClientIdentifier, []byte(d.ClientID)))
 	}
 	if h.SyslogAddr.Compare(netip.Addr{}) != 0 {
 		mods = append(

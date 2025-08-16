@@ -21,12 +21,12 @@ import (
 	"net/netip"
 	"net/url"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/dhcp"
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	oteldhcp "github.com/bmcpi/pibmc/internal/dhcp/otel"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/dhcp"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	oteldhcp "github.com/metal3-community/metal-boot/internal/dhcp/otel"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"
@@ -34,7 +34,7 @@ import (
 	"golang.org/x/net/ipv4"
 )
 
-const tracerName = "github.com/bmcpi/pibmc/internal/dhcp/handler/proxy"
+const tracerName = "github.com/metal3-community/metal-boot/internal/dhcp/handler/proxy"
 
 // Handler holds the configuration details for the running the DHCP server.
 type Handler struct {

@@ -11,8 +11,9 @@ import (
 	"testing"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq/lease"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 )
 
 func TestConfigManagerHostFiles(t *testing.T) {
@@ -307,7 +308,7 @@ func TestLeaseManagerFileWatching(t *testing.T) {
 	logger := logr.Discard()
 
 	// Create lease manager
-	manager, err := NewLeaseManager(logger, leaseFile)
+	manager, err := lease.NewLeaseManager(logger, leaseFile)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -429,4 +430,203 @@ tag:9c:6b:00:70:59:8a,66,192.168.1.1
 	if !foundBootfile {
 		t.Error("Expected to find bootfile option with snp.efi value")
 	}
+}
+
+// TestIPReassignmentViaPut tests that the Put method can handle IP reassignment when called with empty IP.
+func TestIPReassignmentViaPut(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "dnsmasq-reassign-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create backend with auto-assignment enabled
+	config := Config{
+		RootDir:           tmpDir,
+		TFTPServer:        "192.168.1.1",
+		HTTPServer:        "192.168.1.1",
+		AutoAssignEnabled: true,
+		IPPoolStart:       "192.168.1.100",
+		IPPoolEnd:         "192.168.1.110",
+		DefaultLeaseTime:  3600,
+	}
+
+	backend, err := NewBackend(logr.Discard(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	mac, _ := net.ParseMAC("aa:bb:cc:dd:ee:ff")
+
+	// First, assign an IP normally
+	dhcpData, _, err := backend.GetByMac(ctx, mac)
+	if err != nil {
+		t.Fatalf("Expected automatic assignment to succeed, got error: %v", err)
+	}
+
+	originalIP := dhcpData.IPAddress
+	t.Logf("Original IP assigned: %s", originalIP.String())
+
+	// Mark the IP as declined to simulate DHCP DECLINE
+	if err := backend.leaseManager.MarkIPDeclined(originalIP.String()); err != nil {
+		t.Fatalf("Failed to mark IP as declined: %v", err)
+	}
+
+	// Now use Put with empty IP to trigger reassignment
+	newDHCP := &data.DHCP{
+		MACAddress: mac,
+		// Leave IPAddress empty to trigger auto-assignment
+		Hostname:  "test-reassign",
+		LeaseTime: 3600,
+	}
+
+	newNetboot := &data.Netboot{
+		AllowNetboot: true,
+	}
+
+	// Use Put to reassign IP
+	if err := backend.Put(ctx, mac, newDHCP, newNetboot); err != nil {
+		t.Fatalf("Failed to reassign IP via Put: %v", err)
+	}
+
+	// Verify new IP was assigned
+	updatedDHCP, _, err := backend.GetByMac(ctx, mac)
+	if err != nil {
+		t.Fatalf("Failed to get updated data: %v", err)
+	}
+
+	newIP := updatedDHCP.IPAddress
+	t.Logf("New IP assigned: %s", newIP.String())
+
+	// Verify the new IP is different from the original (declined) IP
+	if newIP.String() == originalIP.String() {
+		t.Error("New IP should be different from the declined IP")
+	}
+
+	// Verify the new IP is within the configured range
+	startIP, _ := netip.ParseAddr("192.168.1.100")
+	endIP, _ := netip.ParseAddr("192.168.1.110")
+
+	if newIP.Compare(startIP) < 0 || newIP.Compare(endIP) > 0 {
+		t.Errorf("New IP %s is outside the configured range %s-%s",
+			newIP.String(), startIP.String(), endIP.String())
+	}
+
+	// Verify the hostname was updated
+	if updatedDHCP.Hostname != "test-reassign" {
+		t.Errorf("Expected hostname 'test-reassign', got '%s'", updatedDHCP.Hostname)
+	}
+}
+
+// TestDHCPDeclineWithBackendWriter tests the complete DHCP DECLINE flow using BackendWriter.
+func TestDHCPDeclineWithBackendWriter(t *testing.T) {
+	// Create a temporary directory for testing
+	tmpDir, err := os.MkdirTemp("", "dnsmasq-decline-test")
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer os.RemoveAll(tmpDir)
+
+	// Create backend with auto-assignment enabled
+	config := Config{
+		RootDir:           tmpDir,
+		TFTPServer:        "192.168.1.1",
+		HTTPServer:        "192.168.1.1",
+		AutoAssignEnabled: true,
+		IPPoolStart:       "192.168.1.100",
+		IPPoolEnd:         "192.168.1.110",
+		DefaultLeaseTime:  3600,
+	}
+
+	backend, err := NewBackend(logr.Discard(), config)
+	if err != nil {
+		t.Fatal(err)
+	}
+	defer backend.Close()
+
+	ctx := context.Background()
+	mac, _ := net.ParseMAC("aa:bb:cc:dd:ee:ff")
+
+	// Simulate a DHCP client getting an initial IP
+	dhcpData, _, err := backend.GetByMac(ctx, mac)
+	if err != nil {
+		t.Fatalf("Initial IP assignment failed: %v", err)
+	}
+	initialIP := dhcpData.IPAddress
+	t.Logf("Initial IP assigned: %s", initialIP.String())
+
+	// Verify lease file was written
+	leaseFile := filepath.Join(tmpDir, "dnsmasq.leases")
+	if _, err := os.Stat(leaseFile); err != nil {
+		t.Fatalf("Lease file was not created: %v", err)
+	}
+
+	// Read lease file content to verify it contains our lease
+	leaseContent, err := os.ReadFile(leaseFile)
+	if err != nil {
+		t.Fatalf("Failed to read lease file: %v", err)
+	}
+
+	if !strings.Contains(string(leaseContent), mac.String()) {
+		t.Errorf("Lease file should contain MAC address %s", mac.String())
+	}
+	if !strings.Contains(string(leaseContent), initialIP.String()) {
+		t.Errorf("Lease file should contain IP address %s", initialIP.String())
+	}
+
+	// Simulate DHCP DECLINE by marking IP as declined and using Put for reassignment
+	if err := backend.leaseManager.MarkIPDeclined(initialIP.String()); err != nil {
+		t.Fatalf("Failed to mark IP as declined: %v", err)
+	}
+
+	// Use BackendWriter.Put with empty IP to trigger reassignment (like the DHCP handler would)
+	// The backend already implements BackendWriter through its Put method
+	reassignDHCP := &data.DHCP{
+		MACAddress: mac,
+		// Empty IPAddress to trigger auto-assignment
+		Hostname:  fmt.Sprintf("reassign-%s", mac.String()),
+		LeaseTime: 3600,
+	}
+
+	reassignNetboot := &data.Netboot{
+		AllowNetboot: true,
+	}
+
+	if err := backend.Put(ctx, mac, reassignDHCP, reassignNetboot); err != nil {
+		t.Fatalf("IP reassignment via Put failed: %v", err)
+	}
+
+	// Verify new IP was assigned
+	newDHCP, _, err := backend.GetByMac(ctx, mac)
+	if err != nil {
+		t.Fatalf("Failed to get reassigned IP: %v", err)
+	}
+
+	newIP := newDHCP.IPAddress
+	t.Logf("Reassigned IP: %s", newIP.String())
+
+	// Verify IP changed
+	if newIP.String() == initialIP.String() {
+		t.Error("IP should have changed after decline and reassignment")
+	}
+
+	// Verify lease file was updated with new IP
+	updatedLeaseContent, err := os.ReadFile(leaseFile)
+	if err != nil {
+		t.Fatalf("Failed to read updated lease file: %v", err)
+	}
+
+	if !strings.Contains(string(updatedLeaseContent), newIP.String()) {
+		t.Errorf("Updated lease file should contain new IP address %s", newIP.String())
+	}
+
+	// Verify hostname was updated
+	if newDHCP.Hostname != fmt.Sprintf("reassign-%s", mac.String()) {
+		t.Errorf("Expected updated hostname, got '%s'", newDHCP.Hostname)
+	}
+
+	t.Logf("Successfully completed DHCP DECLINE simulation with BackendWriter")
 }

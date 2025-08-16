@@ -10,8 +10,8 @@ import (
 	"net/url"
 	"path"
 
-	"github.com/bmcpi/pibmc/internal/backend"
-	"github.com/bmcpi/pibmc/internal/config"
+	"github.com/metal3-community/metal-boot/internal/backend"
+	"github.com/metal3-community/metal-boot/internal/config"
 )
 
 // scriptHandler handles iPXE script requests.

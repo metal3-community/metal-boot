@@ -5,10 +5,10 @@ import (
 	"context"
 	"net"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 	"golang.org/x/net/ipv4"
 )
 

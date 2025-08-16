@@ -34,6 +34,7 @@ type Metadata struct {
 type DHCP struct {
 	MACAddress       net.HardwareAddr // chaddr DHCP header.
 	IPAddress        netip.Addr       // yiaddr DHCP header.
+	ClientID         string           // cidr DHCP header.
 	SubnetMask       net.IPMask       // DHCP option 1.
 	DefaultGateway   netip.Addr       // DHCP option 3.
 	NameServers      []net.IP         // DHCP option 6.

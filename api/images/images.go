@@ -14,9 +14,9 @@ import (
 	"strings"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/config"
-	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/config"
+	"github.com/metal3-community/metal-boot/internal/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/codes"

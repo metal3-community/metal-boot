@@ -13,14 +13,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/bmcpi/pibmc/internal/dhcp/data"
-	"github.com/bmcpi/pibmc/internal/util"
 	"github.com/go-logr/logr"
+	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq/lease"
+	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	"github.com/metal3-community/metal-boot/internal/util"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/codes"
 )
 
-const tracerName = "github.com/bmcpi/pibmc/backend/dnsmasq"
+const tracerName = "github.com/metal3-community/metal-boot/backend/dnsmasq"
 
 // Errors used by the dnsmasq backend.
 var (
@@ -31,7 +32,7 @@ var (
 // lease and configuration files.
 type Backend struct {
 	mu            sync.RWMutex
-	leaseManager  *LeaseManager
+	leaseManager  *lease.LeaseManager
 	configManager *ConfigManager
 	log           logr.Logger
 
@@ -70,7 +71,7 @@ type Config struct {
 
 // NewBackend creates a new DNSMasq backend.
 func NewBackend(log logr.Logger, config Config) (*Backend, error) {
-	leaseManager, err := NewLeaseManager(log, filepath.Join(config.RootDir, "dnsmasq.leases"))
+	leaseManager, err := lease.NewLeaseManager(log, filepath.Join(config.RootDir, "dnsmasq.leases"))
 	if err != nil {
 		return nil, fmt.Errorf("failed to create lease manager: %w", err)
 	}
@@ -126,8 +127,8 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 
 	// Load existing data
 	if err := backend.loadData(); err != nil {
-		leaseManager.Close()     // Clean up on error
-		configManager.Close()    // Clean up on error
+		leaseManager.Close()  // Clean up on error
+		configManager.Close() // Clean up on error
 		return nil, fmt.Errorf("failed to load existing data: %w", err)
 	}
 
@@ -175,12 +176,14 @@ func (b *Backend) GetByMac(
 		hostname := fmt.Sprintf("auto-%s", mac.String())
 		b.mu.Lock()
 		b.leaseManager.AddLease(mac, assignedIP, hostname, b.defaultLeaseTime)
+		clientID := fmt.Sprintf(mac.String())
 
 		// Set up netboot configuration for auto-assigned devices with architecture-specific boot file
-		bootFile := "ipxe.efi" // Default for x86_64
-		if util.IsRaspberryPI(mac) {
-			bootFile = "snp.efi" // ARM64 Raspberry Pi
-		}
+		bootFile := "snp.efi" // Default for arm64
+		// bootFile := "ipxe.efi" // Default for x86_64
+		// if util.IsRaspberryPI(mac) {
+		// 	bootFile = "snp.efi" // ARM64 Raspberry Pi
+		// }
 		b.configManager.AddNetbootOptionsWithBootFile(mac, b.tftpServer, b.httpServer, bootFile)
 
 		b.mu.Unlock()
@@ -382,7 +385,7 @@ func (b *Backend) save() error {
 }
 
 // leaseToDHCP converts a Lease to data.DHCP.
-func (b *Backend) leaseToDHCP(lease *Lease) (*data.DHCP, error) {
+func (b *Backend) leaseToDHCP(lease *lease.Lease) (*data.DHCP, error) {
 	ipAddr, err := netip.ParseAddr(lease.IP.String())
 	if err != nil {
 		return nil, fmt.Errorf("failed to parse IP address: %w", err)
@@ -393,6 +396,7 @@ func (b *Backend) leaseToDHCP(lease *Lease) (*data.DHCP, error) {
 		IPAddress:  ipAddr,
 		Hostname:   lease.Hostname,
 		LeaseTime:  uint32(lease.Expiry - time.Now().Unix()),
+		ClientID:   lease.ClientID,
 	}
 
 	return dhcp, nil
@@ -486,8 +490,7 @@ func (b *Backend) assignIPForMAC(mac net.HardwareAddr) (net.IP, error) {
 	hash := hasher.Sum(nil)
 
 	// Use first 4 bytes of hash as offset seed
-	var offsetSeed uint32
-	offsetSeed = binary.BigEndian.Uint32(hash[:4])
+	offsetSeed := binary.BigEndian.Uint32(hash[:4])
 
 	// Calculate offset within the pool
 	offset := offsetSeed % poolSize
@@ -505,13 +508,18 @@ func (b *Backend) assignIPForMAC(mac net.HardwareAddr) (net.IP, error) {
 
 		testIP := intToIP(currentInt)
 
-		// Check if this IP is available
+		// Check if this IP is available (not assigned to different MAC and not declined)
 		occupied := false
 		for _, lease := range activeLeases {
 			if lease.IP.Equal(testIP) && lease.MAC.String() != mac.String() {
 				occupied = true
 				break
 			}
+		}
+
+		// Also check if this IP is currently declined
+		if !occupied && b.leaseManager.IsIPDeclined(testIP.String()) {
+			occupied = true
 		}
 
 		if !occupied {
