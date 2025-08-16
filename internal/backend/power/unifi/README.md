@@ -1,6 +1,6 @@
 # Unifi SSH Power Management Package
 
-This package provides SSH-based power management for Unifi switches, implementing the `backend.BackendPower` interface for the PiBMC system.
+This package provides SSH-based power management for Unifi switches, implementing the `backend.BackendPower` interface for the Metal Boot system.
 
 ## Features
 
@@ -207,9 +207,9 @@ The package returns descriptive errors for common scenarios:
 - Unknown MAC addresses (port mapping not found)
 - Invalid power states
 
-## Integration with PiBMC
+## Integration with Metal Boot
 
-The `PowerManager` type implements the `backend.BackendPower` interface, making it compatible with the PiBMC system's backend architecture:
+The `PowerManager` type implements the `backend.BackendPower` interface, making it compatible with the Metal Boot system's backend architecture:
 
 ```go
 type BackendPower interface {
@@ -271,7 +271,7 @@ func handleDHCPDecline(powerBackend backend.BackendPower, mac net.HardwareAddr) 
 }
 ```
 
-This allows the Unifi power manager to be used in DHCP handlers, Redfish API endpoints, and other PiBMC components that require power management capabilities.
+This allows the Unifi power manager to be used in DHCP handlers, Redfish API endpoints, and other Metal Boot components that require power management capabilities.
 
 ## Security Considerations
 

@@ -1,10 +1,10 @@
-# PiBMC: Raspberry Pi Baseboard Management Controller
+# Metal Boot: Raspberry Pi Baseboard Management Controller
 
 A complete netboot environment and management system for Raspberry Pi 4 devices using DHCP proxy, TFTP, HTTP, iPXE, EDK2, UEFI, and Redfish.
 
 ## Overview
 
-PiBMC provides enterprise-grade server management capabilities for Raspberry Pi 4 devices by implementing:
+Metal Boot provides enterprise-grade server management capabilities for Raspberry Pi 4 devices by implementing:
 
 1. Network booting through DHCP proxy and TFTP services
 2. UEFI firmware customization for Raspberry Pi 4
@@ -120,7 +120,7 @@ stateDiagram-v2
 
 ```mermaid
 flowchart TD
-    subgraph "PiBMC Server"
+    subgraph "Metal Boot Server"
         DHCP[DHCP Proxy Service]
         TFTP[TFTP Service]
         HTTP[HTTP Service]
@@ -169,9 +169,9 @@ flowchart TD
 
 ## Netbooting Raspberry Pi 4 Devices
 
-### How Netbooting Works in PiBMC
+### How Netbooting Works in Metal Boot
 
-PiBMC implements a comprehensive netboot process for Raspberry Pi 4 devices:
+Metal Boot implements a comprehensive netboot process for Raspberry Pi 4 devices:
 
 ```mermaid
 sequenceDiagram
@@ -200,7 +200,7 @@ sequenceDiagram
 
 1. **Initial Boot Phase**:
    - The Raspberry Pi 4 sends a DHCP broadcast on the network
-   - PiBMC's DHCP proxy service responds with appropriate options including TFTP server information
+   - Metal Boot's DHCP proxy service responds with appropriate options including TFTP server information
    - The Pi downloads and boots the UEFI firmware (RPI_EFI.fd) via TFTP
 
 2. **UEFI Firmware Phase**:
@@ -239,11 +239,11 @@ The configuration lets you define per-device settings, including:
 
 ## UEFI Firmware Customization
 
-PiBMC incorporates tools for modifying and managing UEFI firmware for Raspberry Pi 4 devices.
+Metal Boot incorporates tools for modifying and managing UEFI firmware for Raspberry Pi 4 devices.
 
 ### EDK2 Firmware for Raspberry Pi
 
-PiBMC uses the EDK2-based UEFI firmware for Raspberry Pi 4 (from [pftf/RPi4](https://github.com/pftf/RPi4)). The firmware is embedded in the application and served via TFTP.
+Metal Boot uses the EDK2-based UEFI firmware for Raspberry Pi 4 (from [pftf/RPi4](https://github.com/pftf/RPi4)). The firmware is embedded in the application and served via TFTP.
 
 Default UEFI configuration:
 
@@ -265,7 +265,7 @@ tftp_prefix=2
 
 ### Working with EFI Variables
 
-PiBMC provides functionality to:
+Metal Boot provides functionality to:
 
 1. **Read** existing EFI variables from firmware
 2. **Modify** EFI variables including boot entries
@@ -274,7 +274,7 @@ PiBMC provides functionality to:
 
 #### Viewing and Modifying Boot Entries
 
-EFI boot entries control the boot sequence of the Raspberry Pi. PiBMC can decode and modify these entries:
+EFI boot entries control the boot sequence of the Raspberry Pi. Metal Boot can decode and modify these entries:
 
 Example boot entry:
 
@@ -297,7 +297,7 @@ virt-fw-vars --inplace RPI_EFI.fd --set-json firmware-vars.json
 
 ## BMC Functionality
 
-PiBMC implements industry-standard Redfish API for out-of-band management of Raspberry Pi devices.
+Metal Boot implements industry-standard Redfish API for out-of-band management of Raspberry Pi devices.
 
 ### Redfish API
 
@@ -311,9 +311,9 @@ The Redfish API provides a RESTful interface for:
 
 ### Power Management
 
-PiBMC can control power to Raspberry Pi devices by:
+Metal Boot can control power to Raspberry Pi devices by:
 
-1. **PoE Switch Control**: For Raspberry Pis powered via Power over Ethernet, PiBMC can control power by managing PoE switch ports.
+1. **PoE Switch Control**: For Raspberry Pis powered via Power over Ethernet, Metal Boot can control power by managing PoE switch ports.
 
 ```yaml
 Power:
@@ -325,17 +325,17 @@ Power:
 
 ### Automated Device Discovery
 
-PiBMC maintains a mapping between MAC addresses and PoE switch ports, allowing for automatic discovery and power management of Raspberry Pi devices on the network.
+Metal Boot maintains a mapping between MAC addresses and PoE switch ports, allowing for automatic discovery and power management of Raspberry Pi devices on the network.
 
 ## Deployment Example
 
 ### Complete Setup with Ironic Inspection
 
-PiBMC can integrate with OpenStack Ironic for complete bare-metal provisioning:
+Metal Boot can integrate with OpenStack Ironic for complete bare-metal provisioning:
 
 ```mermaid
 flowchart TD
-    subgraph "PiBMC Environment"
+    subgraph "Metal Boot Environment"
         DHCP[DHCP Proxy]
         TFTP[TFTP Server]
         HTTP[HTTP Server]
@@ -364,14 +364,14 @@ flowchart TD
     Redfish -->|Power Control| Pi
 ```
 
-1. PiBMC provides DHCP, TFTP and HTTP services for netbooting
+1. Metal Boot provides DHCP, TFTP and HTTP services for netbooting
 2. Raspberry Pi devices boot the Ironic Python Agent (IPA)
 3. IPA collects hardware information and sends to Ironic Inspector
-4. Ironic manages the devices through PiBMC's Redfish API
+4. Ironic manages the devices through Metal Boot's Redfish API
 
 ### DHCP Lease Management
 
-PiBMC supports DNSMasq-compatible DHCP lease management for production environments. See [DHCP Lease Management](docs/DHCP_LEASE_MANAGEMENT.md) for complete documentation.
+Metal Boot supports DNSMasq-compatible DHCP lease management for production environments. See [DHCP Lease Management](docs/DHCP_LEASE_MANAGEMENT.md) for complete documentation.
 
 Key features:
 - DNSMasq-compatible lease file format
@@ -397,7 +397,7 @@ To set up a local testing environment:
 
 1. Configure a test network with a DHCP server that forwards PXE requests
 2. Connect Raspberry Pi devices to this network
-3. Run PiBMC server on a machine on the same network
+3. Run Metal Boot server on a machine on the same network
 4. Observe DHCP requests and responses using a network analyzer
 
 ### Testing UEFI Firmware Modifications
@@ -420,7 +420,7 @@ To test modifications to UEFI firmware:
 
 ## Contributing
 
-Contributions to PiBMC are welcome! Here are some guidelines:
+Contributions to Metal Boot are welcome! Here are some guidelines:
 
 1. **Code Style**: Follow Go best practices and ensure code passes linting
 2. **Testing**: Add unit tests for new functionality

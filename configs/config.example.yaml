@@ -1,4 +1,4 @@
-# Example configuration for PiBMC with DHCP lease management
+# Example configuration for Metal Boot with DHCP lease management
 # This shows how to enable DNSMasq-compatible lease and configuration management
 
 address: "0.0.0.0"

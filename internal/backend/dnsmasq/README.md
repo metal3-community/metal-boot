@@ -1,6 +1,6 @@
 # DNSMasq Backend
 
-This backend provides DNSMasq-compatible DHCP lease and configuration management for PiBMC, with support for Ironic-style configuration files.
+This backend provides DNSMasq-compatible DHCP lease and configuration management for Metal Boot, with support for Ironic-style configuration files.
 
 ## Overview
 
@@ -67,7 +67,7 @@ tag:9c:6b:00:70:59:8a,150,192.168.1.1
 
 ## Configuration
 
-Add the following to your PiBMC configuration:
+Add the following to your Metal Boot configuration:
 
 ```yaml
 dnsmasq:
@@ -79,7 +79,7 @@ dnsmasq:
 
 ## Usage
 
-The backend implements the standard PiBMC Backend interfaces:
+The backend implements the standard Metal Boot Backend interfaces:
 
 - `BackendReader`: Read DHCP and netboot configuration by MAC or IP
 - `BackendWriter`: Write DHCP leases and netboot configuration

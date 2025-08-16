@@ -1,5 +1,5 @@
 // Package integration shows an example of how to integrate the Unifi SSH power management
-// with the PiBMC system's backend architecture.
+// with the Metal Boot system's backend architecture.
 package integration
 
 import (
@@ -15,7 +15,7 @@ import (
 )
 
 // UnifiBackendConfig holds configuration for integrating Unifi power management
-// into the PiBMC backend system.
+// into the Metal Boot backend system.
 type UnifiBackendConfig struct {
 	// SSH connection settings
 	SwitchHost     string
@@ -113,7 +113,7 @@ func (u *UnifiPowerBackend) PowerCycle(ctx context.Context, mac net.HardwareAddr
 // Verify that UnifiPowerBackend implements the BackendPower interface.
 var _ backend.BackendPower = (*UnifiPowerBackend)(nil)
 
-// ExampleUsage demonstrates how to use the UnifiPowerBackend in a PiBMC setup.
+// ExampleUsage demonstrates how to use the UnifiPowerBackend in a Metal Boot setup.
 func ExampleUsage() error {
 	// Configuration for the Unifi backend
 	config := &UnifiBackendConfig{
@@ -164,7 +164,7 @@ func ExampleUsage() error {
 }
 
 // IntegrateWithDHCPHandler shows how the power backend could be integrated
-// with a DHCP handler in the PiBMC system.
+// with a DHCP handler in the Metal Boot system.
 func IntegrateWithDHCPHandler(powerBackend backend.BackendPower) {
 	// This is a conceptual example showing how the power backend
 	// would be used in a DHCP handler context

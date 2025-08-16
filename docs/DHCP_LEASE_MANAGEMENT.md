@@ -1,6 +1,6 @@
 # DHCP Lease Management
 
-PiBMC now supports DNSMasq-compatible DHCP lease and configuration management, providing seamless integration with existing DNSMasq-based infrastructure.
+Metal Boot now supports DNSMasq-compatible DHCP lease and configuration management, providing seamless integration with existing DNSMasq-based infrastructure.
 
 ## Features
 
@@ -18,7 +18,7 @@ PiBMC now supports DNSMasq-compatible DHCP lease and configuration management, p
 
 ## Configuration
 
-Add the following to your PiBMC configuration file:
+Add the following to your Metal Boot configuration file:
 
 ```yaml
 dhcp:
@@ -90,16 +90,16 @@ Format explanation:
 ### Lease Lifecycle
 
 1. **DHCP DISCOVER**: Client broadcasts discovery request
-2. **DHCP OFFER**: PiBMC responds with IP offer (no lease recorded)
+2. **DHCP OFFER**: Metal Boot responds with IP offer (no lease recorded)
 3. **DHCP REQUEST**: Client requests specific IP
-4. **DHCP ACK**: PiBMC confirms assignment and **records lease**
+4. **DHCP ACK**: Metal Boot confirms assignment and **records lease**
 5. **Lease Expiry**: Automatic cleanup of expired leases every 5 minutes
 
 ### Configuration Updates
 
 When a netboot-capable client receives a DHCP response:
 
-1. PiBMC detects the client supports PXE/iPXE
+1. Metal Boot detects the client supports PXE/iPXE
 2. Automatically generates DHCP option configuration
 3. Updates the configuration file with appropriate boot options
 4. Configuration persists across service restarts
@@ -115,14 +115,14 @@ When a netboot-capable client receives a DHCP response:
 
 The lease and configuration files are fully compatible with DNSMasq:
 
-1. **Shared lease file**: DNSMasq can read PiBMC's lease file
-2. **Configuration import**: DNSMasq can include PiBMC's config file
-3. **Seamless migration**: Easy transition between PiBMC and DNSMasq
+1. **Shared lease file**: DNSMasq can read Metal Boot's lease file
+2. **Configuration import**: DNSMasq can include Metal Boot's config file
+3. **Seamless migration**: Easy transition between Metal Boot and DNSMasq
 
 Example DNSMasq integration:
 
 ```bash
-# Include PiBMC DHCP options
+# Include Metal Boot DHCP options
 conf-file=/etc/dhcp/dhcp.conf
 
 # Share lease file  
@@ -131,7 +131,7 @@ dhcp-leasefile=/var/lib/dhcp/dhcp.leases
 
 ## Monitoring
 
-PiBMC provides structured logging for lease management:
+Metal Boot provides structured logging for lease management:
 
 ```json
 {"level":"INFO","msg":"DHCP lease management enabled","lease_file":"/var/lib/dhcp/dhcp.leases","config_file":"/etc/dhcp/dhcp.conf"}
@@ -149,8 +149,8 @@ PiBMC provides structured logging for lease management:
 
 ### Common Issues
 
-1. **Permission denied**: Ensure PiBMC has write access to lease/config directories
-2. **File conflicts**: Avoid concurrent DNSMasq and PiBMC writing to same files
+1. **Permission denied**: Ensure Metal Boot has write access to lease/config directories
+2. **File conflicts**: Avoid concurrent DNSMasq and Metal Boot writing to same files
 3. **Disk full**: Monitor available disk space
 
 ### Debug Commands
@@ -162,6 +162,6 @@ cat /var/lib/dhcp/dhcp.leases
 # Check configuration file
 cat /etc/dhcp/dhcp.conf
 
-# Monitor PiBMC logs
+# Monitor Metal Boot logs
 journalctl -u pibmc -f
 ```

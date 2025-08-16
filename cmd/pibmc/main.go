@@ -54,7 +54,7 @@ func main() {
 
 	// Create structured logger from config
 	logger := cfg.Log
-	logger.Info("PiBMC starting", "version", GitRev, "start_time", startTime)
+	logger.Info("Metal Boot starting", "version", GitRev, "start_time", startTime)
 
 	// Create readerBackend
 	readerBackend, err := createReaderBackend(context.Background(), logger, cfg)
@@ -85,7 +85,7 @@ func main() {
 		os.Exit(1)
 	}
 
-	logger.Info("PiBMC shutdown complete")
+	logger.Info("Metal Boot shutdown complete")
 }
 
 // createPowerBackend initializes and starts the backend service.

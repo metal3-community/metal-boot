@@ -28,3 +28,4 @@ openapi.yaml
 bin/
 out/
 /pibmc
+hack/
