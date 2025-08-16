@@ -31,10 +31,9 @@ jobs:
         with:
           go-version-file: "go.mod"
           cache: true
-      - run: |
-          echo "KO_DOCKER_REPO=$(echo ghcr.io/${{github.repository}} | tr '[:upper:]' '[:lower:]')" >> ${GITHUB_ENV}
       - uses: ko-build/setup-ko@d006021bd0c28d1ce33a07e7943d48b079944c8d # v0.9
         env:
+          KO_DOCKER_REPO: ${{github.repository}}
           KO_DEFAULTBASEIMAGE: docker.io/chainguard/static:latest
       - name: Run ko build
         if: ${{ ! startsWith(github.ref, 'refs/tags/') }}
