@@ -1,6 +1,6 @@
 version: 2
 
-project_name: pibmc
+project_name: metal-boot
 
 env:
   - REPO={{.GitURL | trimprefix "https://github.com/" | trimsuffix ".git"}}
@@ -11,8 +11,8 @@ before:
 
 builds:
   - env: ["CGO_ENABLED=0"]
-    main: ./cmd/pibmc
-    binary: pibmc
+    main: ./cmd/metal-boot
+    binary: metal-boot
     goos:
       - linux
     goarch:
@@ -34,4 +34,4 @@ kos:
       - linux/arm64
     disable: false
     base_image: docker.io/chainguard/static
-    local_domain: "ghcr.io/appkins-org/pibmc"
+    local_domain: "ghcr.io/metal3-community/metal-boot"

@@ -3,6 +3,6 @@ defaultPlatforms:
   - linux/amd64
 defaultBaseImage: docker.io/chainguard/static:latest
 builds:
-  - dir: ./cmd/pibmc
+  - dir: ./cmd/metal-boot
     main: .
-    id: pibmc
+    id: metal-boot

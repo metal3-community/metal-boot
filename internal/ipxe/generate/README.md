@@ -50,9 +50,9 @@ The script ensures robust network booting by retrying failed operations.
 The build process generates:
 - `internal/firmware/edk2/snp-uboot.efi` - iPXE EFI binary for ARM64
 
-## Integration with pibmc
+## Integration with Metal Boot
 
-The iPXE EFI binary is automatically built during `go generate` and placed in the firmware directory where it can be used by the pibmc system for:
+The iPXE EFI binary is automatically built during `go generate` and placed in the firmware directory where it can be used by the metal boot system for:
 
 - Network booting via EFI
 - DHCP-based boot configurations

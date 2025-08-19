@@ -31,7 +31,7 @@ func main() {
 		"-f",
 		dockerfilePath,
 		"-t",
-		"pibmc-ipxe",
+		"metal-boot-ipxe",
 		"../../",
 	)
 	buildCmd.Stdout = os.Stdout
@@ -52,7 +52,7 @@ func main() {
 
 	// Create a temporary container
 	ctx := context.Background()
-	createCmd := exec.CommandContext(ctx, "docker", "create", "pibmc-ipxe")
+	createCmd := exec.CommandContext(ctx, "docker", "create", "metal-boot-ipxe")
 	containerIDBytes, err := createCmd.Output()
 	if err != nil {
 		log.Fatalf("Failed to create container: %v", err)

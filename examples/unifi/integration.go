@@ -119,8 +119,8 @@ func ExampleUsage() error {
 	config := &UnifiBackendConfig{
 		SwitchHost:     "192.168.1.10",
 		SwitchPort:     22,
-		Username:       "pibmc-service",
-		PrivateKeyPath: "/etc/pibmc/ssh/id_rsa",
+		Username:       "metal-boot-service",
+		PrivateKeyPath: "/etc/metal-boot/ssh/id_rsa",
 		StaticPortMapping: map[string]int{
 			"b8:27:eb:12:34:56": 1, // Pi Node 1
 			"b8:27:eb:78:9a:bc": 2, // Pi Node 2

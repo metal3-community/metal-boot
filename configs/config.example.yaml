@@ -57,7 +57,7 @@ ipxe_http_script:
   static_files_enabled: true
 
 # Backend Configuration
-backend_file_path: "/etc/pibmc/hardware.yaml"
+backend_file_path: "/etc/metal-boot/hardware.yaml"
 
 # Logging
 log_level: "info"

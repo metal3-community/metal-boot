@@ -237,14 +237,14 @@ import (
 
 // Create a backend that implements BackendPower
 func createUnifiBackend() (backend.BackendPower, error) {
-    privateKey, err := ioutil.ReadFile("/etc/pibmc/ssh/id_rsa")
+    privateKey, err := ioutil.ReadFile("/etc/metal-boot/ssh/id_rsa")
     if err != nil {
         return nil, err
     }
 
     config := &unifi.Config{
         Host:            "192.168.1.10",
-        Username:        "pibmc-service",
+        Username:        "metal-boot-service",
         PrivateKey:      privateKey,
         HostKeyCallback: ssh.InsecureIgnoreHostKey(),
     }

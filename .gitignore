@@ -27,5 +27,5 @@ openapi.yaml
 .vscode/settings.json
 bin/
 out/
-/pibmc
+/metal-boot
 hack/

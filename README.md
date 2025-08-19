@@ -433,13 +433,13 @@ Contributions to Metal Boot are welcome! Here are some guidelines:
 ```bash
 # Clone the repository
 git clone https://github.com/metal3-community/metal-boot.git
-cd pibmc
+cd metal-boot
 
 # Install dependencies
 go mod download
 
 # Build the project
-go build ./cmd/pibmc
+go build ./cmd/metal-boot
 ```
 
 ## License
