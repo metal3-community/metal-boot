@@ -60,11 +60,11 @@ type isoHandler struct {
 	MagicString string
 	// SourceISO is the source url where the unmodified iso lives.
 	// It must be a valid url.URL{} object and must have a url.URL{}.Scheme of HTTP or HTTPS.
-	SourceISO          string
-	Syslog             string
-	TinkServerTLS      bool
-	TinkServerGRPCAddr string
-	StaticIPAMEnabled  bool
+	SourceISO         string
+	Syslog            string
+	UseTLS            bool
+	GRPCAddr          string
+	StaticIPAMEnabled bool
 	// parsedURL derives a url.URL from the SourceISO field.
 	// It needed for validation of SourceISO and easier modification.
 	parsedURL       *url.URL
@@ -83,7 +83,7 @@ func New(
 		MagicString:       cfg.Iso.MagicString,
 		SourceISO:         cfg.Iso.Url,
 		Syslog:            cfg.Dhcp.SyslogIP,
-		TinkServerTLS:     cfg.IpxeHttpScript.TinkServerUseTLS,
+		UseTLS:            cfg.IpxeHttpScript.UseTLS,
 		StaticIPAMEnabled: cfg.Dhcp.StaticIPAMEnabled,
 	}
 }
@@ -293,8 +293,8 @@ func (h *isoHandler) RoundTrip(req *http.Request) (*http.Response, error) {
 
 func (h *isoHandler) constructPatch(console, mac string, d *data.DHCP) string {
 	syslogHost := fmt.Sprintf("syslog_host=%s", h.Syslog)
-	grpcAuthority := fmt.Sprintf("grpc_authority=%s", h.TinkServerGRPCAddr)
-	tinkerbellTLS := fmt.Sprintf("tinkerbell_tls=%v", h.TinkServerTLS)
+	grpcAuthority := fmt.Sprintf("grpc_authority=%s", h.GRPCAddr)
+	tinkerbellTLS := fmt.Sprintf("tinkerbell_tls=%v", h.UseTLS)
 	workerID := fmt.Sprintf("worker_id=%s", mac)
 	vlanID := func() string {
 		if d != nil && d.VLANID != "" {

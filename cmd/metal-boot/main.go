@@ -10,7 +10,6 @@ import (
 	"net/url"
 	"os"
 	"os/signal"
-	"path"
 	"path/filepath"
 	"syscall"
 	"time"
@@ -109,7 +108,7 @@ func createReaderBackend(
 	backend, err := dnsmasq.NewBackend(log, dnsmasq.Config{
 		RootDir:    cfg.Dnsmasq.RootDirectory,
 		TFTPServer: cfg.Dhcp.TftpAddress,
-		HTTPServer: cfg.IpxeHttpScript.HookURL,
+		HTTPServer: cfg.Dhcp.IpxeBinaryUrl.GetUrl().Host,
 
 		AutoAssignEnabled: cfg.Dnsmasq.AutoAssignEnabled,
 		IPPoolStart:       cfg.Dnsmasq.IPPoolStart,
@@ -383,29 +382,14 @@ func dhcpHandler(
 	if err != nil {
 		return nil, fmt.Errorf("invalid tftp address for DHCP server: %w", err)
 	}
-	httpBinaryURL := &url.URL{
-		Scheme: c.Dhcp.IpxeBinaryUrl.Scheme,
-		Host:   fmt.Sprintf("%s:%d", c.Dhcp.IpxeBinaryUrl.Address, c.Dhcp.IpxeBinaryUrl.Port),
-		Path:   c.Dhcp.IpxeBinaryUrl.Path,
-	}
+	c.Dhcp.IpxeBinaryUrl.GetUrl()
+	httpBinaryURL := c.Dhcp.IpxeBinaryUrl.GetUrl()
 	if _, err := url.Parse(httpBinaryURL.String()); err != nil {
 		return nil, fmt.Errorf("invalid http ipxe binary url: %w", err)
 	}
 
-	httpScriptURL, err := c.GetIpxeHttpUrl()
-	if err != nil {
-		return nil, fmt.Errorf("failed to get ipxe http url: %w", err)
-	}
-
-	if _, err := url.Parse(httpScriptURL.String()); err != nil {
-		return nil, fmt.Errorf("invalid http ipxe script url: %w", err)
-	}
-
 	ipxeScript := func(d *dhcpv4.DHCPv4) *url.URL {
-		u := *httpScriptURL
-		p := path.Base(u.Path)
-		u.Path = path.Join(path.Dir(u.Path), d.ClientHWAddr.String(), p)
-		return &u
+		return c.Dhcp.IpxeBinaryUrl.GetUrl("/boot.ipxe")
 	}
 
 	var dh dhcpServer.Handler

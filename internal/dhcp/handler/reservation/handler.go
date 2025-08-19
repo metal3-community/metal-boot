@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net"
 	"net/netip"
+	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
@@ -155,6 +156,12 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		return
 	}
 
+	if strings.HasPrefix("http:///", reply.BootFileName) {
+		ipxeScriptUrl := *h.Netboot.IPXEScriptURL(reply)
+		ipxeScriptUrl.Path = "/boot.ipxe"
+		reply.BootFileName = ipxeScriptUrl.String()
+	}
+
 	if bf := reply.BootFileName; bf != "" {
 		log = log.WithValues("bootFileName", bf)
 	}
@@ -218,22 +225,6 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 	log.Info("sent DHCP response")
 	span.SetAttributes(h.encodeToAttributes(reply, "reply")...)
 	span.SetStatus(codes.Ok, "sent DHCP response")
-}
-
-// replyDestination determines the destination address for the DHCP reply.
-// If the giaddr is set, then the reply should be sent to the giaddr.
-// Otherwise, the reply should be sent to the direct peer.
-//
-// From page 22 of https://www.ietf.org/rfc/rfc2131.txt:
-// "If the 'giaddr' field in a DHCP message from a client is non-zero,
-// the server sends any return messages to the 'DHCP server' port on
-// the BOOTP relay agent whose address appears in 'giaddr'.".
-func replyDestination(directPeer net.Addr, giaddr net.IP) net.Addr {
-	if !giaddr.IsUnspecified() && giaddr != nil {
-		return &net.UDPAddr{IP: giaddr, Port: dhcpv4.ServerPort}
-	}
-
-	return directPeer
 }
 
 // readBackend encapsulates the backend read and opentelemetry handling.

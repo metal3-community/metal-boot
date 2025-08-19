@@ -8,6 +8,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"sync"
 
@@ -31,6 +32,7 @@ type DHCPOption struct {
 type HostEntry struct {
 	MAC        net.HardwareAddr
 	NodeID     string
+	TagID      string
 	ShouldBoot bool
 }
 
@@ -115,6 +117,14 @@ func (c *ConfigManager) setupWatchers() error {
 	}
 
 	return nil
+}
+
+func (c *ConfigManager) GetHost(mac net.HardwareAddr) (*HostEntry, bool) {
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
+
+	host, ok := c.hosts[mac.String()]
+	return host, ok
 }
 
 // LoadConfig reads host configurations and DHCP options from the directory structure.
@@ -214,42 +224,107 @@ func (c *ConfigManager) parseHostLine(line string) (*HostEntry, error) {
 	// Parse set:node_id,set:ironic format
 	if len(parts) >= 3 {
 		for _, part := range parts[1:] {
-			if strings.HasPrefix(part, "set:") {
-				setValue := strings.TrimPrefix(part, "set:")
+			if after, ok := strings.CutPrefix(part, "set:"); ok {
+				setValue := after
 				if setValue != "ironic" {
-					// This should be the node ID
-					entry.NodeID = setValue
+					// This should be the tag ID
+					entry.TagID = setValue
+
+					// Find the matching options file and extract nodeID
+					if nodeID := c.findNodeIDFromOptionsFile(setValue); nodeID != "" {
+						entry.NodeID = nodeID
+					}
 				}
 			}
 		}
 
 		// Check if this entry has both node ID and ironic tag
-		for _, part := range parts {
-			if part == "set:ironic" {
-				entry.ShouldBoot = true
-				break
-			}
+		if slices.Contains(parts, "set:ironic") {
+			entry.ShouldBoot = true
 		}
 	}
 
 	return entry, nil
 }
 
+// findNodeIDFromOptionsFile scans the options directory for a file containing the given tag
+// and returns the nodeID extracted from the filename (ironic-${nodeID}.conf format).
+func (c *ConfigManager) findNodeIDFromOptionsFile(tag string) string {
+	// Get all option files in the opts directory
+	pattern := filepath.Join(c.OptsDir, "ironic-*.conf")
+	matches, err := filepath.Glob(pattern)
+	if err != nil {
+		return ""
+	}
+
+	// Check each file for the matching tag
+	for _, optionFile := range matches {
+		if c.hasTag(optionFile, tag) {
+			// Extract nodeID from filename: ironic-${nodeID}.conf
+			basename := filepath.Base(optionFile)
+			nodeID := strings.TrimPrefix(basename, "ironic-")
+			nodeID = strings.TrimSuffix(nodeID, ".conf")
+			return nodeID
+		}
+	}
+
+	return ""
+}
+
 // loadOptionFiles reads DHCP option files for hosts that should boot.
 func (c *ConfigManager) loadOptionFiles() error {
 	for _, host := range c.hosts {
-		if !host.ShouldBoot || host.NodeID == "" {
+		if !host.ShouldBoot || host.TagID == "" {
 			continue
 		}
 
-		optionFile := filepath.Join(c.OptsDir, fmt.Sprintf("ironic-%s.conf", host.NodeID))
-		if err := c.loadOptionFile(optionFile, host.MAC.String()); err != nil {
-			// Log the error but continue with other files
-			fmt.Fprintf(os.Stderr, "Warning: failed to load option file %s: %v\n", optionFile, err)
+		matches, err := filepath.Glob(filepath.Join(c.OptsDir, "ironic-*.conf"))
+		if err != nil {
+			return fmt.Errorf("failed to glob option files: %w", err)
+		}
+		for _, optionFile := range matches {
+			if c.hasTag(optionFile, host.TagID) {
+				if err := c.loadOptionFile(optionFile, host.MAC.String()); err != nil {
+					// Log the error but continue with other files
+					fmt.Fprintf(
+						os.Stderr,
+						"Warning: failed to load option file %s: %v\n",
+						optionFile,
+						err,
+					)
+				}
+			}
 		}
 	}
 
 	return nil
+}
+
+func (c *ConfigManager) hasTag(fileName string, tag string) bool {
+	f, err := os.Open(fileName)
+	if err != nil {
+		return false
+	}
+	defer f.Close()
+
+	scanner := bufio.NewScanner(f)
+	for scanner.Scan() {
+		line := strings.TrimSpace(scanner.Text())
+		if line == "" || strings.HasPrefix(line, "#") {
+			continue
+		}
+
+		fs := strings.Split(line, ",")
+		if len(fs) > 0 {
+			f := fs[0]
+			if after, ok := strings.CutPrefix(f, "tag:"); ok {
+				t := after
+				return t == tag
+			}
+		}
+	}
+
+	return false
 }
 
 // loadOptionFile reads DHCP options for a specific node/MAC.
@@ -622,7 +697,15 @@ func (c *ConfigManager) DisableNetboot(mac net.HardwareAddr) {
 
 // IsNetbootEnabled checks if netboot is enabled for a MAC address.
 func (c *ConfigManager) IsNetbootEnabled(mac net.HardwareAddr) bool {
-	return true
+	c.dataMu.RLock()
+	defer c.dataMu.RUnlock()
+
+	if host, exists := c.hosts[mac.String()]; exists {
+		return host.ShouldBoot
+	}
+
+	// Default to false if host entry doesn't exist
+	return false
 }
 
 // GetAllOptions returns all configured DHCP options.

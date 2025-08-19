@@ -147,8 +147,8 @@ menuentry 'LinuxKit ISO Image' {
 		SourceISO:          u,
 		ExtraKernelParams:  []string{},
 		Syslog:             "127.0.0.1:514",
-		TinkServerTLS:      false,
-		TinkServerGRPCAddr: "127.0.0.1:42113",
+		UseTLS:      false,
+		GRPCAddr: "127.0.0.1:42113",
 		parsedURL:          parsedURL,
 		MagicString:        magicString,
 	}

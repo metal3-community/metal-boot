@@ -45,7 +45,7 @@ func (s *Server) ListenAndServe(
 	backend backend.BackendReader,
 ) error {
 	if backend == nil {
-		return fmt.Errorf("(tftp) backend cannot be nil")
+		return fmt.Errorf("backend cannot be nil")
 	}
 
 	handler := &Handler{
@@ -59,12 +59,12 @@ func (s *Server) ListenAndServe(
 	var err error
 	handler.firmware, err = manager.NewSimpleFirmwareManager(handler.Log)
 	if err != nil {
-		return fmt.Errorf("(tftp) failed to create firmware manager: %w", err)
+		return fmt.Errorf("failed to create firmware manager: %w", err)
 	}
 
 	tftpServer := tftp.NewServer(handler.HandleRead, handler.HandleWrite)
 	if tftpServer == nil {
-		return fmt.Errorf("(tftp) failed to create TFTP server")
+		return fmt.Errorf("failed to create TFTP server")
 	}
 	tftpServer.SetBlockSize(512) // force plain RFC 1350 mode
 
@@ -72,24 +72,24 @@ func (s *Server) ListenAndServe(
 
 	a, err := net.ResolveUDPAddr("udp", addr.String())
 	if err != nil {
-		return fmt.Errorf("(tftp) failed to resolve UDP address: %w", err)
+		return fmt.Errorf("failed to resolve UDP address: %w", err)
 	}
 
 	conn, err := net.ListenUDP("udp", a)
 	if err != nil {
-		return fmt.Errorf("(tftp) failed to listen on UDP: %w", err)
+		return fmt.Errorf("failed to listen on UDP: %w", err)
 	}
 
 	go func() {
 		<-ctx.Done()
-		s.Logger.Info("(tftp) shutting down tftp server")
+		s.Logger.Info("shutting down tftp server")
 		tftpServer.Shutdown()
 	}()
 
-	s.Logger.Info("(tftp) starting TFTP server", "address", addr.String())
+	s.Logger.Info("starting TFTP server", "address", addr.String())
 
 	if err := tftpServer.Serve(conn); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.Logger.Error(err, "(tftp) TFTP server error")
+		s.Logger.Error(err, "TFTP server error")
 		return err
 	}
 
@@ -97,11 +97,11 @@ func (s *Server) ListenAndServe(
 }
 
 func (h *Handler) OnSuccess(stats tftp.TransferStats) {
-	h.Log.Info("(tftp) transfer complete", "remote", stats.RemoteAddr, "path", stats.Filename)
+	h.Log.Info("transfer complete", "remote", stats.RemoteAddr, "path", stats.Filename)
 }
 
 func (h *Handler) OnFailure(stats tftp.TransferStats, err error) {
-	h.Log.Error(err, "(tftp) transfer failed", "remote", stats.RemoteAddr, "path", stats.Filename)
+	h.Log.Error(err, "transfer failed", "remote", stats.RemoteAddr, "path", stats.Filename)
 }
 
 // HandleRead handles TFTP GET requests.
@@ -131,25 +131,30 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) 
 
 	filename := filepath.Base(fullfilepath)
 
-	if filename == edk2.FirmwareFileName {
-		if dhcpInfo == nil {
-			h.Log.Error(nil, "(tftp) cannot serve firmware without DHCP info")
-			return fmt.Errorf("DHCP info required for firmware")
+	switch filename {
+	case edk2.FirmwareFileName:
+		if dhcpInfo == nil || netboot == nil || !netboot.AllowNetboot {
+			br := bytes.NewReader(edk2.Files[edk2.FirmwareFileName])
+			_, err := rf.ReadFrom(br)
+			return err
 		}
 
 		mac := dhcpInfo.MACAddress
 
 		mgr, err := manager.NewSimpleFirmwareManager(h.Log)
 		if err != nil {
-			h.Log.Error(err, "(tftp) failed to create firmware manager")
+			h.Log.Error(err, "failed to create firmware manager")
 			return err
 		}
 		reader, err := mgr.GetFirmwareReader(mac)
 		if err != nil {
-			h.Log.Error(err, "(tftp) failed to get firmware reader")
+			h.Log.Error(err, "failed to get firmware reader")
 			return err
 		}
 		_, err = rf.ReadFrom(reader)
+		return err
+	case "autoexec.ipxe":
+		_, err = rf.ReadFrom(bytes.NewReader([]byte("#!ipxe\n\n"))) // Serve a minimal iPXE script
 		return err
 	}
 
@@ -174,10 +179,6 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) 
 
 	if file, err := root.Open(resolvedPath); err == nil {
 		defer file.Close()
-		if rf == nil {
-			h.Log.Error(nil, "(tftp) ReaderFrom is nil when serving file", "path", resolvedPath)
-			return fmt.Errorf("nil ReaderFrom parameter")
-		}
 		_, err := rf.ReadFrom(file)
 		return err
 	}

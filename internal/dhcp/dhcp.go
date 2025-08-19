@@ -268,7 +268,6 @@ func (i Info) Bootfile(
 	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Ironic userclass (option 77).
 	switch { // order matters here.
 	case i.UserClass == Ironic,
-		i.UserClass == IPXE,
 		(customUC != "" && i.UserClass == customUC): // this case gets us out of an ipxe boot loop.
 		if i.UserClass == Ironic && ipxeScript != nil {
 			bootfile = ipxeScript.String()

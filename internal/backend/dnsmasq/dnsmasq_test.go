@@ -52,9 +52,9 @@ func TestConfigManagerHostFiles(t *testing.T) {
 	// Create test options file
 	optsFile := filepath.Join(optsDir, "ironic-92ef984e-995f-4aea-8088-9cde6a970a88.conf")
 	optsContent := `# Test options
-tag:9c:6b:00:70:59:8a,tag:!ipxe,67,ipxe.efi
-tag:9c:6b:00:70:59:8a,tag:ipxe,67,http://192.168.1.1/boot.ipxe
-tag:9c:6b:00:70:59:8a,66,192.168.1.1
+tag:92ef984e-995f-4aea-8088-9cde6a970a88,tag:!ipxe,67,ipxe.efi
+tag:92ef984e-995f-4aea-8088-9cde6a970a88,tag:ipxe,67,http://192.168.1.1/boot.ipxe
+tag:92ef984e-995f-4aea-8088-9cde6a970a88,66,192.168.1.1
 `
 	if err := os.WriteFile(optsFile, []byte(optsContent), 0o644); err != nil {
 		t.Fatal(err)
@@ -394,9 +394,9 @@ func TestConfigManagerFileWatching(t *testing.T) {
 	// Write a corresponding options file
 	optsFile := filepath.Join(optsDir, "ironic-testnode.conf")
 	optsContent := `# Test options
-tag:9c:6b:00:70:59:8a,tag:!ipxe,67,snp.efi
-tag:9c:6b:00:70:59:8a,tag:ipxe,67,http://192.168.1.1/boot.ipxe
-tag:9c:6b:00:70:59:8a,66,192.168.1.1
+tag:testnode,tag:!ipxe,67,snp.efi
+tag:testnode,tag:ipxe,67,http://192.168.1.1/boot.ipxe
+tag:testnode,66,192.168.1.1
 `
 	if err := os.WriteFile(optsFile, []byte(optsContent), 0o644); err != nil {
 		t.Fatal(err)

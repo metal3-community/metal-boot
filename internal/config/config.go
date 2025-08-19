@@ -22,6 +22,12 @@ const (
 	magicString      = "464vn90e7rbj08xbwdjejmdf4it17c5zfzjyfhthbh19eij201hjgit021bmpdb9ctrc87x2ymc8e7icu4ffi15x1hah9iyaiz38ckyap8hwx2vt5rm44ixv4hau8iw718q5yd019um5dt2xpqqa2rjtdypzr5v1gun8un110hhwp8cex7pqrh2ivh0ynpm4zkkwc8wcn367zyethzy7q8hzudyeyzx3cgmxqbkh825gcak7kxzjbgjajwizryv7ec1xm2h0hh7pz29qmvtgfjj1vphpgq1zcbiiehv52wrjy9yq473d9t1rvryy6929nk435hfx55du3ih05kn5tju3vijreru1p6knc988d4gfdz28eragvryq5x8aibe5trxd0t6t7jwxkde34v6pj1khmp50k6qqj3nzgcfzabtgqkmeqhdedbvwf3byfdma4nkv3rcxugaj2d0ru30pa2fqadjqrtjnv8bu52xzxv7irbhyvygygxu1nt5z4fh9w1vwbdcmagep26d298zknykf2e88kumt59ab7nq79d8amnhhvbexgh48e8qc61vq2e9qkihzt1twk1ijfgw70nwizai15iqyted2dt9gfmf2gg7amzufre79hwqkddc1cd935ywacnkrnak6r7xzcz7zbmq3kt04u2hg1iuupid8rt4nyrju51e6uejb2ruu36g9aibmz3hnmvazptu8x5tyxk820g2cdpxjdij766bt2n3djur7v623a2v44juyfgz80ekgfb9hkibpxh3zgknw8a34t4jifhf116x15cei9hwch0fye3xyq0acuym8uhitu5evc4rag3ui0fny3qg4kju7zkfyy8hwh537urd5uixkzwu5bdvafz4jmv7imypj543xg5em8jk8cgk7c4504xdd5e4e71ihaumt6u5u2t1w7um92fepzae8p0vq93wdrd1756npu1pziiur1payc7kmdwyxg3hj5n4phxbc29x0tcddamjrwt260b0w"
 )
 
+type IronicConfig struct {
+	Url      string `mapstructure:"url"`
+	UserName string `mapstructure:"username"`
+	Password string `mapstructure:"password"`
+}
+
 type UnifiConfig struct {
 	APIKey   string `mapstructure:"api_key"`
 	Username string `mapstructure:"username"`
@@ -56,14 +62,16 @@ func (u IpxeUrl) GetUrl(paths ...string) *url.URL {
 	return &url.URL{
 		Scheme: u.Scheme,
 		Host: func() string {
-			switch u.Scheme {
-			case "http":
-				if u.Port == 80 {
-					return u.Address
-				}
-			case "https":
-				if u.Port == 443 {
-					return u.Address
+			if u.Port == 0 {
+				switch u.Scheme {
+				case "http":
+					if u.Port == 80 {
+						return u.Address
+					}
+				case "https":
+					if u.Port == 443 {
+						return u.Address
+					}
 				}
 			}
 			return fmt.Sprintf("%s:%d", u.Address, u.Port)
@@ -73,42 +81,33 @@ func (u IpxeUrl) GetUrl(paths ...string) *url.URL {
 }
 
 type DhcpConfig struct {
-	Enabled           bool     `mapstructure:"enabled"`
-	Interface         string   `mapstructure:"interface"`
-	Address           string   `mapstructure:"address"`
-	Port              int      `mapstructure:"port"`
-	ProxyEnabled      bool     `mapstructure:"proxy_enabled"`
-	IpxeBinaryUrl     IpxeUrl  `mapstructure:"ipxe_binary_url"`
-	IpxeHttpUrl       IpxeUrl  `mapstructure:"ipxe_http_url"`
-	IpxeHttpScript    IpxeUrl  `mapstructure:"ipxe_http_script"`
-	IpxeHttpScriptURL string   `mapstructure:"ipxe_http_script_url"`
-	TftpAddress       string   `mapstructure:"tftp_address"`
-	TftpPort          int      `mapstructure:"tftp_port"`
-	SyslogIP          string   `mapstructure:"syslog_ip"`
-	StaticIPAMEnabled bool     `mapstructure:"static_ipam_enabled"`
-	LeaseFile         string   `mapstructure:"lease_file"`
-	ConfigFile        string   `mapstructure:"config_file"`
-	FallbackEnabled   bool     `mapstructure:"fallback_enabled"`
-	FallbackIPStart   string   `mapstructure:"fallback_ip_start"`
-	FallbackIPEnd     string   `mapstructure:"fallback_ip_end"`
-	FallbackGateway   string   `mapstructure:"fallback_gateway"`
-	FallbackSubnet    string   `mapstructure:"fallback_subnet"`
-	FallbackDNS       []string `mapstructure:"fallback_dns"`
-	FallbackDomain    string   `mapstructure:"fallback_domain"`
-	FallbackNetboot   bool     `mapstructure:"fallback_netboot"`
+	Enabled           bool    `mapstructure:"enabled"`
+	Interface         string  `mapstructure:"interface"`
+	Address           string  `mapstructure:"address"`
+	Port              int     `mapstructure:"port"`
+	ProxyEnabled      bool    `mapstructure:"proxy_enabled"`
+	IpxeBinaryUrl     IpxeUrl `mapstructure:"ipxe_binary_url"`
+	IpxeHttpUrl       IpxeUrl `mapstructure:"ipxe_http_url"`
+	IpxeHttpScript    IpxeUrl `mapstructure:"ipxe_http_script"`
+	IpxeHttpScriptURL string  `mapstructure:"ipxe_http_script_url"`
+	TftpAddress       string  `mapstructure:"tftp_address"`
+	TftpPort          int     `mapstructure:"tftp_port"`
+	SyslogIP          string  `mapstructure:"syslog_ip"`
+	StaticIPAMEnabled bool    `mapstructure:"static_ipam_enabled"`
+	LeaseFile         string  `mapstructure:"lease_file"`
+	ConfigFile        string  `mapstructure:"config_file"`
 }
 
 type IpxeHttpScript struct {
-	Enabled               bool     `mapstructure:"enabled"`
-	Retries               int      `mapstructure:"retries"`
-	RetryDelay            int      `mapstructure:"retry_delay"`
-	TinkServer            string   `mapstructure:"tink_server"`
-	HookURL               string   `mapstructure:"hook_url"`
-	TinkServerInsecureTLS bool     `mapstructure:"tink_server_insecure_tls"`
-	TinkServerUseTLS      bool     `mapstructure:"tink_server_use_tls"`
-	ExtraKernelArgs       []string `mapstructure:"extra_kernel_args"`
-	StaticIPXEEnabled     bool     `mapstructure:"static_ipxe_enabled"`
-	StaticFilesEnabled    bool     `mapstructure:"static_files_enabled"`
+	Enabled            bool     `mapstructure:"enabled"`
+	Retries            int      `mapstructure:"retries"`
+	RetryDelay         int      `mapstructure:"retry_delay"`
+	TinkServer         string   `mapstructure:"tink_server"`
+	HookURL            string   `mapstructure:"hook_url"`
+	UseTLS             bool     `mapstructure:"use_tls"`
+	ExtraKernelArgs    []string `mapstructure:"extra_kernel_args"`
+	StaticIPXEEnabled  bool     `mapstructure:"static_ipxe_enabled"`
+	StaticFilesEnabled bool     `mapstructure:"static_files_enabled"`
 }
 
 type IsoConfig struct {
@@ -136,8 +135,6 @@ type StaticConfig struct {
 type DnsmasqConfig struct {
 	Enabled           bool     `mapstructure:"enabled"`
 	RootDirectory     string   `mapstructure:"root_directory"`
-	TFTPServer        string   `mapstructure:"tftp_server"`
-	HTTPServer        string   `mapstructure:"http_server"`
 	AutoAssignEnabled bool     `mapstructure:"auto_assign_enabled"`
 	IPPoolStart       string   `mapstructure:"ip_pool_start"`
 	IPPoolEnd         string   `mapstructure:"ip_pool_end"`
@@ -165,6 +162,7 @@ type Config struct {
 	Dnsmasq         DnsmasqConfig  `mapstructure:"dnsmasq"`
 	ResetDelaySec   int            `mapstructure:"reset_delay_sec"`
 	FirmwarePath    string         `mapstructure:"firmware_path"`
+	Ironic          IronicConfig   `mapstructure:"ironic"`
 }
 
 func (c *Config) GetIpxeHttpUrl() (*url.URL, error) {
@@ -285,20 +283,12 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dhcp.ipxe_http_url.address", netInfo.ExternalIP)
 	viper.SetDefault("dhcp.ipxe_http_url.port", netInfo.Port)
 	viper.SetDefault("dhcp.ipxe_http_url.scheme", "http")
-	viper.SetDefault("dhcp.ipxe_http_url.path", "/auto.ipxe")
+	viper.SetDefault("dhcp.ipxe_http_url.path", "/boot.ipxe")
 	viper.SetDefault("dhcp.tftp_address", netInfo.ExternalIP)
 	viper.SetDefault("dhcp.tftp_port", 69)
 	viper.SetDefault("dhcp.syslog_ip", "")
 	viper.SetDefault("dhcp.lease_file", "")
 	viper.SetDefault("dhcp.static_ipam_enabled", false)
-	viper.SetDefault("dhcp.fallback_enabled", false)
-	viper.SetDefault("dhcp.fallback_ip_start", "192.168.1.100")
-	viper.SetDefault("dhcp.fallback_ip_end", "192.168.1.200")
-	viper.SetDefault("dhcp.fallback_gateway", "192.168.1.1")
-	viper.SetDefault("dhcp.fallback_subnet", "255.255.255.0")
-	viper.SetDefault("dhcp.fallback_dns", []string{"8.8.8.8", "8.8.4.4"})
-	viper.SetDefault("dhcp.fallback_domain", "local")
-	viper.SetDefault("dhcp.fallback_netboot", false)
 
 	viper.SetDefault("static.enabled", true)
 	viper.SetDefault("static.image_urls", []ImageURL{})
@@ -306,8 +296,6 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.SetDefault("dnsmasq.enabled", true)
 	viper.SetDefault("dnsmasq.root_directory", "/shared/dnsmasq")
-	viper.SetDefault("dnsmasq.tftp_server", netInfo.ExternalIP)
-	viper.SetDefault("dnsmasq.http_server", netInfo.ExternalIP)
 	viper.SetDefault("dnsmasq.auto_assign_enabled", false)
 	viper.SetDefault("dnsmasq.ip_pool_start", "192.168.1.100")
 	viper.SetDefault("dnsmasq.ip_pool_end", "192.168.1.200")
@@ -322,11 +310,14 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ipxe_http_script.retry_delay", 5)
 	viper.SetDefault("ipxe_http_script.tink_server", "")
 	viper.SetDefault("ipxe_http_script.hook_url", "")
-	viper.SetDefault("ipxe_http_script.tink_server_insecure_tls", true)
-	viper.SetDefault("ipxe_http_script.tink_server_use_tls", false)
+	viper.SetDefault("ipxe_http_script.use_tls", false)
 	viper.SetDefault("ipxe_http_script.extra_kernel_args", []string{})
 	viper.SetDefault("ipxe_http_script.static_ipxe_enabled", false)
 	viper.SetDefault("ipxe_http_script.static_files_enabled", false)
+
+	viper.SetDefault("ironic.url", "http://ironic:6385")
+	viper.SetDefault("ironic.username", "")
+	viper.SetDefault("ironic.password", "")
 
 	viper.SetDefault("otel.endpoint", "")
 	viper.SetDefault("otel.insecure", true)

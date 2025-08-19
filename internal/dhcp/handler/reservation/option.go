@@ -139,12 +139,10 @@ func (h *Handler) setNetworkBootOpts(
 			}
 			var ipxeScript *url.URL
 			// If the global IPXEScriptURL is set, use that.
-			if h.Netboot.IPXEScriptURL != nil {
-				ipxeScript = h.Netboot.IPXEScriptURL(m)
-			}
-			// If the IPXE script URL is set on the hardware record, use that.
 			if n.IPXEScriptURL != nil {
 				ipxeScript = n.IPXEScriptURL
+			} else if h.Netboot.IPXEScriptURL != nil {
+				ipxeScript = h.Netboot.IPXEScriptURL(m)
 			}
 			d.BootFileName, d.ServerIPAddr = h.bootfileAndNextServer(
 				ctx,

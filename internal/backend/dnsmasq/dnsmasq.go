@@ -9,7 +9,9 @@ import (
 	"net"
 	"net/netip"
 	"net/url"
+	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -21,7 +23,10 @@ import (
 	"go.opentelemetry.io/otel/codes"
 )
 
-const tracerName = "github.com/metal3-community/metal-boot/backend/dnsmasq"
+const (
+	tracerName = "github.com/metal3-community/metal-boot/backend/dnsmasq"
+	diskLabel  = "boot_whole_disk"
+)
 
 // Errors used by the dnsmasq backend.
 var (
@@ -31,10 +36,9 @@ var (
 // Backend implements the BackendReader and BackendWriter interfaces using DNSMasq-compatible
 // lease and configuration files.
 type Backend struct {
-	mu            sync.RWMutex
-	leaseManager  *lease.LeaseManager
-	configManager *ConfigManager
-	log           logr.Logger
+	mu           sync.RWMutex
+	leaseManager *lease.LeaseManager
+	log          logr.Logger
 
 	// Configuration
 	rootDir    string
@@ -83,12 +87,11 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 	}
 
 	backend := &Backend{
-		leaseManager:  leaseManager,
-		configManager: configManager,
-		log:           log,
-		rootDir:       config.RootDir,
-		tftpServer:    config.TFTPServer,
-		httpServer:    config.HTTPServer,
+		leaseManager: leaseManager,
+		log:          log,
+		rootDir:      config.RootDir,
+		tftpServer:   config.TFTPServer,
+		httpServer:   config.HTTPServer,
 
 		// Auto assignment settings
 		autoAssignEnabled: config.AutoAssignEnabled,
@@ -141,10 +144,6 @@ func (b *Backend) loadData() error {
 		return fmt.Errorf("failed to load leases: %w", err)
 	}
 
-	if err := b.configManager.LoadConfig(); err != nil {
-		return fmt.Errorf("failed to load config: %w", err)
-	}
-
 	return nil
 }
 
@@ -176,14 +175,6 @@ func (b *Backend) GetByMac(
 		hostname := fmt.Sprintf("auto-%s", mac.String())
 		b.mu.Lock()
 		b.leaseManager.AddLease(mac, assignedIP, hostname, b.defaultLeaseTime)
-
-		// Set up netboot configuration for auto-assigned devices with architecture-specific boot file
-		bootFile := "snp.efi" // Default for arm64
-		// bootFile := "ipxe.efi" // Default for x86_64
-		// if util.IsRaspberryPI(mac) {
-		// 	bootFile = "snp.efi" // ARM64 Raspberry Pi
-		// }
-		b.configManager.AddNetbootOptionsWithBootFile(mac, b.tftpServer, b.httpServer, bootFile)
 
 		b.mu.Unlock()
 
@@ -314,19 +305,6 @@ func (b *Backend) Put(
 		b.leaseManager.AddLease(mac, net.IP(d.IPAddress.AsSlice()), hostname, leaseTime)
 	}
 
-	// Update netboot configuration
-	if n != nil && n.AllowNetboot {
-		// Use architecture-specific boot file
-		bootFile := "ipxe.efi" // Default for x86_64
-		if util.IsRaspberryPI(mac) {
-			bootFile = "snp.efi" // ARM64 Raspberry Pi
-		}
-		b.configManager.AddNetbootOptionsWithBootFile(mac, b.tftpServer, b.httpServer, bootFile)
-	} else if n != nil && !n.AllowNetboot {
-		// Disable netboot for this MAC
-		b.configManager.DisableNetboot(mac)
-	}
-
 	// Save changes
 	if err := b.save(); err != nil {
 		span.SetStatus(codes.Error, err.Error())
@@ -374,10 +352,6 @@ func (b *Backend) Sync(ctx context.Context) error {
 func (b *Backend) save() error {
 	if err := b.leaseManager.SaveLeases(); err != nil {
 		return fmt.Errorf("failed to save leases: %w", err)
-	}
-
-	if err := b.configManager.SaveConfig(); err != nil {
-		return fmt.Errorf("failed to save config: %w", err)
 	}
 
 	return nil
@@ -442,29 +416,45 @@ func (b *Backend) leaseToDHCP(lease *lease.Lease) (*data.DHCP, error) {
 
 // getNetbootData gets netboot configuration for a MAC address.
 func (b *Backend) getNetbootData(mac net.HardwareAddr) *data.Netboot {
-	// Check if netboot is enabled for this MAC
-	enabled := b.configManager.IsNetbootEnabled(mac)
+	// Get the host entry for this MAC
 
-	netboot := &data.Netboot{
-		AllowNetboot: enabled,
-	}
-
-	if enabled {
-		// Get options for this MAC
-		options := b.configManager.GetOptions(mac.String())
-
-		// Try to construct the iPXE script URL from option 67
-		for _, option := range options {
-			if option.OptionCode == 67 && option.ConditionalTag == "ipxe" {
-				if u, err := url.Parse(option.Value); err == nil {
-					netboot.IPXEScriptURL = u
+	cfgPath := fmt.Sprintf("pxelinux.cfg/%s", mac.String())
+	ipxeScriptPath := filepath.Join(b.rootDir, "..", "html", cfgPath)
+	if util.Exists(ipxeScriptPath) {
+		if ipxeScript, err := os.ReadFile(ipxeScriptPath); err == nil {
+			for l := range strings.SplitSeq(string(ipxeScript), "\n") {
+				if strings.HasPrefix(l, "goto") {
+					// Extract the target label
+					label := strings.TrimSpace(l[len("goto"):])
+					if label != "" {
+						b.log.Info("found iPXE goto label", "label", label)
+					}
+					if label == diskLabel {
+						return &data.Netboot{
+							AllowNetboot: false,
+						}
+					} else {
+						return &data.Netboot{
+							AllowNetboot: true,
+							IPXEScriptURL: &url.URL{
+								Scheme: "http",
+								Host:   b.httpServer,
+								Path:   cfgPath,
+							},
+						}
+					}
 				}
-				break
 			}
 		}
 	}
-
-	return netboot
+	return &data.Netboot{
+		AllowNetboot: true,
+		IPXEScriptURL: &url.URL{
+			Scheme: "http",
+			Host:   b.httpServer,
+			Path:   "/boot.ipxe",
+		},
+	}
 }
 
 // Start starts the file watchers for lease and configuration files.
@@ -472,9 +462,6 @@ func (b *Backend) getNetbootData(mac net.HardwareAddr) *data.Netboot {
 func (b *Backend) Start(ctx context.Context) {
 	// Start the lease file watcher in a goroutine
 	go b.leaseManager.Start(ctx)
-
-	// Start the config file watcher in a goroutine
-	go b.configManager.Start(ctx)
 
 	// Wait for context cancellation
 	<-ctx.Done()
@@ -487,10 +474,6 @@ func (b *Backend) Close() error {
 
 	if err := b.leaseManager.Close(); err != nil {
 		errs = append(errs, fmt.Errorf("failed to close lease manager: %w", err))
-	}
-
-	if err := b.configManager.Close(); err != nil {
-		errs = append(errs, fmt.Errorf("failed to close config manager: %w", err))
 	}
 
 	if len(errs) > 0 {
@@ -538,7 +521,7 @@ func (b *Backend) assignIPForMAC(mac net.HardwareAddr) (net.IP, error) {
 	activeLeases := b.leaseManager.GetActiveLeases()
 
 	// Try the calculated IP first, then search sequentially if occupied
-	for i := uint32(0); i < poolSize; i++ {
+	for i := range poolSize {
 		currentInt := assignedInt + i
 		if currentInt > endInt {
 			currentInt = startInt + (currentInt - endInt - 1) // wrap around

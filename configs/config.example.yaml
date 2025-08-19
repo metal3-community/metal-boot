@@ -49,7 +49,7 @@ ipxe_http_script:
   tink_server: "10.1.1.1:42113"
   hook_url: "http://10.1.1.1:3333"
   tink_server_insecure_tls: true
-  tink_server_use_tls: false
+  use_tls: false
   extra_kernel_args:
     - "console=ttyS0"
     - "console=ttyS1"
