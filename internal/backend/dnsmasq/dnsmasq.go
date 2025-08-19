@@ -176,7 +176,6 @@ func (b *Backend) GetByMac(
 		hostname := fmt.Sprintf("auto-%s", mac.String())
 		b.mu.Lock()
 		b.leaseManager.AddLease(mac, assignedIP, hostname, b.defaultLeaseTime)
-		clientID := fmt.Sprintf(mac.String())
 
 		// Set up netboot configuration for auto-assigned devices with architecture-specific boot file
 		bootFile := "snp.efi" // Default for arm64
@@ -384,6 +383,37 @@ func (b *Backend) save() error {
 	return nil
 }
 
+func (b *Backend) getNameServers() []net.IP {
+	var nameServers []net.IP
+
+	for _, dnsStr := range b.defaultDNS {
+		if ip := net.ParseIP(dnsStr); ip != nil {
+			nameServers = append(nameServers, ip)
+		}
+	}
+
+	return nameServers
+}
+
+func (b *Backend) getDefaultSubnetMask() net.IPMask {
+	if b.defaultSubnet == "" {
+		return net.IPv4Mask(255, 255, 255, 0) // Default /24 subnet
+	}
+
+	// Parse CIDR notation (e.g., "192.168.1.0/24")
+	_, ipNet, err := net.ParseCIDR(b.defaultSubnet)
+	if err != nil {
+		// If not CIDR, try parsing as subnet mask (e.g., "255.255.255.0")
+		mask := net.ParseIP(b.defaultSubnet)
+		if mask != nil {
+			return net.IPv4Mask(mask[12], mask[13], mask[14], mask[15])
+		}
+		return net.IPv4Mask(255, 255, 255, 0) // Default /24 subnet
+	}
+
+	return ipNet.Mask
+}
+
 // leaseToDHCP converts a Lease to data.DHCP.
 func (b *Backend) leaseToDHCP(lease *lease.Lease) (*data.DHCP, error) {
 	ipAddr, err := netip.ParseAddr(lease.IP.String())
@@ -392,11 +422,19 @@ func (b *Backend) leaseToDHCP(lease *lease.Lease) (*data.DHCP, error) {
 	}
 
 	dhcp := &data.DHCP{
-		MACAddress: lease.MAC,
-		IPAddress:  ipAddr,
-		Hostname:   lease.Hostname,
-		LeaseTime:  uint32(lease.Expiry - time.Now().Unix()),
-		ClientID:   lease.ClientID,
+		MACAddress:  lease.MAC,
+		IPAddress:   ipAddr,
+		Hostname:    lease.Hostname,
+		LeaseTime:   uint32(lease.Expiry - time.Now().Unix()),
+		ClientID:    lease.ClientID,
+		SubnetMask:  b.getDefaultSubnetMask(),
+		NameServers: b.getNameServers(),
+		DomainName:  b.defaultDomain,
+	}
+
+	defaultGateway, err := netip.ParseAddr(b.defaultGateway)
+	if err == nil {
+		dhcp.DefaultGateway = defaultGateway
 	}
 
 	return dhcp, nil

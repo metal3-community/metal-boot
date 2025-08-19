@@ -10,7 +10,6 @@ require (
 	github.com/go-logr/logr v1.4.3
 	github.com/go-logr/stdr v1.2.2
 	github.com/google/go-cmp v0.6.0
-	github.com/google/gopacket v1.1.19
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
 	github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816110302-8e53665a98ee

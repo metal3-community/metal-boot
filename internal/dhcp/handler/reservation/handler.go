@@ -9,7 +9,6 @@ import (
 
 	"github.com/go-logr/logr"
 	"github.com/insomniacslk/dhcp/dhcpv4"
-	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/dhcp"
 	"github.com/metal3-community/metal-boot/internal/dhcp/arp"
 	"github.com/metal3-community/metal-boot/internal/dhcp/data"
@@ -121,17 +120,6 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 			return
 		}
 
-		// Temporarily disable IP conflict checking to debug DECLINE issue
-		// if h.hasIPConflict(ctx, d.IPAddress) {
-		// 	log.Info(
-		// 		"IP address conflict detected, declining offer",
-		// 		"ip", d.IPAddress.String(),
-		// 		"type", p.Pkt.MessageType().String(),
-		// 	)
-		// 	span.SetStatus(codes.Ok, "IP conflict detected, no offer sent")
-		// 	return
-		// }
-
 		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
 		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeOffer)
 		log = log.WithValues("type", dhcpv4.MessageTypeOffer.String())
@@ -157,38 +145,9 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 
 			return
 		}
-
-		// Temporarily disable IP conflict checking to debug DECLINE issue
-		// if h.hasIPConflict(ctx, d.IPAddress) {
-		// 	log.Info(
-		// 		"IP address conflict detected, sending NAK",
-		// 		"ip", d.IPAddress.String(),
-		// 		"type", p.Pkt.MessageType().String(),
-		// 	)
-		// 	// Send DHCP NAK to inform client of conflict
-		// 	reply = h.createNAK(p.Pkt, "IP address conflict detected")
-		// 	log = log.WithValues("type", dhcpv4.MessageTypeNak.String())
-		// } else {
-		log.Info("received DHCP packet", "type", p.Pkt.MessageType().String())
 		reply = h.updateMsg(ctx, p.Pkt, d, n, dhcpv4.MessageTypeAck)
 		log = log.WithValues("type", dhcpv4.MessageTypeAck.String())
-		// }
 		span.SetStatus(codes.Ok, "processed request")
-	case dhcpv4.MessageTypeDecline:
-		// Handle DHCP DECLINE properly
-		h.handleDecline(ctx, p.Pkt, log)
-		span.SetStatus(codes.Ok, "processed decline, no response required")
-		return
-	case dhcpv4.MessageTypeRelease:
-		// Release the lease from the backend
-		log.Info(
-			"received DHCP release packet, no response required, all IPs are host reservations",
-			"type",
-			p.Pkt.MessageType().String(),
-		)
-		span.SetStatus(codes.Ok, "received release, no response required")
-
-		return
 	default:
 		log.Info("received unknown message type", "type", p.Pkt.MessageType().String())
 		span.SetStatus(codes.Error, "received unknown message type")
@@ -212,6 +171,7 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		"clientIP", p.Pkt.ClientIPAddr.String(),
 		"giaddr", p.Pkt.GatewayIPAddr.String(),
 		"yourIP", reply.YourIPAddr.String(),
+		"leaseTime", reply.Options.Get(dhcpv4.OptionIPAddressLeaseTime),
 		"broadcastFlag", p.Pkt.IsBroadcast(),
 		"messageType", p.Pkt.MessageType().String())
 
@@ -351,19 +311,19 @@ func hardwareNotFound(err error) bool {
 	return ok && te.NotFound()
 }
 
-// hasIPConflict checks if an IP address has conflicts using both lease tracking and ARP detection.
-func (h *Handler) hasIPConflict(ctx context.Context, ip netip.Addr) bool {
+// hasIPConflict checks if an IP address has conflicts using pDAD, lease tracking, and ARP detection.
+func (h *Handler) hasIPConflict(ctx context.Context, ip netip.Addr, mac net.HardwareAddr) bool {
 	h.setDefaults()
 
 	ipStr := ip.String()
 
-	// First check if IP is marked as declined in our lease manager
+	// Check if IP is marked as declined in our lease manager
 	if h.LeaseBackend != nil && h.LeaseBackend.IsIPDeclined(ipStr) {
 		h.Log.V(1).Info("IP is marked as declined", "ip", ipStr)
 		return true
 	}
 
-	// Then check for active ARP conflicts
+	// Check for active ARP conflicts
 	if h.ARPDetector != nil {
 		if h.ARPDetector.IsIPInUse(ip.AsSlice()) {
 			h.Log.Info("ARP conflict detected for IP", "ip", ipStr)
@@ -378,55 +338,6 @@ func (h *Handler) hasIPConflict(ctx context.Context, ip netip.Addr) bool {
 	}
 
 	return false
-}
-
-// handleDecline processes DHCP DECLINE messages by marking the IP as declined.
-func (h *Handler) handleDecline(ctx context.Context, pkt *dhcpv4.DHCPv4, log logr.Logger) {
-	h.setDefaults()
-
-	// Extract requested IP from option 50 (Requested IP Address)
-	requestedIP := pkt.RequestedIPAddress()
-	if requestedIP == nil {
-		log.Info("DHCP DECLINE received but no requested IP found")
-		return
-	}
-
-	ipStr := requestedIP.String()
-	log.Info(
-		"processing DHCP DECLINE",
-		"declined_ip",
-		ipStr,
-		"client_mac",
-		pkt.ClientHWAddr.String(),
-	)
-
-	// Mark the IP as declined in our lease manager
-	if h.LeaseBackend != nil {
-		if err := h.LeaseBackend.MarkIPDeclined(ipStr); err != nil {
-			log.Error(err, "failed to mark IP as declined", "ip", ipStr)
-			return
-		}
-		log.Info("marked IP as declined", "ip", ipStr)
-	} else {
-		log.Info("no lease backend configured, cannot track declined IP", "ip", ipStr)
-	}
-
-	// For static reservations, we don't reassign IPs - the same MAC always gets the same IP
-	// The decline is likely due to the client detecting its own previous usage
-	log.Info("DECLINE processed for static reservation - same MAC will get same IP on next request",
-		"mac", pkt.ClientHWAddr.String(),
-		"declined_ip", ipStr)
-
-	// Optionally verify the conflict with ARP
-	if h.ARPDetector != nil {
-		if addr, err := netip.ParseAddr(ipStr); err == nil {
-			if h.ARPDetector.IsIPInUse(addr.AsSlice()) {
-				log.Info("ARP conflict confirmed for declined IP", "ip", ipStr)
-			} else {
-				log.Info("no ARP conflict detected for declined IP (possible client quirk)", "ip", ipStr)
-			}
-		}
-	}
 }
 
 // createNAK creates a DHCP NAK response to reject a client's request.
@@ -448,64 +359,4 @@ func (h *Handler) createNAK(pkt *dhcpv4.DHCPv4, message string) *dhcpv4.DHCPv4 {
 	reply, _ := dhcpv4.NewReplyFromRequest(pkt, mods...)
 
 	return reply
-}
-
-// reassignIPAfterDecline handles IP reassignment after a DHCP DECLINE using the BackendWriter interface.
-func (h *Handler) reassignIPAfterDecline(
-	ctx context.Context,
-	writer backend.BackendWriter,
-	mac net.HardwareAddr,
-	declinedIP net.IP,
-	log logr.Logger,
-) error {
-	// First mark the declined IP in our lease backend if available
-	if h.LeaseBackend != nil {
-		if err := h.LeaseBackend.MarkIPDeclined(declinedIP.String()); err != nil {
-			log.Error(err, "failed to mark declined IP in lease backend", "ip", declinedIP.String())
-		}
-	}
-
-	// Get the current data for this MAC to preserve it
-	currentDHCP, currentNetboot, err := h.Backend.GetByMac(ctx, mac)
-	if err != nil {
-		// If we can't get current data, we can't reassign safely
-		return fmt.Errorf("failed to get current data for MAC %s: %w", mac.String(), err)
-	}
-
-	// If there's no current data or the current IP is the declined IP,
-	// we need to assign a new IP. This should trigger automatic assignment
-	// in backends that support it (like dnsmasq with auto-assignment enabled).
-	if currentDHCP == nil || currentDHCP.IPAddress.String() == declinedIP.String() {
-		// Create new DHCP data with empty IP to trigger auto-assignment
-		newDHCP := &data.DHCP{
-			MACAddress: mac,
-			// Leave IPAddress empty to trigger auto-assignment
-			Hostname:  fmt.Sprintf("auto-%s", mac.String()),
-			LeaseTime: 604800, // Default 1 week
-		}
-
-		// Preserve existing netboot configuration if available
-		if currentNetboot == nil {
-			currentNetboot = &data.Netboot{
-				AllowNetboot: true, // Enable netboot for auto-assigned devices
-			}
-		}
-
-		// Use Put to assign new IP and save to lease file
-		if err := writer.Put(ctx, mac, newDHCP, currentNetboot); err != nil {
-			return fmt.Errorf("failed to reassign IP using backend writer: %w", err)
-		}
-
-		log.Info("triggered IP reassignment via backend writer",
-			"mac", mac.String(),
-			"declined_ip", declinedIP.String())
-		return nil
-	}
-
-	// Current IP is different from declined IP, no reassignment needed
-	log.Info("current IP differs from declined IP, no reassignment needed",
-		"mac", mac.String(),
-		"current_ip", currentDHCP.IPAddress.String(),
-		"declined_ip", declinedIP.String())
-	return nil
 }

@@ -159,7 +159,7 @@ func (w *Remote) clientToDHCP(ctx context.Context, client *unifi.ClientInfo, dhc
 	dhcp.Arch = "arm64"
 	dhcp.Disabled = false
 
-	if network, err := w.client.GetNetwork(ctx, w.config.Unifi.Site, client.NetworkID); err == nil {
+	if network, err := w.client.GetNetwork(ctx, w.config.Unifi.Site, client.NetworkId); err == nil {
 
 		if _, cidr, err := net.ParseCIDR(network.IPSubnet); err == nil {
 			dhcp.SubnetMask = cidr.Mask

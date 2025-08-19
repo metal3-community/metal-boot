@@ -9,7 +9,6 @@ import (
 	"strings"
 
 	"github.com/insomniacslk/dhcp/dhcpv4"
-	"github.com/insomniacslk/dhcp/dhcpv4/ztpv4"
 	"github.com/metal3-community/metal-boot/internal/dhcp"
 	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 	dhcpotel "github.com/metal3-community/metal-boot/internal/dhcp/otel"
@@ -32,28 +31,36 @@ func (h *Handler) setDHCPOpts(
 		dhcpv4.WithGeneric(dhcpv4.OptionBootfileName, []byte("snp.efi")),
 	}
 
-	vendorData, err := ztpv4.ParseVendorData(pkt)
-	if err != nil {
-		h.Log.Error(err, "failed to parse vendor data")
-		return nil
-	}
-	h.Log.Info(
-		"parsed vendor data",
-		"Serial",
-		vendorData.Serial,
-		"Model",
-		vendorData.Model,
-		"VendorName",
-		vendorData.VendorName,
-	)
+	// arch := dhcp.Arch(pkt)
 
-	mods = append(
-		mods,
-		dhcpv4.WithGeneric(dhcpv4.OptionVendorSpecificInformation, []byte(vendorData.Serial)),
-	)
+	// if arch == iana.EFI_ARM64 && util.IsRaspberryPI(d.MACAddress) {
+	// 	mods = append(mods, dhcpv4.WithYourIP(d.IPAddress.Next().Next().AsSlice()))
+	// } else {
+	// 	mods = append(mods, dhcpv4.WithYourIP(d.IPAddress.AsSlice()))
+	// }
+
+	// vendorData, err := ztpv4.ParseVendorData(pkt)
+	// if err != nil {
+	// 	h.Log.Error(err, "failed to parse vendor data")
+	// 	return nil
+	// }
+	// h.Log.Info(
+	// 	"parsed vendor data",
+	// 	"Serial",
+	// 	vendorData.Serial,
+	// 	"Model",
+	// 	vendorData.Model,
+	// 	"VendorName",
+	// 	vendorData.VendorName,
+	// )
+
+	// mods = append(
+	// 	mods,
+	// 	dhcpv4.WithGeneric(dhcpv4.OptionVendorSpecificInformation, []byte(vendorData.Serial)),
+	// )
 
 	// TODO: Check if needed - APIPA - 169.254.0.0 to 169.254.255.255
-	mods = append(mods, dhcpv4.WithOption(dhcpv4.OptAutoConfigure(dhcpv4.AutoConfigure)))
+	// mods = append(mods, dhcpv4.WithOption(dhcpv4.OptAutoConfigure(dhcpv4.AutoConfigure)))
 
 	if len(d.NameServers) > 0 {
 		mods = append(mods, dhcpv4.WithDNS(d.NameServers...))

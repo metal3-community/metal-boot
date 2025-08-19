@@ -733,34 +733,6 @@ func (m *mockLeaseManager) ClearDeclinedIPs() error {
 	return nil
 }
 
-func TestHandler_handleDecline(t *testing.T) {
-	// Create a DHCP DECLINE packet
-	decline, err := dhcpv4.NewDiscovery(net.HardwareAddr{0x12, 0x34, 0x56, 0x78, 0x9a, 0xbc})
-	if err != nil {
-		t.Fatalf("Failed to create test packet: %v", err)
-	}
-
-	// Convert to DECLINE and add requested IP
-	decline.UpdateOption(dhcpv4.OptMessageType(dhcpv4.MessageTypeDecline))
-	decline.UpdateOption(dhcpv4.OptRequestedIPAddress(net.ParseIP("192.168.1.100")))
-
-	mockLM := &mockLeaseManager{}
-
-	handler := &Handler{
-		LeaseBackend: mockLM,
-		Log:          logr.Discard(),
-		IPAddr:       netip.MustParseAddr("192.168.1.1"),
-	}
-
-	// Test handleDecline
-	handler.handleDecline(context.Background(), decline, logr.Discard())
-
-	// Verify IP was marked as declined
-	if !mockLM.IsIPDeclined("192.168.1.100") {
-		t.Error("Expected IP to be marked as declined")
-	}
-}
-
 func TestHandler_hasIPConflict(t *testing.T) {
 	mockLM := &mockLeaseManager{}
 
@@ -771,9 +743,10 @@ func TestHandler_hasIPConflict(t *testing.T) {
 	}
 
 	testIP := netip.MustParseAddr("192.168.1.100")
+	testMAC := net.HardwareAddr{0x00, 0x11, 0x22, 0x33, 0x44, 0x55}
 
 	// Initially no conflict
-	if handler.hasIPConflict(context.Background(), testIP) {
+	if handler.hasIPConflict(context.Background(), testIP, testMAC) {
 		t.Error("Expected no conflict for fresh IP")
 	}
 
@@ -781,7 +754,7 @@ func TestHandler_hasIPConflict(t *testing.T) {
 	mockLM.MarkIPDeclined(testIP.String())
 
 	// Now should have conflict
-	if !handler.hasIPConflict(context.Background(), testIP) {
+	if !handler.hasIPConflict(context.Background(), testIP, testMAC) {
 		t.Error("Expected conflict for declined IP")
 	}
 }

@@ -110,6 +110,15 @@ func createReaderBackend(
 		RootDir:    cfg.Dnsmasq.RootDirectory,
 		TFTPServer: cfg.Dhcp.TftpAddress,
 		HTTPServer: cfg.IpxeHttpScript.HookURL,
+
+		AutoAssignEnabled: cfg.Dnsmasq.AutoAssignEnabled,
+		IPPoolStart:       cfg.Dnsmasq.IPPoolStart,
+		IPPoolEnd:         cfg.Dnsmasq.IPPoolEnd,
+		DefaultLeaseTime:  cfg.Dnsmasq.DefaultLeaseTime,
+		DefaultGateway:    cfg.Dnsmasq.DefaultGateway,
+		DefaultSubnet:     cfg.Dnsmasq.DefaultSubnet,
+		DefaultDNS:        cfg.Dnsmasq.DefaultDNS,
+		DefaultDomain:     cfg.Dnsmasq.DefaultDomain,
 	})
 	if err != nil {
 		log.Error(err, "failed to create dnsmasq backend")
