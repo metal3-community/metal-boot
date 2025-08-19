@@ -17,10 +17,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	"github.com/metal3-community/metal-boot/internal/ipxe/binary"
 	"github.com/metal3-community/uefi-firmware-manager/edk2"
 	"github.com/metal3-community/uefi-firmware-manager/manager"
 	"github.com/pin/tftp/v3"
-	"github.com/tinkerbell/ipxedust/binary"
 )
 
 type Server struct {
@@ -66,6 +66,7 @@ func (s *Server) ListenAndServe(
 	if tftpServer == nil {
 		return fmt.Errorf("(tftp) failed to create TFTP server")
 	}
+	tftpServer.SetBlockSize(512) // force plain RFC 1350 mode
 
 	tftpServer.SetHook(handler)
 
@@ -130,7 +131,7 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) 
 
 	filename := filepath.Base(fullfilepath)
 
-	if filename == "RPI_EFI.fd" {
+	if filename == edk2.FirmwareFileName {
 		if dhcpInfo == nil {
 			h.Log.Error(nil, "(tftp) cannot serve firmware without DHCP info")
 			return fmt.Errorf("DHCP info required for firmware")
@@ -148,12 +149,6 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) 
 			h.Log.Error(err, "(tftp) failed to get firmware reader")
 			return err
 		}
-
-		if rf == nil {
-			h.Log.Error(nil, "(tftp) ReaderFrom is nil when serving firmware")
-			return fmt.Errorf("nil ReaderFrom parameter")
-		}
-
 		_, err = rf.ReadFrom(reader)
 		return err
 	}
@@ -311,7 +306,7 @@ func (h *Handler) resolvePath(fullfilepath string, dhcpInfo *data.DHCP) string {
 
 	isSerial, _ := regexp.MatchString(`^\d{2}[a-z]\d{5}$`, prefix)
 	if isSerial {
-		if filename == "RPI_EFI.fd" {
+		if filename == edk2.FirmwareFileName {
 			return strings.Replace(fullfilepath, prefix, macDir, 1)
 		} else {
 			return strings.Join(parts[1:], "/")

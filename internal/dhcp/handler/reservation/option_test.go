@@ -147,7 +147,7 @@ func TestBootfileAndNextServer(t *testing.T) {
 				pkt: &dhcpv4.DHCPv4{
 					ClientHWAddr: net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 					Options: dhcpv4.OptionsFromList(
-						dhcpv4.OptUserClass(dhcp.Tinkerbell.String()),
+						dhcpv4.OptUserClass(dhcp.Ironic.String()),
 					),
 				},
 				iscript: &url.URL{Scheme: "http", Host: "localhost:8080", Path: "/auto.ipxe"},
@@ -305,7 +305,7 @@ func TestSetNetworkBootOpts(t *testing.T) {
 				m: &dhcpv4.DHCPv4{
 					ClientHWAddr: net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 					Options: dhcpv4.OptionsFromList(
-						dhcpv4.OptUserClass(dhcp.Tinkerbell.String()),
+						dhcpv4.OptUserClass(dhcp.Ironic.String()),
 						dhcpv4.OptClassIdentifier("HTTPClient:xxxxx"),
 						dhcpv4.OptClientArch(iana.EFI_X86_64_HTTP),
 					),
@@ -346,7 +346,7 @@ func TestSetNetworkBootOpts(t *testing.T) {
 				m: &dhcpv4.DHCPv4{
 					ClientHWAddr: net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 					Options: dhcpv4.OptionsFromList(
-						dhcpv4.OptUserClass(dhcp.Tinkerbell.String()),
+						dhcpv4.OptUserClass(dhcp.Ironic.String()),
 						dhcpv4.OptClientArch(iana.UBOOT_ARM64),
 					),
 				},

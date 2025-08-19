@@ -13,7 +13,7 @@ import (
 	"time"
 
 	"github.com/metal3-community/metal-boot/internal/config"
-	"github.com/tinkerbell/ipxedust/binary"
+	"github.com/metal3-community/metal-boot/internal/ipxe/binary"
 )
 
 // binaryHandler handles requests for iPXE binary files.

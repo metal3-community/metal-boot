@@ -120,7 +120,7 @@ func TestHandle(t *testing.T) {
 				ClientHWAddr: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
-					dhcpv4.OptUserClass("Tinkerbell"),
+					dhcpv4.OptUserClass("Ironic"),
 					dhcpv4.OptClassIdentifier("HTTPClient:Arch:xxxxx:UNDI:yyyzzz"),
 					dhcpv4.OptClientArch(iana.EFI_X86_64_HTTP),
 					dhcpv4.OptGeneric(
@@ -225,7 +225,7 @@ func TestHandle(t *testing.T) {
 					dhcpv4.OptBroadcastAddress(net.IP{192, 168, 1, 255}),
 					dhcpv4.OptNTPServers([]net.IP{{132, 163, 96, 2}}...),
 					dhcpv4.OptDomainSearch(&rfc1035label.Labels{Labels: []string{"mydomain.com"}}),
-					dhcpv4.OptUserClass("Tinkerbell"),
+					dhcpv4.OptUserClass("Ironic"),
 					dhcpv4.OptClassIdentifier("HTTPClient:Arch:xxxxx:UNDI:yyyzzz"),
 					dhcpv4.OptClientArch(iana.EFI_X86_64_HTTP),
 					dhcpv4.OptGeneric(
@@ -459,7 +459,7 @@ func TestUpdateMsg(t *testing.T) {
 					OpCode:       dhcpv4.OpcodeBootRequest,
 					ClientHWAddr: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 					Options: dhcpv4.OptionsFromList(
-						dhcpv4.OptUserClass("Tinkerbell"),
+						dhcpv4.OptUserClass("Ironic"),
 						dhcpv4.OptClassIdentifier("HTTPClient"),
 						dhcpv4.OptClientArch(iana.EFI_ARM64_HTTP),
 						dhcpv4.OptGeneric(
@@ -576,7 +576,7 @@ func TestReadBackend(t *testing.T) {
 				OpCode:       dhcpv4.OpcodeBootRequest,
 				ClientHWAddr: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 				Options: dhcpv4.OptionsFromList(
-					dhcpv4.OptUserClass("Tinkerbell"),
+					dhcpv4.OptUserClass("Ironic"),
 					dhcpv4.OptClassIdentifier("HTTPClient"),
 					dhcpv4.OptClientArch(iana.EFI_ARM64_HTTP),
 					dhcpv4.OptGeneric(

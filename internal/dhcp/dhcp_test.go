@@ -32,7 +32,7 @@ func TestNewInfo(t *testing.T) {
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 					dhcpv4.OptClientArch(iana.EFI_X86_64_HTTP),
-					dhcpv4.OptUserClass(Tinkerbell.String()),
+					dhcpv4.OptUserClass(Ironic.String()),
 					dhcpv4.OptClassIdentifier(exampleHTTPClient),
 					dhcpv4.OptGeneric(
 						dhcpv4.OptionClientNetworkInterfaceIdentifier,
@@ -65,7 +65,7 @@ func TestNewInfo(t *testing.T) {
 			want: Info{
 				Arch:            iana.EFI_X86_64_HTTP,
 				Mac:             net.HardwareAddr{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
-				UserClass:       Tinkerbell,
+				UserClass:       Ironic,
 				ClientType:      HTTPClient,
 				IsNetbootClient: nil,
 				IPXEBinary:      "ipxe.efi",
@@ -267,7 +267,7 @@ func TestBootfile(t *testing.T) {
 	}{
 		"ipxe script": {
 			info: Info{
-				UserClass: Tinkerbell,
+				UserClass: Ironic,
 			},
 			args: args{
 				ipxeScript: &url.URL{Path: "/ipxe-script"},

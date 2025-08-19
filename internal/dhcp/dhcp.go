@@ -27,11 +27,11 @@ const (
 	// needed because in this mode the client is using iPXE native
 	// drivers and chainloading to a UNDI stack won't work.
 	IPXE UserClass = "iPXE"
-	// If the client identifies as "Tinkerbell", we've already
+	// If the client identifies as "Ironic", we've already
 	// chainloaded this client to the full-featured copy of iPXE
 	// we supply. We have to distinguish this case so we don't
 	// loop on the chainload step.
-	Tinkerbell UserClass = "Tinkerbell"
+	Ironic UserClass = "Ironic"
 )
 
 // UserClass is DHCP option 77 (https://www.rfc-editor.org/rfc/rfc3004.html).
@@ -265,12 +265,12 @@ func (i Info) Bootfile(
 ) string {
 	bootfile := "/no-ipxe-script-defined"
 
-	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Tinkerbell userclass (option 77).
+	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Ironic userclass (option 77).
 	switch { // order matters here.
-	case i.UserClass == Tinkerbell,
+	case i.UserClass == Ironic,
 		i.UserClass == IPXE,
 		(customUC != "" && i.UserClass == customUC): // this case gets us out of an ipxe boot loop.
-		if i.UserClass == Tinkerbell && ipxeScript != nil {
+		if i.UserClass == Ironic && ipxeScript != nil {
 			bootfile = ipxeScript.String()
 		} else if i.UserClass == IPXE {
 			// For IPXE user class, return TFTP URL with MAC address
@@ -315,7 +315,7 @@ func (i Info) Bootfile(
 func (i Info) NextServer(ipxeHTTPBinServer *url.URL, ipxeTFTPBinServer netip.AddrPort) net.IP {
 	var nextServer net.IP
 
-	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Tinkerbell userclass (option 77).
+	// If a machine is in an ipxe boot loop, it is likely to be that we aren't matching on IPXE or Ironic userclass (option 77).
 	switch { // order matters here.
 	case i.ClientType == HTTPClient: // Check the client type from option 60.
 		if ipxeHTTPBinServer != nil {

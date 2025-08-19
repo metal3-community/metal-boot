@@ -13,10 +13,10 @@ import (
 	"github.com/go-logr/logr"
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/dhcp/data"
+	"github.com/metal3-community/metal-boot/internal/ipxe/binary"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
-	"github.com/tinkerbell/ipxedust/binary"
 )
 
 // mockBackend implements backend.BackendReader for testing.

@@ -1,6 +1,6 @@
 #!ipxe
 
-set user-class iPXE
+set user-class Ironic
 echo Welcome to Ironic!
 
 # Allow the operator to drop to a shell
