@@ -141,12 +141,7 @@ func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) 
 
 		mac := dhcpInfo.MACAddress
 
-		mgr, err := manager.NewSimpleFirmwareManager(h.Log)
-		if err != nil {
-			h.Log.Error(err, "failed to create firmware manager")
-			return err
-		}
-		reader, err := mgr.GetFirmwareReader(mac)
+		reader, err := h.firmware.GetFirmwareReader(mac)
 		if err != nil {
 			h.Log.Error(err, "failed to get firmware reader")
 			return err

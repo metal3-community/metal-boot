@@ -142,15 +142,15 @@ menuentry 'LinuxKit ISO Image' {
 	}
 
 	h := &isoHandler{
-		Logger:             logr.Discard(),
-		Backend:            &mockBackend{},
-		SourceISO:          u,
-		ExtraKernelParams:  []string{},
-		Syslog:             "127.0.0.1:514",
-		UseTLS:      false,
-		GRPCAddr: "127.0.0.1:42113",
-		parsedURL:          parsedURL,
-		MagicString:        magicString,
+		Logger:            logr.Discard(),
+		Backend:           &mockBackend{},
+		SourceISO:         u,
+		ExtraKernelParams: []string{},
+		Syslog:            "127.0.0.1:514",
+		UseTLS:            false,
+		GRPCAddr:          "127.0.0.1:42113",
+		parsedURL:         parsedURL,
+		MagicString:       magicString,
 	}
 	h.magicStrPadding = bytes.Repeat([]byte{' '}, len(h.MagicString))
 	// for debugging enable a logger

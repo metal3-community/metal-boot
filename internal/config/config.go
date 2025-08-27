@@ -23,9 +23,10 @@ const (
 )
 
 type IronicConfig struct {
-	Url      string `mapstructure:"url"`
-	UserName string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
+	Url        string `mapstructure:"url"`
+	UserName   string `mapstructure:"username"`
+	Password   string `mapstructure:"password"`
+	SocketPath string `mapstructure:"socket_path"`
 }
 
 type UnifiConfig struct {
@@ -318,6 +319,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.url", "http://ironic:6385")
 	viper.SetDefault("ironic.username", "")
 	viper.SetDefault("ironic.password", "")
+	viper.SetDefault("ironic.socket_path", "/var/run/ironic.sock")
 
 	viper.SetDefault("otel.endpoint", "")
 	viper.SetDefault("otel.insecure", true)

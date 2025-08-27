@@ -29,3 +29,6 @@ bin/
 out/
 /metal-boot
 hack/
+terraform.tfstate*
+.terraform/
+.terraform.lock.hcl

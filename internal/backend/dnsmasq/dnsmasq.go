@@ -80,12 +80,6 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 		return nil, fmt.Errorf("failed to create lease manager: %w", err)
 	}
 
-	configManager, err := NewConfigManager(log, config.RootDir)
-	if err != nil {
-		leaseManager.Close() // Clean up on error
-		return nil, fmt.Errorf("failed to create config manager: %w", err)
-	}
-
 	backend := &Backend{
 		leaseManager: leaseManager,
 		log:          log,
@@ -130,8 +124,7 @@ func NewBackend(log logr.Logger, config Config) (*Backend, error) {
 
 	// Load existing data
 	if err := backend.loadData(); err != nil {
-		leaseManager.Close()  // Clean up on error
-		configManager.Close() // Clean up on error
+		leaseManager.Close() // Clean up on error
 		return nil, fmt.Errorf("failed to load existing data: %w", err)
 	}
 
@@ -417,30 +410,31 @@ func (b *Backend) leaseToDHCP(lease *lease.Lease) (*data.DHCP, error) {
 // getNetbootData gets netboot configuration for a MAC address.
 func (b *Backend) getNetbootData(mac net.HardwareAddr) *data.Netboot {
 	// Get the host entry for this MAC
-
-	cfgPath := fmt.Sprintf("pxelinux.cfg/%s", mac.String())
-	ipxeScriptPath := filepath.Join(b.rootDir, "..", "html", cfgPath)
-	if util.Exists(ipxeScriptPath) {
-		if ipxeScript, err := os.ReadFile(ipxeScriptPath); err == nil {
-			for l := range strings.SplitSeq(string(ipxeScript), "\n") {
-				if strings.HasPrefix(l, "goto") {
-					// Extract the target label
-					label := strings.TrimSpace(l[len("goto"):])
-					if label != "" {
-						b.log.Info("found iPXE goto label", "label", label)
-					}
-					if label == diskLabel {
-						return &data.Netboot{
-							AllowNetboot: false,
+	if util.IsRaspberryPI(mac) {
+		cfgPath := fmt.Sprintf("pxelinux.cfg/%s", mac.String())
+		ipxeScriptPath := filepath.Join(b.rootDir, "..", "html", cfgPath)
+		if util.Exists(ipxeScriptPath) {
+			if ipxeScript, err := os.ReadFile(ipxeScriptPath); err == nil {
+				for l := range strings.SplitSeq(string(ipxeScript), "\n") {
+					if strings.HasPrefix(l, "goto") {
+						// Extract the target label
+						label := strings.TrimSpace(l[len("goto"):])
+						if label != "" {
+							b.log.Info("found iPXE goto label", "label", label)
 						}
-					} else {
-						return &data.Netboot{
-							AllowNetboot: true,
-							IPXEScriptURL: &url.URL{
-								Scheme: "http",
-								Host:   b.httpServer,
-								Path:   cfgPath,
-							},
+						if label == diskLabel {
+							return &data.Netboot{
+								AllowNetboot: false,
+							}
+						} else {
+							return &data.Netboot{
+								AllowNetboot: true,
+								IPXEScriptURL: &url.URL{
+									Scheme: "http",
+									Host:   b.httpServer,
+									Path:   cfgPath,
+								},
+							}
 						}
 					}
 				}

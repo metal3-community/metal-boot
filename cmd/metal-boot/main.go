@@ -20,6 +20,7 @@ import (
 	"github.com/metal3-community/metal-boot/api"
 	"github.com/metal3-community/metal-boot/api/health"
 	"github.com/metal3-community/metal-boot/api/ipxe"
+	"github.com/metal3-community/metal-boot/api/ironic"
 	"github.com/metal3-community/metal-boot/api/iso"
 	"github.com/metal3-community/metal-boot/api/metrics"
 	"github.com/metal3-community/metal-boot/api/redfish"
@@ -252,6 +253,9 @@ func configureAPIHandlers(
 	// Add Redfish handler
 	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, readerBackend, pwrBackend))
 	logger.V(1).Info("registered Redfish handler", "path", "/redfish/v1/")
+
+	apiServer.AddHandler("/v1/", ironic.New(slogger, cfg.Ironic.SocketPath))
+	logger.V(1).Info("registered Ironic handler", "path", "/v1/")
 
 	// Add iPXE handlers if enabled
 	if cfg.IpxeHttpScript.Enabled {
