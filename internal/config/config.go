@@ -322,7 +322,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.url", "http://ironic:6385")
 	viper.SetDefault("ironic.username", "")
 	viper.SetDefault("ironic.password", "")
-	viper.SetDefault("ironic.socket_path", "/var/run/ironic.sock")
+	viper.SetDefault("ironic.socket_path", "/tmp/ironic.sock")
 	viper.SetDefault("ironic.enabled", false)
 	viper.SetDefault("ironic.supervisor_enabled", false)
 	viper.SetDefault("ironic.database_connection", "sqlite:////var/lib/ironic/ironic.db")

@@ -14,7 +14,7 @@ import (
 )
 
 const (
-	ironicSocketPath    = "/tmp/ironic-api.sock"
+	ironicSocketPath    = "/tmp/ironic.sock"
 	ironicConfigPath    = "/etc/ironic/ironic.conf"
 	healthCheckInterval = 30 * time.Second
 	shutdownTimeout     = 30 * time.Second
@@ -110,7 +110,7 @@ func (pm *ProcessManager) generateIronicConfig() error {
 
 	// Set default values for all-in-one operation with Unix sockets
 	if cfg.Default.LogFile == "" {
-		cfg.Default.LogFile = "/var/log/ironic/ironic.log"
+		cfg.Default.LogFile = "/shared/log/ironic/ironic.log"
 	}
 
 	if cfg.Default.RPCTransport == "" {

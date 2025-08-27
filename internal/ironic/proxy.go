@@ -38,8 +38,8 @@ func NewSocketProxy(logger *slog.Logger, socketPath string) *SocketProxy {
 		Rewrite: func(r *httputil.ProxyRequest) {
 			// Set target URL (the actual URL doesn't matter for Unix socket)
 			r.SetURL(&url.URL{
-				Scheme: "unix",
-				Path:   socketPath,
+				Scheme: "http",
+				Host:   "unix",
 			})
 
 			// Remove the /v1 prefix from the path since Ironic expects it
