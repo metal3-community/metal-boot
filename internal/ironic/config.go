@@ -132,8 +132,10 @@ type IPMIConfig struct {
 }
 
 type JSONRPCConfig struct {
-	AuthStrategy string `toml:"auth_strategy,omitempty"`
-	HostIP       string `toml:"host_ip,omitempty"`
+	AuthStrategy   string `toml:"auth_strategy,omitempty"`
+	HostIP         string `toml:"host_ip,omitempty"`
+	UnixSocket     string `toml:"unix_socket,omitempty"`
+	UnixSocketMode string `toml:"unix_socket_mode,omitempty"`
 }
 
 type NovaConfig struct {

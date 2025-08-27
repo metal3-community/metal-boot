@@ -23,10 +23,13 @@ const (
 )
 
 type IronicConfig struct {
-	Url        string `mapstructure:"url"`
-	UserName   string `mapstructure:"username"`
-	Password   string `mapstructure:"password"`
-	SocketPath string `mapstructure:"socket_path"`
+	Url                string `mapstructure:"url"`
+	UserName           string `mapstructure:"username"`
+	Password           string `mapstructure:"password"`
+	SocketPath         string `mapstructure:"socket_path"`
+	Enabled            bool   `mapstructure:"enabled"`
+	SupervisorEnabled  bool   `mapstructure:"supervisor_enabled"`
+	DatabaseConnection string `mapstructure:"database_connection"`
 }
 
 type UnifiConfig struct {
@@ -320,6 +323,9 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.username", "")
 	viper.SetDefault("ironic.password", "")
 	viper.SetDefault("ironic.socket_path", "/var/run/ironic.sock")
+	viper.SetDefault("ironic.enabled", false)
+	viper.SetDefault("ironic.supervisor_enabled", false)
+	viper.SetDefault("ironic.database_connection", "sqlite:////var/lib/ironic/ironic.db")
 
 	viper.SetDefault("otel.endpoint", "")
 	viper.SetDefault("otel.insecure", true)

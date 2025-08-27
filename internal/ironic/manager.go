@@ -41,13 +41,14 @@ type Process struct {
 }
 
 // NewProcessManager creates a new process manager.
-func NewProcessManager(ctx context.Context, logger *slog.Logger) *ProcessManager {
+func NewProcessManager(ctx context.Context, logger *slog.Logger, config *Config) *ProcessManager {
 	ctx, cancel := context.WithCancel(ctx)
 	return &ProcessManager{
 		processes: make(map[string]*Process),
 		ctx:       ctx,
 		cancel:    cancel,
 		logger:    logger,
+		config:    config,
 	}
 }
 
@@ -65,20 +66,12 @@ func (pm *ProcessManager) Start() error {
 		return fmt.Errorf("failed to generate Ironic config: %w", err)
 	}
 
-	// Start Ironic API process
-	if err := pm.startProcess("ironic-api", []string{
-		"ironic-api",
+	// Start all-in-one Ironic process
+	if err := pm.startProcess("ironic", []string{
+		"/usr/bin/ironic",
 		"--config-file", ironicConfigPath,
 	}); err != nil {
-		return fmt.Errorf("failed to start ironic-api: %w", err)
-	}
-
-	// Start Ironic Conductor process
-	if err := pm.startProcess("ironic-conductor", []string{
-		"ironic-conductor",
-		"--config-file", ironicConfigPath,
-	}); err != nil {
-		return fmt.Errorf("failed to start ironic-conductor: %w", err)
+		return fmt.Errorf("failed to start ironic: %w", err)
 	}
 
 	// Start health check routine
@@ -88,7 +81,7 @@ func (pm *ProcessManager) Start() error {
 	return nil
 }
 
-// prepareSocketDir ensures the socket directory is ready
+// prepareSocketDir ensures the socket directory is ready.
 func (pm *ProcessManager) prepareSocketDir() error {
 	socketDir := filepath.Dir(ironicSocketPath)
 	if err := os.MkdirAll(socketDir, 0o755); err != nil {
@@ -111,7 +104,11 @@ func (pm *ProcessManager) generateIronicConfig() error {
 	}
 
 	cfg := pm.config
+	if cfg == nil {
+		cfg = &Config{}
+	}
 
+	// Set default values for all-in-one operation with Unix sockets
 	if cfg.Default.LogFile == "" {
 		cfg.Default.LogFile = "/var/log/ironic/ironic.log"
 	}
@@ -125,7 +122,19 @@ func (pm *ProcessManager) generateIronicConfig() error {
 	}
 
 	if cfg.API.UnixSocketMode == "" {
-		cfg.API.UnixSocketMode = "0o666"
+		cfg.API.UnixSocketMode = "0666"
+	}
+
+	if cfg.JSONRPC.UnixSocket == "" {
+		cfg.JSONRPC.UnixSocket = "/tmp/ironic-rpc.sock"
+	}
+
+	if cfg.JSONRPC.UnixSocketMode == "" {
+		cfg.JSONRPC.UnixSocketMode = "0666"
+	}
+
+	if cfg.JSONRPC.AuthStrategy == "" {
+		cfg.JSONRPC.AuthStrategy = "noauth"
 	}
 
 	if cfg.OsloMessagingNotifications.Driver == "" {
@@ -136,12 +145,22 @@ func (pm *ProcessManager) generateIronicConfig() error {
 		cfg.Conductor.APIURL = fmt.Sprintf("http+unix://%s", ironicSocketPath)
 	}
 
+	// Set up database for all-in-one operation
+	if cfg.Database.Connection == "" {
+		cfg.Database.Connection = "sqlite:////var/lib/ironic/ironic.db"
+	}
+
+	// Configure for standalone operation
+	if cfg.Default.AuthStrategy == "" {
+		cfg.Default.AuthStrategy = "noauth"
+	}
+
 	config, err := cfg.Marshal()
 	if err != nil {
 		return fmt.Errorf("failed to marshal Ironic config: %w", err)
 	}
 
-	return os.WriteFile(ironicConfigPath, []byte(config), 0o644)
+	return os.WriteFile(ironicConfigPath, config, 0o644)
 }
 
 // startProcess starts and supervises a single process.
@@ -292,8 +311,8 @@ func (pm *ProcessManager) performHealthChecks() {
 		}
 		proc.mu.RUnlock()
 
-		// For ironic-api, also check socket connectivity
-		if name == "ironic-api" {
+		// For ironic (all-in-one), also check socket connectivity
+		if name == "ironic" {
 			if err := pm.checkSocketHealth(); err != nil {
 				pm.logger.Info("Socket health check failed", "process name", name, "error", err)
 			}

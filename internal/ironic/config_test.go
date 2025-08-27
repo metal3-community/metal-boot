@@ -596,7 +596,9 @@ func configIPMIEqual(a, b IPMIConfig) bool {
 
 func configJSONRPCEqual(a, b JSONRPCConfig) bool {
 	return a.AuthStrategy == b.AuthStrategy &&
-		a.HostIP == b.HostIP
+		a.HostIP == b.HostIP &&
+		a.UnixSocket == b.UnixSocket &&
+		a.UnixSocketMode == b.UnixSocketMode
 }
 
 func configNovaEqual(a, b NovaConfig) bool {
@@ -676,6 +678,7 @@ func isEmptyConfig(c Config) bool {
 		c.AutoDiscovery.Enabled == "" &&
 		c.IPMI.MinCommandInterval == 0 &&
 		c.JSONRPC.AuthStrategy == "" &&
+		c.JSONRPC.UnixSocket == "" &&
 		c.OsloMessagingNotifications.Driver == "" &&
 		c.SensorData.Interval == 0 &&
 		c.Metrics.Backend == "" &&

@@ -32,6 +32,7 @@ import (
 	"github.com/metal3-community/metal-boot/internal/dhcp/handler/proxy"
 	"github.com/metal3-community/metal-boot/internal/dhcp/handler/reservation"
 	dhcpServer "github.com/metal3-community/metal-boot/internal/dhcp/server"
+	ironicManager "github.com/metal3-community/metal-boot/internal/ironic"
 	"github.com/metal3-community/metal-boot/internal/tftp"
 	"golang.org/x/sync/errgroup"
 )
@@ -163,6 +164,14 @@ func startServices(
 		)
 		if err := startDHCPServer(ctx, g, cfg, logger, readerBackend); err != nil {
 			return fmt.Errorf("failed to start DHCP server: %w", err)
+		}
+	}
+
+	// Start Ironic supervisor if enabled
+	if cfg.Ironic.SupervisorEnabled {
+		logger.Info("Ironic supervisor enabled", "socket_path", cfg.Ironic.SocketPath)
+		if err := startIronicSupervisor(ctx, g, cfg, logger); err != nil {
+			return fmt.Errorf("failed to start Ironic supervisor: %w", err)
 		}
 	}
 
@@ -438,4 +447,63 @@ func dhcpHandler(
 		dh = reservationHandler
 	}
 	return dh, nil
+}
+
+// startIronicSupervisor configures and starts the Ironic process supervisor.
+func startIronicSupervisor(
+	ctx context.Context,
+	g *errgroup.Group,
+	cfg *config.Config,
+	logger logr.Logger,
+) error {
+	// Create structured logger for Ironic supervisor
+	slogger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	// Create Ironic configuration from main config
+	ironicConfig := &ironicManager.Config{
+		Default: ironicManager.DefaultConfig{
+			AuthStrategy: "noauth",
+			RPCTransport: "json-rpc",
+			LogFile:      "/var/log/ironic/ironic.log",
+		},
+		API: ironicManager.APIConfig{
+			UnixSocket:     cfg.Ironic.SocketPath,
+			UnixSocketMode: "0666",
+		},
+		JSONRPC: ironicManager.JSONRPCConfig{
+			AuthStrategy:   "noauth",
+			UnixSocket:     "/tmp/ironic-rpc.sock",
+			UnixSocketMode: "0666",
+		},
+		Database: ironicManager.DatabaseConfig{
+			Connection: cfg.Ironic.DatabaseConnection,
+		},
+		OsloMessagingNotifications: ironicManager.OsloMessagingNotificationsConfig{
+			Driver: "noop",
+		},
+		Conductor: ironicManager.ConductorConfig{
+			APIURL: fmt.Sprintf("http+unix://%s", cfg.Ironic.SocketPath),
+		},
+	}
+
+	// Create and start the process manager
+	processManager := ironicManager.NewProcessManager(ctx, slogger, ironicConfig)
+
+	// Start the supervisor in a goroutine
+	g.Go(func() error {
+		logger.Info("starting Ironic supervisor")
+		return processManager.Start()
+	})
+
+	// Handle graceful shutdown
+	g.Go(func() error {
+		<-ctx.Done()
+		logger.Info("shutting down Ironic supervisor")
+		processManager.Shutdown()
+		return nil
+	})
+
+	return nil
 }
