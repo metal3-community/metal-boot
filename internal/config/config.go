@@ -22,14 +22,27 @@ const (
 	magicString      = "464vn90e7rbj08xbwdjejmdf4it17c5zfzjyfhthbh19eij201hjgit021bmpdb9ctrc87x2ymc8e7icu4ffi15x1hah9iyaiz38ckyap8hwx2vt5rm44ixv4hau8iw718q5yd019um5dt2xpqqa2rjtdypzr5v1gun8un110hhwp8cex7pqrh2ivh0ynpm4zkkwc8wcn367zyethzy7q8hzudyeyzx3cgmxqbkh825gcak7kxzjbgjajwizryv7ec1xm2h0hh7pz29qmvtgfjj1vphpgq1zcbiiehv52wrjy9yq473d9t1rvryy6929nk435hfx55du3ih05kn5tju3vijreru1p6knc988d4gfdz28eragvryq5x8aibe5trxd0t6t7jwxkde34v6pj1khmp50k6qqj3nzgcfzabtgqkmeqhdedbvwf3byfdma4nkv3rcxugaj2d0ru30pa2fqadjqrtjnv8bu52xzxv7irbhyvygygxu1nt5z4fh9w1vwbdcmagep26d298zknykf2e88kumt59ab7nq79d8amnhhvbexgh48e8qc61vq2e9qkihzt1twk1ijfgw70nwizai15iqyted2dt9gfmf2gg7amzufre79hwqkddc1cd935ywacnkrnak6r7xzcz7zbmq3kt04u2hg1iuupid8rt4nyrju51e6uejb2ruu36g9aibmz3hnmvazptu8x5tyxk820g2cdpxjdij766bt2n3djur7v623a2v44juyfgz80ekgfb9hkibpxh3zgknw8a34t4jifhf116x15cei9hwch0fye3xyq0acuym8uhitu5evc4rag3ui0fny3qg4kju7zkfyy8hwh537urd5uixkzwu5bdvafz4jmv7imypj543xg5em8jk8cgk7c4504xdd5e4e71ihaumt6u5u2t1w7um92fepzae8p0vq93wdrd1756npu1pziiur1payc7kmdwyxg3hj5n4phxbc29x0tcddamjrwt260b0w"
 )
 
+type SocketConfig struct {
+	Path string `mapstructure:"path"`
+	Mode string `mapstructure:"mode"`
+}
+
+type RpcConfig struct {
+	Enabled bool         `mapstructure:"enabled"`
+	Socket  SocketConfig `mapstructure:"socket"`
+	Port    int          `mapstructure:"port"`
+}
+
 type IronicConfig struct {
-	Url                string `mapstructure:"url"`
-	UserName           string `mapstructure:"username"`
-	Password           string `mapstructure:"password"`
-	SocketPath         string `mapstructure:"socket_path"`
-	Enabled            bool   `mapstructure:"enabled"`
-	SupervisorEnabled  bool   `mapstructure:"supervisor_enabled"`
-	DatabaseConnection string `mapstructure:"database_connection"`
+	Url                string       `mapstructure:"url"`
+	PublicEndpoint     string       `mapstructure:"public_endpoint"`
+	UserName           string       `mapstructure:"username"`
+	Password           string       `mapstructure:"password"`
+	Socket             SocketConfig `mapstructure:"socket"`
+	Rpc                RpcConfig    `mapstructure:"rpc"`
+	Enabled            bool         `mapstructure:"enabled"`
+	SupervisorEnabled  bool         `mapstructure:"supervisor_enabled"`
+	DatabaseConnection string       `mapstructure:"database_connection"`
 }
 
 type UnifiConfig struct {
@@ -319,10 +332,16 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ipxe_http_script.static_ipxe_enabled", false)
 	viper.SetDefault("ipxe_http_script.static_files_enabled", false)
 
-	viper.SetDefault("ironic.url", "http://ironic:6385")
+	viper.SetDefault("ironic.url", fmt.Sprintf("http://127.0.0.1:%d", netInfo.Port))
 	viper.SetDefault("ironic.username", "")
 	viper.SetDefault("ironic.password", "")
-	viper.SetDefault("ironic.socket_path", "/tmp/ironic.sock")
+	viper.SetDefault("ironic.socket.path", "/tmp/ironic.sock")
+	viper.SetDefault("ironic.socket.mode", "0666")
+	viper.SetDefault("ironic.public_endpoint", "")
+	viper.SetDefault("ironic.rpc.enabled", false)
+	viper.SetDefault("ironic.rpc.socket.path", "/tmp/ironic-rpc.sock")
+	viper.SetDefault("ironic.rpc.port", 8090)
+	viper.SetDefault("ironic.rpc.socket.mode", "0666")
 	viper.SetDefault("ironic.enabled", false)
 	viper.SetDefault("ironic.supervisor_enabled", false)
 	viper.SetDefault("ironic.database_connection", "sqlite:////var/lib/ironic/ironic.db")

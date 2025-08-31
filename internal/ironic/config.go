@@ -136,6 +136,7 @@ type JSONRPCConfig struct {
 	HostIP         string `toml:"host_ip,omitempty"`
 	UnixSocket     string `toml:"unix_socket,omitempty"`
 	UnixSocketMode string `toml:"unix_socket_mode,omitempty"`
+	Port           int    `toml:"port,omitempty"`
 }
 
 type NovaConfig struct {

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
+	"net/http"
 	"net/netip"
 	"net/url"
 	"os"
@@ -143,6 +144,20 @@ func startServices(
 ) error {
 	g, ctx := errgroup.WithContext(ctx)
 
+	// Start Ironic supervisor if enabled
+	if cfg.Ironic.SupervisorEnabled {
+		logger.Info("Ironic supervisor enabled", "socket_path", cfg.Ironic.Socket.Path)
+		if err := startIronicSupervisor(ctx, g, cfg, logger); err != nil {
+			return fmt.Errorf("failed to start Ironic supervisor: %w", err)
+		}
+	}
+
+	if cfg.Ironic.Rpc.Enabled {
+		if err := startJsonRpcServer(ctx, g, cfg); err != nil {
+			return fmt.Errorf("failed to start JSON-RPC server: %w", err)
+		}
+	}
+
 	// Start HTTP API server
 	if err := startHTTPServer(ctx, g, cfg, logger, readerBackend, pwrBackend); err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
@@ -168,18 +183,66 @@ func startServices(
 		}
 	}
 
-	// Start Ironic supervisor if enabled
-	if cfg.Ironic.SupervisorEnabled {
-		logger.Info("Ironic supervisor enabled", "socket_path", cfg.Ironic.SocketPath)
-		if err := startIronicSupervisor(ctx, g, cfg, logger); err != nil {
-			return fmt.Errorf("failed to start Ironic supervisor: %w", err)
-		}
-	}
-
 	// Wait for all services or shutdown signal
 	if err := g.Wait(); err != nil && !errors.Is(err, context.Canceled) {
 		return fmt.Errorf("service error: %w", err)
 	}
+
+	return nil
+}
+
+func startJsonRpcServer(
+	ctx context.Context,
+	g *errgroup.Group,
+	cfg *config.Config,
+) error {
+	logger := slog.New(slog.NewJSONHandler(os.Stdout, &slog.HandlerOptions{
+		Level: slog.LevelInfo,
+	}))
+
+	httpHandler := ironic.New(logger, cfg.Ironic.Rpc.Socket.Path)
+	httpServer := &http.Server{
+		Addr:    fmt.Sprintf(":%d", cfg.Ironic.Rpc.Port),
+		Handler: httpHandler,
+		// Add reasonable timeouts
+		ReadTimeout:  30 * time.Second,
+		WriteTimeout: 30 * time.Second,
+		IdleTimeout:  60 * time.Second,
+	}
+
+	g.Go(func() error {
+		return httpServer.ListenAndServe()
+	})
+
+	g.Go(func() error {
+		<-ctx.Done()
+		logger.Info("shutting down HTTP server")
+
+		shutdownCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+
+		done := make(chan error, 1)
+		go func() {
+			done <- httpServer.Shutdown(ctx)
+		}()
+
+		select {
+		case err := <-done:
+			if err != nil {
+				logger.ErrorContext(
+					ctx,
+					"error during HTTP server shutdown",
+					slog.Any("error", err),
+				)
+			}
+			return err
+		case <-shutdownCtx.Done():
+			logger.ErrorContext(ctx,
+				"HTTP server shutdown timeout forced shutdown after 30 seconds",
+			)
+			return errors.New("HTTP server shutdown timeout")
+		}
+	})
 
 	return nil
 }
@@ -264,7 +327,7 @@ func configureAPIHandlers(
 	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, readerBackend, pwrBackend))
 	logger.V(1).Info("registered Redfish handler", "path", "/redfish/v1/")
 
-	apiServer.AddHandler("/v1/", ironic.New(slogger, cfg.Ironic.SocketPath))
+	apiServer.AddHandler("/v1/", ironic.New(slogger, cfg.Ironic.Socket.Path))
 	logger.V(1).Info("registered Ironic handler", "path", "/v1/")
 
 	// Add iPXE handlers if enabled
@@ -484,8 +547,8 @@ func startIronicSupervisor(
 			RPCTransport:                "json-rpc",
 			UseStderr:                   util.Ptr(true),
 			HashRingAlgorithm:           "sha256",
-			MyIP:                        "0.0.0.0",
-			Host:                        "ironic",
+			MyIP:                        "127.0.0.1",
+			Host:                        "localhost",
 		},
 		Agent: ironicManager.AgentConfig{
 			DeployLogsCollect:   "always",
@@ -493,17 +556,17 @@ func startIronicSupervisor(
 			MaxCommandAttempts:  30,
 		},
 		API: ironicManager.APIConfig{
-			UnixSocket:     cfg.Ironic.SocketPath,
-			UnixSocketMode: "0666",
-			PublicEndpoint: "",
-			HostIP:         "::",
-			Port:           6385,
+			UnixSocket:     cfg.Ironic.Socket.Path,
+			UnixSocketMode: cfg.Ironic.Socket.Mode,
+			HostIP:         "127.0.0.1",
+			Port:           cfg.Port,
 			EnableSSLAPI:   util.Ptr(false),
 			APIWorkers:     0,
+			PublicEndpoint: cfg.Ironic.PublicEndpoint,
 		},
 		Conductor: ironicManager.ConductorConfig{
 			AutomatedClean:             util.Ptr(false),
-			APIURL:                     fmt.Sprintf("http+unix://%s", cfg.Ironic.SocketPath),
+			APIURL:                     cfg.Ironic.Url,
 			DeployCallbackTimeout:      4800,
 			VerifyStepPriorityOverride: "management.clear_job_queue:90",
 			NodeHistory:                util.Ptr(false),
@@ -519,10 +582,10 @@ func startIronicSupervisor(
 			EraseDevicesMetadataPriority: 10,
 			EraseDevicesPriority:         0,
 			HTTPRoot:                     "/shared/html/",
-			HTTPURL:                      "http://localhost:8080/",
+			HTTPURL:                      cfg.Ironic.Url,
 			FastTrack:                    util.Ptr(false),
-			ExternalHTTPURL:              "https://ironic.appkins.io/",
-			ExternalCallbackURL:          "",
+			ExternalHTTPURL:              cfg.Ironic.PublicEndpoint,
+			ExternalCallbackURL:          fmt.Sprintf("%s/v1/continue", cfg.Ironic.PublicEndpoint),
 		},
 		DHCP: ironicManager.DHCPConfig{
 			DHCPProvider: "none",
@@ -547,8 +610,10 @@ func startIronicSupervisor(
 		},
 		JSONRPC: ironicManager.JSONRPCConfig{
 			AuthStrategy:   "noauth",
-			UnixSocket:     "/tmp/ironic-rpc.sock",
-			UnixSocketMode: "0666",
+			UnixSocket:     cfg.Ironic.Rpc.Socket.Path,
+			UnixSocketMode: cfg.Ironic.Rpc.Socket.Mode,
+			HostIP:         "127.0.0.1",
+			Port:           cfg.Ironic.Rpc.Port,
 		},
 		Nova: ironicManager.NovaConfig{
 			SendPowerNotifications: util.Ptr(false),
@@ -587,9 +652,9 @@ func startIronicSupervisor(
 		IRMC: ironicManager.IRMCConfig{
 			KernelAppendParams: "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes",
 		},
-		ServiceCatalog: ironicManager.ServiceCatalogConfig{
-			EndpointOverride: "https://ironic.appkins.io/v1/",
-		},
+		// ServiceCatalog: ironicManager.ServiceCatalogConfig{
+		// 	EndpointOverride: "https://ironic.appkins.io/v1/",
+		// },
 	}
 
 	// Create and start the process manager
