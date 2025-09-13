@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"net/url"
 	"path"
+	"strings"
 
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/config"
@@ -31,12 +32,15 @@ func New(logger *slog.Logger, cfg *config.Config, backend backend.BackendReader)
 }
 
 // ServeHTTP handles iPXE script requests.
-// It is expected that the request path is /<mac address>/auto.ipxe.
+// It supports two path patterns:
+// 1. Legacy: /<mac address>/auto.ipxe
+// 2. New: v1/boot/<mac address>/boot.ipxe
 func (h *scriptHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqLogger := h.logger.With("method", r.Method, "path", r.URL.Path)
 	reqLogger.Debug("Handling iPXE script request")
 
-	if path.Base(r.URL.Path) != "auto.ipxe" {
+	basePath := path.Base(r.URL.Path)
+	if basePath != "auto.ipxe" && basePath != "boot.ipxe" {
 		reqLogger.Info("URL path not supported")
 		w.WriteHeader(http.StatusNotFound)
 		return
@@ -259,6 +263,29 @@ func getIP(remoteAddr string) (net.IP, error) {
 }
 
 func getMAC(urlPath string) (net.HardwareAddr, error) {
+	// Handle new pattern: v1/boot/<MAC>/boot.ipxe
+	if strings.HasPrefix(urlPath, "/v1/boot/") {
+		parts := strings.Split(strings.Trim(urlPath, "/"), "/")
+		if len(parts) >= 3 && parts[0] == "v1" && parts[1] == "boot" {
+			mac := parts[2]
+			ha, err := net.ParseMAC(mac)
+			if err != nil {
+				return net.HardwareAddr{}, fmt.Errorf(
+					"invalid MAC address in v1/boot path pattern: %w",
+					err,
+				)
+			}
+			return ha, nil
+		}
+		return net.HardwareAddr{}, fmt.Errorf("malformed v1/boot path pattern")
+	}
+
+	// Handle v1 paths that don't match the expected pattern
+	if strings.HasPrefix(urlPath, "/v1/") {
+		return net.HardwareAddr{}, fmt.Errorf("unsupported v1 path pattern")
+	}
+
+	// Handle legacy pattern: /<MAC>/auto.ipxe
 	mac := path.Base(path.Dir(urlPath))
 	ha, err := net.ParseMAC(mac)
 	if err != nil {

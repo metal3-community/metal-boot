@@ -48,7 +48,7 @@ func (h *handler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	// Check if it's an iPXE script request
-	if basePath == "auto.ipxe" {
+	if basePath == "auto.ipxe" || basePath == "boot.ipxe" {
 		reqLogger.Debug("Routing to script handler")
 		h.scriptHandler.ServeHTTP(w, r)
 		return

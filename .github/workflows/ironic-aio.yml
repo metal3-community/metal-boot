@@ -1,0 +1,104 @@
+name: Build and Publish Ironic All-in-One Image
+
+on:
+  push:
+    branches:
+      - main
+    paths:
+      - "main.tf"
+      - "cmd/metal-boot/**"
+      - ".github/workflows/ironic-aio.yml"
+  pull_request:
+    branches:
+      - main
+    paths:
+      - "main.tf"
+      - "cmd/metal-boot/**"
+      - ".github/workflows/ironic-aio.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  id-token: write
+  packages: write
+
+jobs:
+  build-and-publish:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@b4ffde65f46336ab88eb53be808477a3936bae11 # v4.1.1
+        with:
+          fetch-depth: 0
+
+      - name: Setup Go
+        uses: actions/setup-go@93397bea11091df50f3d7e59dc26a7711a8bcfbe # v4.1.0
+        with:
+          go-version-file: "go.mod"
+          cache: true
+
+      - name: Setup Terraform
+        uses: hashicorp/setup-terraform@651471c36a6092792c552e8b1bef71e592b462d8 # v3.0.0
+        with:
+          terraform_version: "~1.5"
+
+      - name: Log in to GitHub Container Registry
+        uses: docker/login-action@343f7c4344506bcbf9b4de18042ae17996df046d # v3.0.0
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Initialize Terraform
+        run: terraform init
+
+      - name: Validate Terraform configuration
+        run: terraform validate
+
+      - name: Plan Terraform changes
+        run: terraform plan -out=tfplan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Apply Terraform changes
+        if: github.event_name != 'pull_request'
+        run: terraform apply -auto-approve tfplan
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Get image reference
+        if: github.event_name != 'pull_request'
+        id: image-ref
+        run: |
+          IMAGE_REF=$(terraform output -raw ipa_image_ref)
+          echo "image_ref=$IMAGE_REF" >> $GITHUB_OUTPUT
+          echo "Image reference: $IMAGE_REF"
+
+      - name: Tag and push AIO image
+        if: github.event_name != 'pull_request'
+        run: |
+          # Extract the base image name without tag/digest
+          BASE_IMAGE=$(echo "${{ steps.image-ref.outputs.image_ref }}" | cut -d'@' -f1 | cut -d':' -f1)
+          AIO_TAG="${BASE_IMAGE}:aio-latest"
+
+          echo "Tagging ${{ steps.image-ref.outputs.image_ref }} as $AIO_TAG"
+
+          # Pull the original image
+          docker pull "${{ steps.image-ref.outputs.image_ref }}"
+
+          # Tag with aio-latest
+          docker tag "${{ steps.image-ref.outputs.image_ref }}" "$AIO_TAG"
+
+          # Push the new tag
+          docker push "$AIO_TAG"
+
+          echo "Successfully pushed $AIO_TAG"
+
+      - name: Output summary
+        if: github.event_name != 'pull_request'
+        run: |
+          echo "## Ironic All-in-One Image Build Summary" >> $GITHUB_STEP_SUMMARY
+          echo "✅ Successfully built and published ironic all-in-one image" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "**Original Image:** \`${{ steps.image-ref.outputs.image_ref }}\`" >> $GITHUB_STEP_SUMMARY
+          echo "**AIO Tagged Image:** \`$(echo "${{ steps.image-ref.outputs.image_ref }}" | cut -d'@' -f1 | cut -d':' -f1):aio-latest\`" >> $GITHUB_STEP_SUMMARY
