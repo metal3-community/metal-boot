@@ -77,7 +77,7 @@ resource "apko_build" "default" {
     annotations = {
       "org.opencontainers.image.title"       = "Ironic Image"
       "org.opencontainers.image.description" = "Ironic Image"
-      "org.opencontainers.image.version"     = "1.0.0"
+      "org.opencontainers.image.version"     = "32.0.0"
     }
     contents = {
       repositories = [
@@ -95,6 +95,7 @@ resource "apko_build" "default" {
         "py3.13-pbr",
         "py3.13-alembic",
         "py3.13-bcrypt",
+        "py3-cotyledon",
         "py3.13-cheroot",
         "py3.13-jinja2",
         "py3.13-jsonpatch",

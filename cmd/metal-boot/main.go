@@ -20,6 +20,7 @@ import (
 	"github.com/insomniacslk/dhcp/dhcpv4/server4"
 	"github.com/metal3-community/metal-boot/api"
 	"github.com/metal3-community/metal-boot/api/health"
+	"github.com/metal3-community/metal-boot/api/images/talos"
 	"github.com/metal3-community/metal-boot/api/ipxe"
 	"github.com/metal3-community/metal-boot/api/ironic"
 	"github.com/metal3-community/metal-boot/api/iso"
@@ -35,7 +36,6 @@ import (
 	dhcpServer "github.com/metal3-community/metal-boot/internal/dhcp/server"
 	ironicManager "github.com/metal3-community/metal-boot/internal/ironic"
 	"github.com/metal3-community/metal-boot/internal/tftp"
-	"github.com/metal3-community/metal-boot/internal/util"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -341,6 +341,12 @@ func configureAPIHandlers(
 		apiServer.AddHandler("/iso/", iso.New(logger, cfg, readerBackend))
 		logger.Info("ISO handler enabled", "path", "/iso/")
 	}
+
+	// Add Talos image handler if enabled
+	if cfg.Talos.Enabled {
+		apiServer.AddHandler("/images/talos/", talos.New(slogger, &cfg.Talos))
+		logger.Info("Talos image handler enabled", "path", "/images/talos/")
+	}
 }
 
 // startTFTPServer configures and starts the TFTP server.
@@ -525,136 +531,49 @@ func startIronicSupervisor(
 		Level: slog.LevelInfo,
 	}))
 
-	// Create Ironic configuration from data/defaults.conf
+	// Create Ironic configuration, setting only values from external configuration
 	ironicConfig := &ironicManager.Config{
-		Default: ironicManager.DefaultConfig{
-			AuthStrategy:                "noauth",
-			Debug:                       util.Ptr(true),
-			DefaultDeployInterface:      "direct",
-			DefaultInspectInterface:     "agent",
-			DefaultNetworkInterface:     "noop",
-			EnabledBiosInterfaces:       "no-bios,redfish,idrac-redfish,ilo",
-			EnabledBootInterfaces:       "ipxe,ilo-ipxe,pxe,ilo-pxe,fake,redfish-virtual-media,idrac-redfish-virtual-media,ilo-virtual-media,redfish-https",
-			EnabledDeployInterfaces:     "direct,fake,ramdisk,custom-agent",
-			EnabledFirmwareInterfaces:   "no-firmware,fake,redfish",
-			EnabledHardwareTypes:        "ipmi,idrac,fake-hardware,redfish,manual-management,ilo,ilo5",
-			EnabledInspectInterfaces:    "agent,fake,redfish,ilo",
-			EnabledManagementInterfaces: "ipmitool,fake,redfish,idrac-redfish,ilo,ilo5,noop",
-			EnabledNetworkInterfaces:    "noop",
-			EnabledPowerInterfaces:      "ipmitool,fake,redfish,idrac-redfish,ilo",
-			EnabledRaidInterfaces:       "no-raid,agent,fake,redfish,idrac-redfish,ilo5",
-			EnabledVendorInterfaces:     "no-vendor,ipmitool,idrac-redfish,redfish,ilo,fake",
-			RPCTransport:                "json-rpc",
-			UseStderr:                   util.Ptr(true),
-			HashRingAlgorithm:           "sha256",
-			MyIP:                        "127.0.0.1",
-			Host:                        "localhost",
-		},
-		Agent: ironicManager.AgentConfig{
-			DeployLogsCollect:   "always",
-			DeployLogsLocalPath: "/shared/log/ironic/deploy",
-			MaxCommandAttempts:  30,
-		},
+		// ProcessManager configuration (not part of TOML config)
+		SocketPath: cfg.Ironic.Socket.Path,
+		ConfigPath: cfg.Ironic.ConfigPath,
+		SkipDBSync: cfg.Ironic.SkipDBSync,
+
+		// API section - set configured values
 		API: ironicManager.APIConfig{
 			UnixSocket:     cfg.Ironic.Socket.Path,
 			UnixSocketMode: cfg.Ironic.Socket.Mode,
-			HostIP:         "127.0.0.1",
 			Port:           cfg.Port,
-			EnableSSLAPI:   util.Ptr(false),
-			APIWorkers:     0,
 			PublicEndpoint: cfg.Ironic.PublicEndpoint,
 		},
-		Conductor: ironicManager.ConductorConfig{
-			AutomatedClean:             util.Ptr(false),
-			APIURL:                     cfg.Ironic.Url,
-			DeployCallbackTimeout:      4800,
-			VerifyStepPriorityOverride: "management.clear_job_queue:90",
-			NodeHistory:                util.Ptr(false),
-			PowerStateChangeTimeout:    120,
-			DisableDeepImageInspection: util.Ptr(true),
-			FileURLAllowedPaths:        "/shared/html/images,/templates",
-		},
+
+		// Database section - set configured values
 		Database: ironicManager.DatabaseConfig{
 			Connection: cfg.Ironic.DatabaseConnection,
 		},
+
+		// Deploy section - set configured values
 		Deploy: ironicManager.DeployConfig{
-			DefaultBootOption:            "local",
-			EraseDevicesMetadataPriority: 10,
-			EraseDevicesPriority:         0,
-			HTTPRoot:                     "/shared/html/",
-			HTTPURL:                      cfg.Ironic.Url,
-			FastTrack:                    util.Ptr(false),
-			ExternalHTTPURL:              cfg.Ironic.PublicEndpoint,
-			ExternalCallbackURL:          fmt.Sprintf("%s/v1/continue", cfg.Ironic.PublicEndpoint),
+			HTTPURL:         cfg.Ironic.Url,
+			ExternalHTTPURL: cfg.Ironic.PublicEndpoint,
 		},
-		DHCP: ironicManager.DHCPConfig{
-			DHCPProvider: "none",
+
+		// Conductor section - set configured values
+		Conductor: ironicManager.ConductorConfig{
+			APIURL: cfg.Ironic.Url,
 		},
-		Inspector: ironicManager.InspectorConfig{
-			RequireManagedBoot: util.Ptr(false),
-			PowerOff:           "true", // Note: template logic would evaluate this
-			ExtraKernelParams:  "ipa-inspection-collectors=default ipa-enable-vlan-interfaces=all ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1",
-			Hooks:              "$default_hooks,parse-lldp",
-			AddPorts:           "all",
-			KeepPorts:          "present",
-		},
-		AutoDiscovery: ironicManager.AutoDiscoveryConfig{
-			Enabled: "false",
-			Driver:  "ipmi",
-		},
-		IPMI: ironicManager.IPMIConfig{
-			UseIpmitoolRetries:  util.Ptr(false),
-			MinCommandInterval:  5,
-			CommandRetryTimeout: 60,
-			CipherSuiteVersions: "3,17",
-		},
+
+		// JSONRPC section - set configured values
 		JSONRPC: ironicManager.JSONRPCConfig{
-			AuthStrategy:   "noauth",
+			Enabled:        cfg.Ironic.Rpc.Enabled,
 			UnixSocket:     cfg.Ironic.Rpc.Socket.Path,
 			UnixSocketMode: cfg.Ironic.Rpc.Socket.Mode,
-			HostIP:         "127.0.0.1",
 			Port:           cfg.Ironic.Rpc.Port,
 		},
-		Nova: ironicManager.NovaConfig{
-			SendPowerNotifications: util.Ptr(false),
+
+		// ServiceCatalog section - set configured values
+		ServiceCatalog: ironicManager.ServiceCatalogConfig{
+			EndpointOverride: cfg.Ironic.PublicEndpoint,
 		},
-		OsloMessagingNotifications: ironicManager.OsloMessagingNotificationsConfig{
-			Driver:       "noop",
-			Location:     "/shared/ironic_prometheus_exporter",
-			TransportURL: "fake://",
-		},
-		SensorData: ironicManager.SensorDataConfig{
-			SendSensorData: util.Ptr(false),
-			Interval:       160,
-		},
-		Metrics: ironicManager.MetricsConfig{
-			Backend: "collector",
-		},
-		PXE: ironicManager.PXEConfig{
-			BootRetryTimeout:      1200,
-			ImagesPath:            "/shared/html/tmp",
-			InstanceMasterPath:    "/shared/html/master_images",
-			TFTPMasterPath:        "/shared/tftpboot/master_images",
-			TFTPRoot:              "/shared/tftpboot",
-			KernelAppendParams:    "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes",
-			EnableNetbootFallback: util.Ptr(true),
-			IPXEFallbackScript:    "inspector.ipxe",
-			IPXEConfigTemplate:    "/templates/ipxe_config.template",
-		},
-		Redfish: ironicManager.RedfishConfig{
-			UseSwift:           util.Ptr(false),
-			KernelAppendParams: "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes",
-		},
-		ILO: ironicManager.ILOConfig{
-			KernelAppendParams:    "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes",
-			UseWebServerForImages: util.Ptr(true),
-		},
-		IRMC: ironicManager.IRMCConfig{
-			KernelAppendParams: "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes",
-		},
-		// ServiceCatalog: ironicManager.ServiceCatalogConfig{
-		// 	EndpointOverride: "https://ironic.appkins.io/v1/",
-		// },
 	}
 
 	// Create and start the process manager

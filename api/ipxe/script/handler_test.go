@@ -72,7 +72,12 @@ func TestGetMAC(t *testing.T) {
 			}
 
 			if mac.String() != expectedMAC.String() {
-				t.Errorf("Expected MAC %s, got %s for path %s", expectedMAC.String(), mac.String(), tt.urlPath)
+				t.Errorf(
+					"Expected MAC %s, got %s for path %s",
+					expectedMAC.String(),
+					mac.String(),
+					tt.urlPath,
+				)
 			}
 		})
 	}

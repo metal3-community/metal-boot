@@ -34,7 +34,7 @@ func New(logger *slog.Logger, cfg *config.Config, backend backend.BackendReader)
 // ServeHTTP handles iPXE script requests.
 // It supports two path patterns:
 // 1. Legacy: /<mac address>/auto.ipxe
-// 2. New: v1/boot/<mac address>/boot.ipxe
+// 2. New: v1/boot/<mac address>/boot.ipxe.
 func (h *scriptHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqLogger := h.logger.With("method", r.Method, "path", r.URL.Path)
 	reqLogger.Debug("Handling iPXE script request")

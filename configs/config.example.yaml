@@ -71,3 +71,11 @@ unifi:
   endpoint: https://192.168.0.1
   site: "default"
   device: "aa:bb:dd:cc:ee:ff"
+
+# Talos image factory configuration
+talos:
+  enabled: false
+  base_url: "https://factory.talos.dev"
+  cache_directory: "/var/cache/metal-boot/talos"
+  max_cache_size: 10737418240 # 10GB in bytes
+  default_extensions: []

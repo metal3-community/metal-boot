@@ -42,12 +42,15 @@ apiServer.AddHandler("/path/", handler.New(logger, config, backends...))
 ```
 
 Handlers:
-- `/healthcheck` - System health
+- `/healthcheck` - System health and Git version info
 - `/metrics` - Prometheus metrics  
-- `/redfish/v1/` - BMC management API
+- `/redfish/v1/` - BMC management API (generated from OpenAPI spec)
 - `/v1/` - Ironic API proxy (when supervisor enabled)
-- `/` - iPXE script serving
-- `/iso/` - ISO image serving
+- `/` - iPXE script serving (chainloading and boot logic)
+- `/iso/` - Dynamic ISO image generation and serving
+
+### OpenTelemetry Tracing
+All HTTP handlers are automatically wrapped with `otelhttp.WithRouteTag()` for distributed tracing. Routes are tagged with their path patterns for observability.
 
 ### Structured Logging
 Use `slog` with consistent fields:
@@ -57,6 +60,13 @@ logger.Error("Operation failed", "error", err, "device", mac.String())
 ```
 
 For Ironic log parsing, see `internal/ironic/log.go` - regex pattern extracts timestamp, level, module, and request ID.
+
+### Process Management
+Ironic supervisor uses `ProcessManager` with health checks:
+- Unix domain sockets for API and JSON-RPC communication
+- 30-second health check intervals with restart capability
+- Structured log parsing for child process output
+- Graceful shutdown with 30-second timeout
 
 ### Error Handling
 - Services return errors via errgroup for centralized handling
@@ -77,8 +87,19 @@ go test ./... -v
 # Test specific package with coverage
 go test ./internal/ironic/ -v -cover
 
-# Generate code (iPXE binaries)
-//go:generate go run ../../internal/ipxe/generate
+# Generate code (multiple generators available)
+go generate ./...                                    # All generators
+//go:generate go run ../../internal/ipxe/generate    # iPXE binaries (in main.go)
+//go:generate go tool oapi-codegen ...               # Redfish OpenAPI (in api/redfish/)
+```
+
+### Docker Development
+```bash
+# Run via Docker Compose (uses host networking)
+docker compose up --build
+
+# Debug with VS Code: Use "Launch Package" configuration
+# Points to cmd/metal-boot with workspace root as working directory
 ```
 
 ### Configuration Development

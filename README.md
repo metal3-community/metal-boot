@@ -299,6 +299,70 @@ virt-fw-vars --inplace RPI_EFI.fd --set-json firmware-vars.json
 
 Metal Boot implements industry-standard Redfish API for out-of-band management of Raspberry Pi devices.
 
+### Talos Image Factory
+
+Metal Boot includes an optional Talos image handler that provides dynamically generated Talos OpenStack images with custom extensions and overlays. This allows for automated provisioning of Talos Linux on your infrastructure.
+
+#### Talos API Endpoints
+
+```
+GET /images/talos/{talos_version}/{arch}/openstack.raw?extensions={extensions}&overlay={overlay}
+```
+
+**Parameters:**
+- `talos_version`: Specific version (e.g., "v1.11.1") or "latest" for the latest stable release
+- `arch`: Architecture ("amd64" or "arm64")  
+- `extensions`: Comma-separated list of extension names (optional)
+- `overlay`: Single overlay name (optional)
+
+**Example URLs:**
+```bash
+# Latest Talos for amd64
+curl /images/talos/latest/amd64/openstack.raw
+
+# Specific version with extensions  
+curl "/images/talos/v1.11.1/amd64/openstack.raw?extensions=qemu-guest-agent,nvidia-open-gpu-kernel-modules"
+
+# ARM64 with Raspberry Pi overlay
+curl "/images/talos/v1.11.1/arm64/openstack.raw?overlay=rpi-generic"
+```
+
+#### Features
+
+- **Smart Caching**: Downloaded images are cached locally with SHA256 integrity verification
+- **Compression**: Uses gzip-compressed downloads for bandwidth efficiency  
+- **Validation**: Validates extensions and overlays against available versions from Talos image factory
+- **Streaming**: Images are streamed to clients while being cached simultaneously
+- **Integrity Checking**: SHA256 checksums are calculated and verified for all cached images
+- **Proper Schematic Handling**: Extensions and overlays are properly separated in Talos schematics
+
+#### Configuration
+
+Enable the Talos handler in your configuration:
+
+```yaml
+talos:
+  enabled: true
+  base_url: "https://factory.talos.dev"
+  cache_directory: "/var/cache/metal-boot/talos"
+  max_cache_size: 10737418240  # 10GB
+  default_extensions: []
+```
+
+**Configuration Options:**
+- `enabled`: Enable/disable the Talos handler  
+- `base_url`: Talos image factory URL (default: "https://factory.talos.dev")
+- `cache_directory`: Local cache directory for images
+- `max_cache_size`: Maximum cache size in bytes (0 = unlimited)
+- `default_extensions`: Default extensions to include when none specified
+
+**Checksum Access:**
+SHA256 checksums for cached images are available by appending `.sha256` to any image URL:
+```bash
+# Get the SHA256 checksum for a Talos image
+curl /images/talos/v1.11.1/amd64/openstack.raw.sha256
+```
+
 ### Redfish API
 
 The Redfish API provides a RESTful interface for:

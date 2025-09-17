@@ -1,6 +1,7 @@
 package ironic
 
 import (
+	"github.com/metal3-community/metal-boot/internal/util"
 	toml "github.com/pelletier/go-toml/v2"
 )
 
@@ -26,6 +27,12 @@ type Config struct {
 	IRMC                       IRMCConfig                       `toml:"irmc,omitempty"`
 	ServiceCatalog             ServiceCatalogConfig             `toml:"service_catalog,omitempty"`
 	SSL                        SSLConfig                        `toml:"ssl,omitempty"`
+
+	// ProcessManager configuration (not part of TOML config)
+	SocketPath string `toml:"-"`
+	ConfigPath string `toml:"-"`
+	SharedRoot string `toml:"-"`
+	SkipDBSync bool   `toml:"-"`
 }
 
 type DefaultConfig struct {
@@ -52,6 +59,7 @@ type DefaultConfig struct {
 	LogFile                     string `toml:"log_file,omitempty"`
 	MyIP                        string `toml:"my_ip,omitempty"`
 	RPCTransport                string `toml:"rpc_transport,omitempty"`
+	UseRPCForDatabase           *bool  `toml:"use_rpc_for_database,omitempty"`
 	UseStderr                   *bool  `toml:"use_stderr,omitempty"`
 	WebserverVerifyCA           *bool  `toml:"webserver_verify_ca,omitempty"`
 }
@@ -137,6 +145,8 @@ type JSONRPCConfig struct {
 	UnixSocket     string `toml:"unix_socket,omitempty"`
 	UnixSocketMode string `toml:"unix_socket_mode,omitempty"`
 	Port           int    `toml:"port,omitempty"`
+
+	Enabled bool `toml:"-"`
 }
 
 type NovaConfig struct {
@@ -191,6 +201,304 @@ type ServiceCatalogConfig struct {
 type SSLConfig struct {
 	CertFile string `toml:"cert_file,omitempty"`
 	KeyFile  string `toml:"key_file,omitempty"`
+}
+
+// SetDefaults populates the configuration with sensible defaults for all fields.
+// This should be called before applying any user-provided configuration values.
+func (c *Config) SetDefaults() {
+	// Default section
+	if c.Default.AuthStrategy == "" {
+		c.Default.AuthStrategy = "noauth"
+	}
+	if c.Default.Debug == nil {
+		c.Default.Debug = util.Ptr(true)
+	}
+	if c.Default.DefaultDeployInterface == "" {
+		c.Default.DefaultDeployInterface = "direct"
+	}
+	if c.Default.DefaultInspectInterface == "" {
+		c.Default.DefaultInspectInterface = "agent"
+	}
+	if c.Default.DefaultNetworkInterface == "" {
+		c.Default.DefaultNetworkInterface = "noop"
+	}
+	if c.Default.EnabledBiosInterfaces == "" {
+		c.Default.EnabledBiosInterfaces = "no-bios,redfish,idrac-redfish,ilo"
+	}
+	if c.Default.EnabledBootInterfaces == "" {
+		c.Default.EnabledBootInterfaces = "ipxe,ilo-ipxe,pxe,ilo-pxe,fake,redfish-virtual-media,idrac-redfish-virtual-media,ilo-virtual-media,redfish-https"
+	}
+	if c.Default.EnabledDeployInterfaces == "" {
+		c.Default.EnabledDeployInterfaces = "direct,fake,ramdisk,custom-agent"
+	}
+	if c.Default.EnabledFirmwareInterfaces == "" {
+		c.Default.EnabledFirmwareInterfaces = "no-firmware,fake,redfish"
+	}
+	if c.Default.EnabledHardwareTypes == "" {
+		c.Default.EnabledHardwareTypes = "ipmi,idrac,fake-hardware,redfish,manual-management,ilo,ilo5"
+	}
+	if c.Default.EnabledInspectInterfaces == "" {
+		c.Default.EnabledInspectInterfaces = "agent,fake,redfish,ilo"
+	}
+	if c.Default.EnabledManagementInterfaces == "" {
+		c.Default.EnabledManagementInterfaces = "ipmitool,fake,redfish,idrac-redfish,ilo,ilo5,noop"
+	}
+	if c.Default.EnabledNetworkInterfaces == "" {
+		c.Default.EnabledNetworkInterfaces = "noop"
+	}
+	if c.Default.EnabledPowerInterfaces == "" {
+		c.Default.EnabledPowerInterfaces = "ipmitool,fake,redfish,idrac-redfish,ilo"
+	}
+	if c.Default.EnabledRaidInterfaces == "" {
+		c.Default.EnabledRaidInterfaces = "no-raid,agent,fake,redfish,idrac-redfish,ilo5"
+	}
+	if c.Default.EnabledVendorInterfaces == "" {
+		c.Default.EnabledVendorInterfaces = "no-vendor,ipmitool,idrac-redfish,redfish,ilo,fake"
+	}
+	if c.Default.RPCTransport == "" {
+		c.Default.RPCTransport = "none"
+	}
+	if c.Default.UseStderr == nil {
+		c.Default.UseStderr = util.Ptr(true)
+	}
+	if c.Default.HashRingAlgorithm == "" {
+		c.Default.HashRingAlgorithm = "sha256"
+	}
+	if c.Default.MyIP == "" {
+		c.Default.MyIP = "127.0.0.1"
+	}
+	if c.Default.Host == "" {
+		c.Default.Host = "localhost"
+	}
+
+	// Agent section
+	if c.Agent.DeployLogsCollect == "" {
+		c.Agent.DeployLogsCollect = "always"
+	}
+	if c.Agent.MaxCommandAttempts == 0 {
+		c.Agent.MaxCommandAttempts = 30
+	}
+
+	// API section
+	if c.API.HostIP == "" {
+		c.API.HostIP = "127.0.0.1"
+	}
+	if c.API.EnableSSLAPI == nil {
+		c.API.EnableSSLAPI = util.Ptr(false)
+	}
+	if c.API.APIWorkers == 0 {
+		c.API.APIWorkers = 0
+	}
+
+	// Conductor section
+	if c.Conductor.AutomatedClean == nil {
+		c.Conductor.AutomatedClean = util.Ptr(false)
+	}
+	if c.Conductor.DeployCallbackTimeout == 0 {
+		c.Conductor.DeployCallbackTimeout = 4800
+	}
+	if c.Conductor.VerifyStepPriorityOverride == "" {
+		c.Conductor.VerifyStepPriorityOverride = "management.clear_job_queue:90"
+	}
+	if c.Conductor.NodeHistory == nil {
+		c.Conductor.NodeHistory = util.Ptr(false)
+	}
+	if c.Conductor.PowerStateChangeTimeout == 0 {
+		c.Conductor.PowerStateChangeTimeout = 120
+	}
+	if c.Conductor.DisableDeepImageInspection == nil {
+		c.Conductor.DisableDeepImageInspection = util.Ptr(true)
+	}
+
+	// Deploy section
+	if c.Deploy.DefaultBootOption == "" {
+		c.Deploy.DefaultBootOption = "local"
+	}
+	if c.Deploy.EraseDevicesMetadataPriority == 0 {
+		c.Deploy.EraseDevicesMetadataPriority = 10
+	}
+	if c.Deploy.EraseDevicesPriority == 0 {
+		c.Deploy.EraseDevicesPriority = 0
+	}
+	if c.Deploy.FastTrack == nil {
+		c.Deploy.FastTrack = util.Ptr(false)
+	}
+
+	// DHCP section
+	if c.DHCP.DHCPProvider == "" {
+		c.DHCP.DHCPProvider = "none"
+	}
+
+	// Inspector section
+	if c.Inspector.RequireManagedBoot == nil {
+		c.Inspector.RequireManagedBoot = util.Ptr(false)
+	}
+	if c.Inspector.PowerOff == "" {
+		c.Inspector.PowerOff = "true"
+	}
+	if c.Inspector.ExtraKernelParams == "" {
+		c.Inspector.ExtraKernelParams = "ipa-inspection-collectors=default ipa-enable-vlan-interfaces=all ipa-inspection-dhcp-all-interfaces=1 ipa-collect-lldp=1"
+	}
+	if c.Inspector.Hooks == "" {
+		c.Inspector.Hooks = "$default_hooks,parse-lldp"
+	}
+	if c.Inspector.AddPorts == "" {
+		c.Inspector.AddPorts = "all"
+	}
+	if c.Inspector.KeepPorts == "" {
+		c.Inspector.KeepPorts = "present"
+	}
+
+	// AutoDiscovery section
+	if c.AutoDiscovery.Enabled == "" {
+		c.AutoDiscovery.Enabled = "false"
+	}
+	if c.AutoDiscovery.Driver == "" {
+		c.AutoDiscovery.Driver = "ipmi"
+	}
+
+	// IPMI section
+	if c.IPMI.UseIpmitoolRetries == nil {
+		c.IPMI.UseIpmitoolRetries = util.Ptr(false)
+	}
+	if c.IPMI.MinCommandInterval == 0 {
+		c.IPMI.MinCommandInterval = 5
+	}
+	if c.IPMI.CommandRetryTimeout == 0 {
+		c.IPMI.CommandRetryTimeout = 60
+	}
+	if c.IPMI.CipherSuiteVersions == "" {
+		c.IPMI.CipherSuiteVersions = "3,17"
+	}
+
+	// JSONRPC section
+	if c.JSONRPC.AuthStrategy == "" {
+		c.JSONRPC.AuthStrategy = "noauth"
+	}
+	if c.JSONRPC.HostIP == "" {
+		c.JSONRPC.HostIP = "127.0.0.1"
+	}
+
+	// Nova section
+	if c.Nova.SendPowerNotifications == nil {
+		c.Nova.SendPowerNotifications = util.Ptr(false)
+	}
+
+	// OsloMessagingNotifications section
+	if c.OsloMessagingNotifications.Driver == "" {
+		c.OsloMessagingNotifications.Driver = "noop"
+	}
+	if c.OsloMessagingNotifications.TransportURL == "" {
+		c.OsloMessagingNotifications.TransportURL = "fake://"
+	}
+
+	// SensorData section
+	if c.SensorData.SendSensorData == nil {
+		c.SensorData.SendSensorData = util.Ptr(false)
+	}
+	if c.SensorData.Interval == 0 {
+		c.SensorData.Interval = 160
+	}
+
+	// Metrics section
+	if c.Metrics.Backend == "" {
+		c.Metrics.Backend = "collector"
+	}
+
+	// PXE section
+	if c.PXE.BootRetryTimeout == 0 {
+		c.PXE.BootRetryTimeout = 1200
+	}
+	if c.PXE.KernelAppendParams == "" {
+		c.PXE.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+	}
+	if c.PXE.EnableNetbootFallback == nil {
+		c.PXE.EnableNetbootFallback = util.Ptr(true)
+	}
+	if c.PXE.IPXEFallbackScript == "" {
+		c.PXE.IPXEFallbackScript = "inspector.ipxe"
+	}
+	// if c.PXE.IPXEConfigTemplate == "" {
+	// 	c.PXE.IPXEConfigTemplate = "/templates/ipxe_config.template"
+	// }
+
+	// Redfish section
+	if c.Redfish.UseSwift == nil {
+		c.Redfish.UseSwift = util.Ptr(false)
+	}
+	if c.Redfish.KernelAppendParams == "" {
+		c.Redfish.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+	}
+
+	// ILO section
+	if c.ILO.KernelAppendParams == "" {
+		c.ILO.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+	}
+	if c.ILO.UseWebServerForImages == nil {
+		c.ILO.UseWebServerForImages = util.Ptr(true)
+	}
+
+	// IRMC section
+	if c.IRMC.KernelAppendParams == "" {
+		c.IRMC.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+	}
+
+	// ProcessManager-specific defaults for Unix socket operation
+	if c.API.UnixSocketMode == "" {
+		c.API.UnixSocketMode = "0666"
+	}
+	if c.JSONRPC.UnixSocketMode == "" {
+		c.JSONRPC.UnixSocketMode = "0666"
+	}
+	if c.Database.Connection == "" {
+		c.Database.Connection = "sqlite:////var/lib/ironic/ironic.db"
+	}
+}
+
+// SetRuntimePaths configures paths that depend on ProcessManager configuration.
+// This should be called after SetDefaults and after the ProcessManager paths are set.
+func (c *Config) SetRuntimePaths(socketPath, sharedRoot string) {
+	// Set runtime-specific paths that depend on ProcessManager configuration
+	if c.Default.LogFile == "" {
+		c.Default.LogFile = sharedRoot + "/log/ironic/ironic.log"
+	}
+	if c.API.UnixSocket == "" {
+		c.API.UnixSocket = socketPath
+	}
+	if c.JSONRPC.UnixSocket == "" && c.JSONRPC.Enabled {
+		c.JSONRPC.UnixSocket = "/tmp/ironic-rpc.sock"
+	} else {
+		c.Default.UseRPCForDatabase = util.Ptr(true)
+	}
+	if c.Conductor.APIURL == "" {
+		c.Conductor.APIURL = "http+unix://" + socketPath
+	}
+
+	// Set shared root dependent paths
+	if c.Agent.DeployLogsLocalPath == "" {
+		c.Agent.DeployLogsLocalPath = sharedRoot + "/log/ironic/deploy"
+	}
+	if c.Conductor.FileURLAllowedPaths == "" {
+		c.Conductor.FileURLAllowedPaths = sharedRoot + "/html/images,/templates"
+	}
+	if c.Deploy.HTTPRoot == "" {
+		c.Deploy.HTTPRoot = sharedRoot + "/html/"
+	}
+	if c.OsloMessagingNotifications.Location == "" {
+		c.OsloMessagingNotifications.Location = sharedRoot + "/ironic_prometheus_exporter"
+	}
+	if c.PXE.ImagesPath == "" {
+		c.PXE.ImagesPath = sharedRoot + "/html/tmp"
+	}
+	if c.PXE.InstanceMasterPath == "" {
+		c.PXE.InstanceMasterPath = sharedRoot + "/html/master_images"
+	}
+	if c.PXE.TFTPMasterPath == "" {
+		c.PXE.TFTPMasterPath = sharedRoot + "/tftpboot/master_images"
+	}
+	if c.PXE.TFTPRoot == "" {
+		c.PXE.TFTPRoot = sharedRoot + "/tftpboot"
+	}
 }
 
 func (c *Config) Unmarshal(data []byte) error {

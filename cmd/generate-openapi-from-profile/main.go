@@ -16,72 +16,72 @@ import (
 	"gopkg.in/yaml.v3"
 )
 
-// InteropProfile represents the structure of a Redfish Interop Profile
+// InteropProfile represents the structure of a Redfish Interop Profile.
 type InteropProfile struct {
-	ProfileName     string                      `json:"ProfileName"`
-	ProfileVersion  string                      `json:"ProfileVersion"`
-	Purpose         string                      `json:"Purpose"`
-	OwningEntity    string                      `json:"OwningEntity"`
-	ContactInfo     string                      `json:"ContactInfo"`
-	License         string                      `json:"License"`
-	Resources       map[string]ResourceProfile  `json:"Resources"`
-	Registries      map[string]RegistryProfile  `json:"Registries,omitempty"`
-	Protocol        ProtocolProfile             `json:"Protocol"`
+	ProfileName    string                     `json:"ProfileName"`
+	ProfileVersion string                     `json:"ProfileVersion"`
+	Purpose        string                     `json:"Purpose"`
+	OwningEntity   string                     `json:"OwningEntity"`
+	ContactInfo    string                     `json:"ContactInfo"`
+	License        string                     `json:"License"`
+	Resources      map[string]ResourceProfile `json:"Resources"`
+	Registries     map[string]RegistryProfile `json:"Registries,omitempty"`
+	Protocol       ProtocolProfile            `json:"Protocol"`
 }
 
-// ResourceProfile defines requirements for a specific Redfish resource
+// ResourceProfile defines requirements for a specific Redfish resource.
 type ResourceProfile struct {
-	Purpose              string                          `json:"Purpose"`
-	ReadRequirement      string                          `json:"ReadRequirement,omitempty"`
-	WriteRequirement     string                          `json:"WriteRequirement,omitempty"`
-	ConditionalRequirement string                        `json:"ConditionalRequirement,omitempty"`
-	MinVersion           string                          `json:"MinVersion,omitempty"`
-	CreateResource       bool                            `json:"CreateResource,omitempty"`
-	URIs                 []string                        `json:"URIs,omitempty"`
-	PropertyRequirements map[string]PropertyRequirement `json:"PropertyRequirements,omitempty"`
-	ActionRequirements   map[string]ActionRequirement   `json:"ActionRequirements,omitempty"`
-	MinCount             int                             `json:"MinCount,omitempty"`
-}
-
-// PropertyRequirement defines requirements for a specific property
-type PropertyRequirement struct {
-	Purpose               string                          `json:"Purpose,omitempty"`
-	ReadRequirement       string                          `json:"ReadRequirement,omitempty"`
-	WriteRequirement      string                          `json:"WriteRequirement,omitempty"`
+	Purpose                string                         `json:"Purpose"`
+	ReadRequirement        string                         `json:"ReadRequirement,omitempty"`
+	WriteRequirement       string                         `json:"WriteRequirement,omitempty"`
 	ConditionalRequirement string                         `json:"ConditionalRequirement,omitempty"`
-	Comparison            string                          `json:"Comparison,omitempty"`
-	Values                []string                        `json:"Values,omitempty"`
-	MinCount              int                             `json:"MinCount,omitempty"`
-	MinSupportValues      []string                        `json:"MinSupportValues,omitempty"`
-	PropertyRequirements  map[string]PropertyRequirement `json:"PropertyRequirements,omitempty"`
+	MinVersion             string                         `json:"MinVersion,omitempty"`
+	CreateResource         bool                           `json:"CreateResource,omitempty"`
+	URIs                   []string                       `json:"URIs,omitempty"`
+	PropertyRequirements   map[string]PropertyRequirement `json:"PropertyRequirements,omitempty"`
+	ActionRequirements     map[string]ActionRequirement   `json:"ActionRequirements,omitempty"`
+	MinCount               int                            `json:"MinCount,omitempty"`
 }
 
-// ActionRequirement defines requirements for a specific action
+// PropertyRequirement defines requirements for a specific property.
+type PropertyRequirement struct {
+	Purpose                string                         `json:"Purpose,omitempty"`
+	ReadRequirement        string                         `json:"ReadRequirement,omitempty"`
+	WriteRequirement       string                         `json:"WriteRequirement,omitempty"`
+	ConditionalRequirement string                         `json:"ConditionalRequirement,omitempty"`
+	Comparison             string                         `json:"Comparison,omitempty"`
+	Values                 []string                       `json:"Values,omitempty"`
+	MinCount               int                            `json:"MinCount,omitempty"`
+	MinSupportValues       []string                       `json:"MinSupportValues,omitempty"`
+	PropertyRequirements   map[string]PropertyRequirement `json:"PropertyRequirements,omitempty"`
+}
+
+// ActionRequirement defines requirements for a specific action.
 type ActionRequirement struct {
 	Purpose         string                          `json:"Purpose"`
 	ReadRequirement string                          `json:"ReadRequirement,omitempty"`
 	Parameters      map[string]ParameterRequirement `json:"Parameters,omitempty"`
 }
 
-// ParameterRequirement defines requirements for action parameters
+// ParameterRequirement defines requirements for action parameters.
 type ParameterRequirement struct {
-	ReadRequirement     string   `json:"ReadRequirement,omitempty"`
-	ParameterValues     []string `json:"ParameterValues,omitempty"`
-	RecommendedValues   []string `json:"RecommendedValues,omitempty"`
+	ReadRequirement   string   `json:"ReadRequirement,omitempty"`
+	ParameterValues   []string `json:"ParameterValues,omitempty"`
+	RecommendedValues []string `json:"RecommendedValues,omitempty"`
 }
 
-// ProtocolProfile defines protocol requirements
+// ProtocolProfile defines protocol requirements.
 type ProtocolProfile struct {
 	MinVersion string `json:"MinVersion"`
 }
 
-// RegistryProfile defines registry requirements
+// RegistryProfile defines registry requirements.
 type RegistryProfile struct {
-	MinVersion string                 `json:"MinVersion"`
-	Messages   map[string]interface{} `json:"Messages,omitempty"`
+	MinVersion string         `json:"MinVersion"`
+	Messages   map[string]any `json:"Messages,omitempty"`
 }
 
-// OpenAPI specification structures
+// OpenAPI specification structures.
 type OpenAPISpec struct {
 	OpenAPI    string                 `yaml:"openapi"`
 	Info       OpenAPIInfo            `yaml:"info"`
@@ -91,11 +91,11 @@ type OpenAPISpec struct {
 }
 
 type OpenAPIInfo struct {
-	Title       string            `yaml:"title"`
-	Description string            `yaml:"description"`
-	Version     string            `yaml:"version"`
-	Contact     *OpenAPIContact   `yaml:"contact,omitempty"`
-	License     *OpenAPILicense   `yaml:"license,omitempty"`
+	Title       string          `yaml:"title"`
+	Description string          `yaml:"description"`
+	Version     string          `yaml:"version"`
+	Contact     *OpenAPIContact `yaml:"contact,omitempty"`
+	License     *OpenAPILicense `yaml:"license,omitempty"`
 }
 
 type OpenAPIContact struct {
@@ -115,24 +115,24 @@ type OpenAPIServer struct {
 }
 
 type OpenAPIPath struct {
-	Summary     string               `yaml:"summary,omitempty"`
-	Description string               `yaml:"description,omitempty"`
-	Parameters  []OpenAPIParameter   `yaml:"parameters,omitempty"`
-	Get         *OpenAPIOperation    `yaml:"get,omitempty"`
-	Post        *OpenAPIOperation    `yaml:"post,omitempty"`
-	Patch       *OpenAPIOperation    `yaml:"patch,omitempty"`
-	Put         *OpenAPIOperation    `yaml:"put,omitempty"`
-	Delete      *OpenAPIOperation    `yaml:"delete,omitempty"`
+	Summary     string             `yaml:"summary,omitempty"`
+	Description string             `yaml:"description,omitempty"`
+	Parameters  []OpenAPIParameter `yaml:"parameters,omitempty"`
+	Get         *OpenAPIOperation  `yaml:"get,omitempty"`
+	Post        *OpenAPIOperation  `yaml:"post,omitempty"`
+	Patch       *OpenAPIOperation  `yaml:"patch,omitempty"`
+	Put         *OpenAPIOperation  `yaml:"put,omitempty"`
+	Delete      *OpenAPIOperation  `yaml:"delete,omitempty"`
 }
 
 type OpenAPIOperation struct {
-	OperationID string                         `yaml:"operationId"`
-	Summary     string                         `yaml:"summary,omitempty"`
-	Description string                         `yaml:"description,omitempty"`
-	Parameters  []OpenAPIParameter             `yaml:"parameters,omitempty"`
-	RequestBody *OpenAPIRequestBody            `yaml:"requestBody,omitempty"`
-	Responses   map[string]OpenAPIResponse     `yaml:"responses"`
-	Deprecated  bool                           `yaml:"deprecated,omitempty"`
+	OperationID string                     `yaml:"operationId"`
+	Summary     string                     `yaml:"summary,omitempty"`
+	Description string                     `yaml:"description,omitempty"`
+	Parameters  []OpenAPIParameter         `yaml:"parameters,omitempty"`
+	RequestBody *OpenAPIRequestBody        `yaml:"requestBody,omitempty"`
+	Responses   map[string]OpenAPIResponse `yaml:"responses"`
+	Deprecated  bool                       `yaml:"deprecated,omitempty"`
 }
 
 type OpenAPIParameter struct {
@@ -144,14 +144,14 @@ type OpenAPIParameter struct {
 }
 
 type OpenAPIRequestBody struct {
-	Description string                            `yaml:"description,omitempty"`
-	Required    bool                              `yaml:"required,omitempty"`
-	Content     map[string]OpenAPIMediaType       `yaml:"content"`
+	Description string                      `yaml:"description,omitempty"`
+	Required    bool                        `yaml:"required,omitempty"`
+	Content     map[string]OpenAPIMediaType `yaml:"content"`
 }
 
 type OpenAPIResponse struct {
-	Description string                            `yaml:"description"`
-	Content     map[string]OpenAPIMediaType       `yaml:"content,omitempty"`
+	Description string                      `yaml:"description"`
+	Content     map[string]OpenAPIMediaType `yaml:"content,omitempty"`
 }
 
 type OpenAPIMediaType struct {
@@ -163,74 +163,74 @@ type OpenAPIComponents struct {
 }
 
 type OpenAPISchemaOrRef struct {
-	Ref                  string                     `yaml:"$ref,omitempty"`
-	Type                 string                     `yaml:"type,omitempty"`
-	Format               string                     `yaml:"format,omitempty"`
-	Description          string                     `yaml:"description,omitempty"`
+	Ref                  string                        `yaml:"$ref,omitempty"`
+	Type                 string                        `yaml:"type,omitempty"`
+	Format               string                        `yaml:"format,omitempty"`
+	Description          string                        `yaml:"description,omitempty"`
 	Properties           map[string]OpenAPISchemaOrRef `yaml:"properties,omitempty"`
-	Required             []string                   `yaml:"required,omitempty"`
-	Items                *OpenAPISchemaOrRef        `yaml:"items,omitempty"`
-	Enum                 []interface{}              `yaml:"enum,omitempty"`
-	ReadOnly             bool                       `yaml:"readOnly,omitempty"`
-	WriteOnly            bool                       `yaml:"writeOnly,omitempty"`
-	Nullable             bool                       `yaml:"nullable,omitempty"`
-	Pattern              string                     `yaml:"pattern,omitempty"`
-	Minimum              *float64                   `yaml:"minimum,omitempty"`
-	Maximum              *float64                   `yaml:"maximum,omitempty"`
-	MinLength            *int                       `yaml:"minLength,omitempty"`
-	MaxLength            *int                       `yaml:"maxLength,omitempty"`
-	AdditionalProperties interface{}                `yaml:"additionalProperties,omitempty"`
-	AllOf                []OpenAPISchemaOrRef       `yaml:"allOf,omitempty"`
-	OneOf                []OpenAPISchemaOrRef       `yaml:"oneOf,omitempty"`
-	AnyOf                []OpenAPISchemaOrRef       `yaml:"anyOf,omitempty"`
+	Required             []string                      `yaml:"required,omitempty"`
+	Items                *OpenAPISchemaOrRef           `yaml:"items,omitempty"`
+	Enum                 []any                         `yaml:"enum,omitempty"`
+	ReadOnly             bool                          `yaml:"readOnly,omitempty"`
+	WriteOnly            bool                          `yaml:"writeOnly,omitempty"`
+	Nullable             bool                          `yaml:"nullable,omitempty"`
+	Pattern              string                        `yaml:"pattern,omitempty"`
+	Minimum              *float64                      `yaml:"minimum,omitempty"`
+	Maximum              *float64                      `yaml:"maximum,omitempty"`
+	MinLength            *int                          `yaml:"minLength,omitempty"`
+	MaxLength            *int                          `yaml:"maxLength,omitempty"`
+	AdditionalProperties any                           `yaml:"additionalProperties,omitempty"`
+	AllOf                []OpenAPISchemaOrRef          `yaml:"allOf,omitempty"`
+	OneOf                []OpenAPISchemaOrRef          `yaml:"oneOf,omitempty"`
+	AnyOf                []OpenAPISchemaOrRef          `yaml:"anyOf,omitempty"`
 }
 
 type OpenAPISchema = OpenAPISchemaOrRef
 
-// Generator handles the conversion from interop profile to OpenAPI
+// Generator handles the conversion from interop profile to OpenAPI.
 type Generator struct {
-	profile     *InteropProfile
-	openAPI     *OpenAPISpec
+	profile      *InteropProfile
+	openAPI      *OpenAPISpec
 	pathMappings map[string]string
 }
 
-// New creates a new generator instance
+// New creates a new generator instance.
 func NewGenerator() *Generator {
 	return &Generator{
 		pathMappings: map[string]string{
-			"ServiceRoot":               "/redfish/v1/",
-			"ComputerSystemCollection":  "/redfish/v1/Systems/",
-			"ComputerSystem":            "/redfish/v1/Systems/{systemId}",
-			"ManagerCollection":         "/redfish/v1/Managers/",
-			"Manager":                   "/redfish/v1/Managers/{managerId}",
-			"ChassisCollection":         "/redfish/v1/Chassis/",
-			"Chassis":                   "/redfish/v1/Chassis/{chassisId}",
+			"ServiceRoot":                 "/redfish/v1/",
+			"ComputerSystemCollection":    "/redfish/v1/Systems/",
+			"ComputerSystem":              "/redfish/v1/Systems/{systemId}",
+			"ManagerCollection":           "/redfish/v1/Managers/",
+			"Manager":                     "/redfish/v1/Managers/{managerId}",
+			"ChassisCollection":           "/redfish/v1/Chassis/",
+			"Chassis":                     "/redfish/v1/Chassis/{chassisId}",
 			"EthernetInterfaceCollection": "/redfish/v1/Systems/{systemId}/EthernetInterfaces/",
-			"EthernetInterface":         "/redfish/v1/Systems/{systemId}/EthernetInterfaces/{ethernetInterfaceId}",
-			"Bios":                      "/redfish/v1/Systems/{systemId}/Bios",
-			"SecureBoot":                "/redfish/v1/Systems/{systemId}/SecureBoot",
-			"ProcessorCollection":       "/redfish/v1/Systems/{systemId}/Processors/",
-			"Processor":                 "/redfish/v1/Systems/{systemId}/Processors/{processorId}",
-			"SimpleStorageCollection":   "/redfish/v1/Systems/{systemId}/SimpleStorage/",
-			"SimpleStorage":             "/redfish/v1/Systems/{systemId}/SimpleStorage/{simpleStorageId}",
-			"StorageCollection":         "/redfish/v1/Systems/{systemId}/Storage/",
-			"Storage":                   "/redfish/v1/Systems/{systemId}/Storage/{storageId}",
-			"VolumeCollection":          "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Volumes/",
-			"Volume":                    "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Volumes/{volumeId}",
-			"DriveCollection":           "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Drives/",
-			"Drive":                     "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Drives/{driveId}",
-			"VirtualMediaCollection":    "/redfish/v1/Managers/{managerId}/VirtualMedia/",
-			"VirtualMedia":              "/redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}",
-			"Power":                     "/redfish/v1/Chassis/{chassisId}/Power",
-			"Thermal":                   "/redfish/v1/Chassis/{chassisId}/Thermal",
-			"SessionService":            "/redfish/v1/SessionService",
-			"TaskService":               "/redfish/v1/TaskService",
-			"UpdateService":             "/redfish/v1/UpdateService",
+			"EthernetInterface":           "/redfish/v1/Systems/{systemId}/EthernetInterfaces/{ethernetInterfaceId}",
+			"Bios":                        "/redfish/v1/Systems/{systemId}/Bios",
+			"SecureBoot":                  "/redfish/v1/Systems/{systemId}/SecureBoot",
+			"ProcessorCollection":         "/redfish/v1/Systems/{systemId}/Processors/",
+			"Processor":                   "/redfish/v1/Systems/{systemId}/Processors/{processorId}",
+			"SimpleStorageCollection":     "/redfish/v1/Systems/{systemId}/SimpleStorage/",
+			"SimpleStorage":               "/redfish/v1/Systems/{systemId}/SimpleStorage/{simpleStorageId}",
+			"StorageCollection":           "/redfish/v1/Systems/{systemId}/Storage/",
+			"Storage":                     "/redfish/v1/Systems/{systemId}/Storage/{storageId}",
+			"VolumeCollection":            "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Volumes/",
+			"Volume":                      "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Volumes/{volumeId}",
+			"DriveCollection":             "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Drives/",
+			"Drive":                       "/redfish/v1/Systems/{systemId}/Storage/{storageId}/Drives/{driveId}",
+			"VirtualMediaCollection":      "/redfish/v1/Managers/{managerId}/VirtualMedia/",
+			"VirtualMedia":                "/redfish/v1/Managers/{managerId}/VirtualMedia/{virtualMediaId}",
+			"Power":                       "/redfish/v1/Chassis/{chassisId}/Power",
+			"Thermal":                     "/redfish/v1/Chassis/{chassisId}/Thermal",
+			"SessionService":              "/redfish/v1/SessionService",
+			"TaskService":                 "/redfish/v1/TaskService",
+			"UpdateService":               "/redfish/v1/UpdateService",
 		},
 	}
 }
 
-// LoadProfile loads an interop profile from a URL or file
+// LoadProfile loads an interop profile from a URL or file.
 func (g *Generator) LoadProfile(source string) error {
 	var data []byte
 	var err error
@@ -265,7 +265,7 @@ func (g *Generator) LoadProfile(source string) error {
 	return nil
 }
 
-// Generate creates the OpenAPI specification
+// Generate creates the OpenAPI specification.
 func (g *Generator) Generate() error {
 	if g.profile == nil {
 		return fmt.Errorf("no profile loaded")
@@ -274,9 +274,14 @@ func (g *Generator) Generate() error {
 	g.openAPI = &OpenAPISpec{
 		OpenAPI: "3.1.0",
 		Info: OpenAPIInfo{
-			Title:       fmt.Sprintf("Redfish API (%s)", g.profile.ProfileName),
-			Description: fmt.Sprintf("Redfish OpenAPI specification compliant with %s v%s. %s", g.profile.ProfileName, g.profile.ProfileVersion, g.profile.Purpose),
-			Version:     g.profile.ProfileVersion,
+			Title: fmt.Sprintf("Redfish API (%s)", g.profile.ProfileName),
+			Description: fmt.Sprintf(
+				"Redfish OpenAPI specification compliant with %s v%s. %s",
+				g.profile.ProfileName,
+				g.profile.ProfileVersion,
+				g.profile.Purpose,
+			),
+			Version: g.profile.ProfileVersion,
 			Contact: &OpenAPIContact{
 				Name:  g.profile.OwningEntity,
 				Email: g.profile.ContactInfo,
@@ -304,7 +309,7 @@ func (g *Generator) Generate() error {
 	return nil
 }
 
-// addCommonSchemas adds standard Redfish schemas
+// addCommonSchemas adds standard Redfish schemas.
 func (g *Generator) addCommonSchemas() {
 	// Redfish Error schema
 	g.openAPI.Components.Schemas["RedfishError"] = OpenAPISchema{
@@ -333,11 +338,15 @@ func (g *Generator) addCommonSchemas() {
 	g.openAPI.Components.Schemas["Message"] = OpenAPISchema{
 		Type: "object",
 		Properties: map[string]OpenAPISchemaOrRef{
-			"MessageId":   {Type: "string", ReadOnly: true},
-			"Message":     {Type: "string", ReadOnly: true},
-			"MessageArgs": {Type: "array", Items: &OpenAPISchemaOrRef{Type: "string"}, ReadOnly: true},
-			"Severity":    {Type: "string", ReadOnly: true},
-			"Resolution":  {Type: "string", ReadOnly: true},
+			"MessageId": {Type: "string", ReadOnly: true},
+			"Message":   {Type: "string", ReadOnly: true},
+			"MessageArgs": {
+				Type:     "array",
+				Items:    &OpenAPISchemaOrRef{Type: "string"},
+				ReadOnly: true,
+			},
+			"Severity":   {Type: "string", ReadOnly: true},
+			"Resolution": {Type: "string", ReadOnly: true},
 		},
 		Required: []string{"MessageId"},
 	}
@@ -355,19 +364,31 @@ func (g *Generator) addCommonSchemas() {
 	commonEnums := map[string]OpenAPISchema{
 		"Health": {
 			Type: "string",
-			Enum: []interface{}{"OK", "Warning", "Critical"},
+			Enum: []any{"OK", "Warning", "Critical"},
 		},
 		"State": {
 			Type: "string",
-			Enum: []interface{}{"Enabled", "Disabled", "StandbyOffline", "StandbySpare", "InTest", "Starting", "Absent", "UnavailableOffline", "Deferring", "Quiesced", "Updating"},
+			Enum: []any{
+				"Enabled",
+				"Disabled",
+				"StandbyOffline",
+				"StandbySpare",
+				"InTest",
+				"Starting",
+				"Absent",
+				"UnavailableOffline",
+				"Deferring",
+				"Quiesced",
+				"Updating",
+			},
 		},
 		"PowerState": {
 			Type: "string",
-			Enum: []interface{}{"On", "Off", "PoweringOn", "PoweringOff"},
+			Enum: []any{"On", "Off", "PoweringOn", "PoweringOff"},
 		},
 		"IndicatorLED": {
 			Type: "string",
-			Enum: []interface{}{"Unknown", "Lit", "Blinking", "Off"},
+			Enum: []any{"Unknown", "Lit", "Blinking", "Off"},
 		},
 		"Status": {
 			Type: "object",
@@ -383,7 +404,7 @@ func (g *Generator) addCommonSchemas() {
 	}
 }
 
-// processResource processes a single resource from the profile
+// processResource processes a single resource from the profile.
 func (g *Generator) processResource(resourceName string, resourceProfile ResourceProfile) error {
 	// Skip resources that are not required or recommended
 	if !g.isResourceRequired(resourceProfile) {
@@ -440,54 +461,61 @@ func (g *Generator) processResource(resourceName string, resourceProfile Resourc
 	return nil
 }
 
-// isResourceRequired checks if a resource is required or recommended
+// isResourceRequired checks if a resource is required or recommended.
 func (g *Generator) isResourceRequired(resource ResourceProfile) bool {
 	requirement := strings.ToLower(resource.ReadRequirement)
 	return requirement == "mandatory" || requirement == "recommended"
 }
 
-// hasWriteRequirement checks if a resource has write requirements
+// hasWriteRequirement checks if a resource has write requirements.
 func (g *Generator) hasWriteRequirement(resource ResourceProfile, method string) bool {
 	// Check if any properties have write requirements
 	for _, prop := range resource.PropertyRequirements {
-		if strings.ToLower(prop.WriteRequirement) == "mandatory" || strings.ToLower(prop.WriteRequirement) == "recommended" {
+		if strings.ToLower(prop.WriteRequirement) == "mandatory" ||
+			strings.ToLower(prop.WriteRequirement) == "recommended" {
 			return true
 		}
 	}
 	return false
 }
 
-// isActionRequired checks if an action is required
+// isActionRequired checks if an action is required.
 func (g *Generator) isActionRequired(action ActionRequirement) bool {
 	requirement := strings.ToLower(action.ReadRequirement)
 	return requirement == "mandatory" || requirement == "recommended"
 }
 
-// extractPathParameters extracts parameters from a path template
+// extractPathParameters extracts parameters from a path template.
 func (g *Generator) extractPathParameters(path string) []OpenAPIParameter {
 	var parameters []OpenAPIParameter
-	
+
 	re := regexp.MustCompile(`\{([^}]+)\}`)
 	matches := re.FindAllStringSubmatch(path, -1)
-	
+
 	for _, match := range matches {
 		paramName := match[1]
 		parameters = append(parameters, OpenAPIParameter{
-			Name:        paramName,
-			In:          "path",
-			Description: fmt.Sprintf("ID of %s", strings.ToLower(strings.TrimSuffix(paramName, "Id"))),
-			Required:    true,
-			Schema:      OpenAPISchemaOrRef{Type: "string"},
+			Name: paramName,
+			In:   "path",
+			Description: fmt.Sprintf(
+				"ID of %s",
+				strings.ToLower(strings.TrimSuffix(paramName, "Id")),
+			),
+			Required: true,
+			Schema:   OpenAPISchemaOrRef{Type: "string"},
 		})
 	}
-	
+
 	return parameters
 }
 
-// createGetOperation creates a GET operation for a resource
-func (g *Generator) createGetOperation(resourceName string, resource ResourceProfile) *OpenAPIOperation {
+// createGetOperation creates a GET operation for a resource.
+func (g *Generator) createGetOperation(
+	resourceName string,
+	resource ResourceProfile,
+) *OpenAPIOperation {
 	operationID := fmt.Sprintf("get_%s", strings.ToLower(resourceName))
-	
+
 	return &OpenAPIOperation{
 		OperationID: operationID,
 		Summary:     fmt.Sprintf("Get %s", resourceName),
@@ -517,11 +545,14 @@ func (g *Generator) createGetOperation(resourceName string, resource ResourcePro
 	}
 }
 
-// createPostOperation creates a POST operation for collections
-func (g *Generator) createPostOperation(resourceName string, resource ResourceProfile) *OpenAPIOperation {
+// createPostOperation creates a POST operation for collections.
+func (g *Generator) createPostOperation(
+	resourceName string,
+	resource ResourceProfile,
+) *OpenAPIOperation {
 	singularName := strings.TrimSuffix(resourceName, "Collection")
 	operationID := fmt.Sprintf("create_%s", strings.ToLower(singularName))
-	
+
 	return &OpenAPIOperation{
 		OperationID: operationID,
 		Summary:     fmt.Sprintf("Create %s", singularName),
@@ -561,10 +592,13 @@ func (g *Generator) createPostOperation(resourceName string, resource ResourcePr
 	}
 }
 
-// createPatchOperation creates a PATCH operation for resources
-func (g *Generator) createPatchOperation(resourceName string, resource ResourceProfile) *OpenAPIOperation {
+// createPatchOperation creates a PATCH operation for resources.
+func (g *Generator) createPatchOperation(
+	resourceName string,
+	resource ResourceProfile,
+) *OpenAPIOperation {
 	operationID := fmt.Sprintf("patch_%s", strings.ToLower(resourceName))
-	
+
 	return &OpenAPIOperation{
 		OperationID: operationID,
 		Summary:     fmt.Sprintf("Update %s", resourceName),
@@ -607,39 +641,42 @@ func (g *Generator) createPatchOperation(resourceName string, resource ResourceP
 	}
 }
 
-// getActionPath constructs the action path
+// getActionPath constructs the action path.
 func (g *Generator) getActionPath(basePath, resourceName, actionName string) string {
 	// Remove trailing parameters for action paths
 	basePath = strings.TrimSuffix(basePath, "/")
 	return fmt.Sprintf("%s/Actions/%s.%s", basePath, resourceName, actionName)
 }
 
-// createActionOperation creates a POST operation for actions
-func (g *Generator) createActionOperation(resourceName, actionName string, action ActionRequirement) *OpenAPIOperation {
+// createActionOperation creates a POST operation for actions.
+func (g *Generator) createActionOperation(
+	resourceName, actionName string,
+	action ActionRequirement,
+) *OpenAPIOperation {
 	operationID := fmt.Sprintf("%s_%s", strings.ToLower(actionName), strings.ToLower(resourceName))
-	
+
 	requestSchema := OpenAPISchemaOrRef{
-		Type: "object",
+		Type:       "object",
 		Properties: make(map[string]OpenAPISchemaOrRef),
 	}
-	
+
 	var required []string
-	
+
 	// Add parameters from action requirements
 	for paramName, paramReq := range action.Parameters {
 		paramSchema := g.createParameterSchema(paramReq)
 		requestSchema.Properties[paramName] = paramSchema
-		
+
 		if strings.ToLower(paramReq.ReadRequirement) == "mandatory" {
 			required = append(required, paramName)
 		}
 	}
-	
+
 	if len(required) > 0 {
 		sort.Strings(required)
 		requestSchema.Required = required
 	}
-	
+
 	return &OpenAPIOperation{
 		OperationID: operationID,
 		Summary:     fmt.Sprintf("Perform %s action", actionName),
@@ -680,26 +717,26 @@ func (g *Generator) createActionOperation(resourceName, actionName string, actio
 	}
 }
 
-// createParameterSchema creates a schema for action parameters
+// createParameterSchema creates a schema for action parameters.
 func (g *Generator) createParameterSchema(param ParameterRequirement) OpenAPISchemaOrRef {
 	schema := OpenAPISchemaOrRef{Type: "string"}
-	
+
 	if len(param.ParameterValues) > 0 {
-		schema.Enum = make([]interface{}, len(param.ParameterValues))
+		schema.Enum = make([]any, len(param.ParameterValues))
 		for i, v := range param.ParameterValues {
 			schema.Enum[i] = v
 		}
 	} else if len(param.RecommendedValues) > 0 {
-		schema.Enum = make([]interface{}, len(param.RecommendedValues))
+		schema.Enum = make([]any, len(param.RecommendedValues))
 		for i, v := range param.RecommendedValues {
 			schema.Enum[i] = v
 		}
 	}
-	
+
 	return schema
 }
 
-// createResourceSchema creates a schema definition for a resource
+// createResourceSchema creates a schema definition for a resource.
 func (g *Generator) createResourceSchema(resourceName string, resource ResourceProfile) {
 	schema := OpenAPISchema{
 		Type: "object",
@@ -712,22 +749,26 @@ func (g *Generator) createResourceSchema(resourceName string, resource ResourceP
 		},
 		Required: []string{"@odata.id", "@odata.type", "Id", "Name"},
 	}
-	
+
 	// Add resource-specific properties from profile requirements
 	for propName, propReq := range resource.PropertyRequirements {
 		propSchema := g.createPropertySchema(propName, propReq)
 		schema.Properties[propName] = propSchema
-		
+
 		// Add to required if mandatory
-		if strings.ToLower(propReq.ReadRequirement) == "mandatory" || strings.ToLower(propReq.WriteRequirement) == "mandatory" {
+		if strings.ToLower(propReq.ReadRequirement) == "mandatory" ||
+			strings.ToLower(propReq.WriteRequirement) == "mandatory" {
 			schema.Required = append(schema.Required, propName)
 		}
 	}
-	
+
 	// Handle collection-specific properties
 	if strings.Contains(resourceName, "Collection") {
 		schema.Properties["Description"] = OpenAPISchemaOrRef{Type: "string", ReadOnly: true}
-		schema.Properties["Members@odata.count"] = OpenAPISchemaOrRef{Type: "integer", ReadOnly: true}
+		schema.Properties["Members@odata.count"] = OpenAPISchemaOrRef{
+			Type:     "integer",
+			ReadOnly: true,
+		}
 		schema.Properties["Members"] = OpenAPISchemaOrRef{
 			Type: "array",
 			Items: &OpenAPISchemaOrRef{
@@ -737,17 +778,20 @@ func (g *Generator) createResourceSchema(resourceName string, resource ResourceP
 		}
 		schema.Required = append(schema.Required, "Members")
 	}
-	
+
 	// Sort required properties for consistency
 	if len(schema.Required) > 0 {
 		sort.Strings(schema.Required)
 	}
-	
+
 	g.openAPI.Components.Schemas[resourceName] = schema
 }
 
-// createPropertySchema creates a schema for a property based on profile requirements
-func (g *Generator) createPropertySchema(propName string, propReq PropertyRequirement) OpenAPISchemaOrRef {
+// createPropertySchema creates a schema for a property based on profile requirements.
+func (g *Generator) createPropertySchema(
+	propName string,
+	propReq PropertyRequirement,
+) OpenAPISchemaOrRef {
 	// Handle special cases and complex properties
 	switch propName {
 	case "Status":
@@ -767,45 +811,48 @@ func (g *Generator) createPropertySchema(propName string, propReq PropertyRequir
 			Pattern: "^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$",
 		}
 	}
-	
+
 	// Handle link properties
 	if propReq.Comparison == "LinkToResource" && len(propReq.Values) > 0 {
 		return OpenAPISchemaOrRef{Ref: "#/components/schemas/idRef"}
 	}
-	
+
 	// Handle enum properties
 	if len(propReq.Values) > 0 {
 		schema := OpenAPISchemaOrRef{Type: "string"}
-		schema.Enum = make([]interface{}, len(propReq.Values))
+		schema.Enum = make([]any, len(propReq.Values))
 		for i, v := range propReq.Values {
 			schema.Enum[i] = v
 		}
 		return schema
 	}
-	
+
 	// Handle nested properties
 	if len(propReq.PropertyRequirements) > 0 {
 		schema := OpenAPISchemaOrRef{
 			Type:       "object",
 			Properties: make(map[string]OpenAPISchemaOrRef),
 		}
-		
+
 		var required []string
 		for nestedPropName, nestedPropReq := range propReq.PropertyRequirements {
-			schema.Properties[nestedPropName] = g.createPropertySchema(nestedPropName, nestedPropReq)
+			schema.Properties[nestedPropName] = g.createPropertySchema(
+				nestedPropName,
+				nestedPropReq,
+			)
 			if strings.ToLower(nestedPropReq.ReadRequirement) == "mandatory" {
 				required = append(required, nestedPropName)
 			}
 		}
-		
+
 		if len(required) > 0 {
 			sort.Strings(required)
 			schema.Required = required
 		}
-		
+
 		return schema
 	}
-	
+
 	// Handle arrays
 	if propReq.MinCount > 0 {
 		return OpenAPISchemaOrRef{
@@ -815,19 +862,20 @@ func (g *Generator) createPropertySchema(propName string, propReq PropertyRequir
 			},
 		}
 	}
-	
+
 	// Default to string for simple properties
 	schema := OpenAPISchemaOrRef{Type: "string"}
-	
+
 	// Set read-only for read-only properties
-	if strings.ToLower(propReq.WriteRequirement) == "" && strings.ToLower(propReq.ReadRequirement) != "" {
+	if strings.ToLower(propReq.WriteRequirement) == "" &&
+		strings.ToLower(propReq.ReadRequirement) != "" {
 		schema.ReadOnly = true
 	}
-	
+
 	return schema
 }
 
-// WriteSpec writes the OpenAPI specification to a file
+// WriteSpec writes the OpenAPI specification to a file.
 func (g *Generator) WriteSpec(filename string) error {
 	if g.openAPI == nil {
 		return fmt.Errorf("no OpenAPI specification generated")
@@ -835,7 +883,7 @@ func (g *Generator) WriteSpec(filename string) error {
 
 	// Create output directory if it doesn't exist
 	dir := filepath.Dir(filename)
-	if err := os.MkdirAll(dir, 0755); err != nil {
+	if err := os.MkdirAll(dir, 0o755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
@@ -846,7 +894,7 @@ func (g *Generator) WriteSpec(filename string) error {
 	}
 
 	// Write to file
-	if err := os.WriteFile(filename, data, 0644); err != nil {
+	if err := os.WriteFile(filename, data, 0o644); err != nil {
 		return fmt.Errorf("failed to write file: %w", err)
 	}
 
@@ -855,9 +903,17 @@ func (g *Generator) WriteSpec(filename string) error {
 
 func main() {
 	var (
-		profileURL = flag.String("profile-url", "https://raw.githubusercontent.com/openstack/ironic/refs/heads/master/redfish-interop-profiles/OpenStackIronicProfile.v1_1_0.json", "URL or path to the Redfish Interop Profile JSON file")
-		outputFile = flag.String("output", "api/redfish/openapi-from-profile.yaml", "Output file for the OpenAPI specification")
-		help       = flag.Bool("help", false, "Show help message")
+		profileURL = flag.String(
+			"profile-url",
+			"https://raw.githubusercontent.com/openstack/ironic/refs/heads/master/redfish-interop-profiles/OpenStackIronicProfile.v1_1_0.json",
+			"URL or path to the Redfish Interop Profile JSON file",
+		)
+		outputFile = flag.String(
+			"output",
+			"api/redfish/openapi-from-profile.yaml",
+			"Output file for the OpenAPI specification",
+		)
+		help = flag.Bool("help", false, "Show help message")
 	)
 	flag.Parse()
 
@@ -902,7 +958,11 @@ func main() {
 		log.Fatalf("Error loading profile: %v", err)
 	}
 	fmt.Printf("OK\n")
-	fmt.Printf("  Profile: %s v%s\n", generator.profile.ProfileName, generator.profile.ProfileVersion)
+	fmt.Printf(
+		"  Profile: %s v%s\n",
+		generator.profile.ProfileName,
+		generator.profile.ProfileVersion,
+	)
 	fmt.Printf("  Resources: %d\n", len(generator.profile.Resources))
 
 	// Generate OpenAPI specification

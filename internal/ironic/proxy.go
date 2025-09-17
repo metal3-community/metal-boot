@@ -50,7 +50,7 @@ func NewSocketProxy(logger *slog.Logger, socketPath string) *SocketProxy {
 			// Set proxy headers as recommended in Ironic NGINX config
 			// These headers are crucial for Ironic to properly handle requests
 			r.Out.Header.Set("Host", r.In.Host)
-			
+
 			// Get real IP address, checking for forwarded headers first
 			realIP := r.In.RemoteAddr
 			if host, _, err := net.SplitHostPort(realIP); err == nil {
@@ -61,14 +61,14 @@ func NewSocketProxy(logger *slog.Logger, socketPath string) *SocketProxy {
 				realIP = strings.TrimSpace(realIP)
 			}
 			r.Out.Header.Set("X-Real-IP", realIP)
-			
+
 			// Handle X-Forwarded-For header (append to existing or create new)
 			if existingForwarded := r.In.Header.Get("X-Forwarded-For"); existingForwarded != "" {
 				r.Out.Header.Set("X-Forwarded-For", existingForwarded+", "+realIP)
 			} else {
 				r.Out.Header.Set("X-Forwarded-For", realIP)
 			}
-			
+
 			// Set forwarded protocol
 			scheme := "http"
 			if r.In.TLS != nil {
@@ -97,8 +97,8 @@ func NewSocketProxy(logger *slog.Logger, socketPath string) *SocketProxy {
 
 // ServeHTTP implements http.Handler.
 func (ip *SocketProxy) ServeHTTP(w http.ResponseWriter, r *http.Request) {
-	ip.logger.Info("Proxying request", 
-		"method", r.Method, 
+	ip.logger.Info("Proxying request",
+		"method", r.Method,
 		"path", r.URL.Path,
 		"remote_addr", r.RemoteAddr,
 		"host", r.Host,

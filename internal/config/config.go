@@ -43,6 +43,16 @@ type IronicConfig struct {
 	Enabled            bool         `mapstructure:"enabled"`
 	SupervisorEnabled  bool         `mapstructure:"supervisor_enabled"`
 	DatabaseConnection string       `mapstructure:"database_connection"`
+	ConfigPath         string       `mapstructure:"config_path"`
+	SkipDBSync         bool         `mapstructure:"skip_db_sync"`
+}
+
+type TalosConfig struct {
+	Enabled           bool     `mapstructure:"enabled"`
+	BaseURL           string   `mapstructure:"base_url"`
+	CacheDirectory    string   `mapstructure:"cache_directory"`
+	MaxCacheSize      int64    `mapstructure:"max_cache_size"`
+	DefaultExtensions []string `mapstructure:"default_extensions"`
 }
 
 type UnifiConfig struct {
@@ -180,6 +190,7 @@ type Config struct {
 	ResetDelaySec   int            `mapstructure:"reset_delay_sec"`
 	FirmwarePath    string         `mapstructure:"firmware_path"`
 	Ironic          IronicConfig   `mapstructure:"ironic"`
+	Talos           TalosConfig    `mapstructure:"talos"`
 }
 
 func (c *Config) GetIpxeHttpUrl() (*url.URL, error) {
@@ -337,6 +348,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.password", "")
 	viper.SetDefault("ironic.socket.path", "/tmp/ironic.sock")
 	viper.SetDefault("ironic.socket.mode", "0666")
+	viper.SetDefault("ironic.config_path", "/etc/ironic/ironic.conf")
 	viper.SetDefault("ironic.public_endpoint", "")
 	viper.SetDefault("ironic.rpc.enabled", false)
 	viper.SetDefault("ironic.rpc.socket.path", "/tmp/ironic-rpc.sock")
@@ -345,6 +357,13 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.enabled", false)
 	viper.SetDefault("ironic.supervisor_enabled", false)
 	viper.SetDefault("ironic.database_connection", "sqlite:////var/lib/ironic/ironic.db")
+	viper.SetDefault("ironic.skip_db_sync", false)
+
+	viper.SetDefault("talos.enabled", false)
+	viper.SetDefault("talos.base_url", "https://factory.talos.dev")
+	viper.SetDefault("talos.cache_directory", "/tmp/")
+	viper.SetDefault("talos.max_cache_size", int64(0)) // 0 = unlimited
+	viper.SetDefault("talos.default_extensions", []string{})
 
 	viper.SetDefault("otel.endpoint", "")
 	viper.SetDefault("otel.insecure", true)

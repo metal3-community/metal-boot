@@ -8,14 +8,15 @@ import (
 	"os"
 	"os/exec"
 	"path/filepath"
+	"strings"
 	"sync"
 	"syscall"
 	"time"
+
+	"gopkg.in/yaml.v3"
 )
 
 const (
-	ironicSocketPath    = "/tmp/ironic.sock"
-	ironicConfigPath    = "/etc/ironic/ironic.conf"
 	healthCheckInterval = 30 * time.Second
 	shutdownTimeout     = 30 * time.Second
 )
@@ -43,6 +44,26 @@ type Process struct {
 // NewProcessManager creates a new process manager.
 func NewProcessManager(ctx context.Context, logger *slog.Logger, config *Config) *ProcessManager {
 	ctx, cancel := context.WithCancel(ctx)
+
+	// Set default paths if not configured
+	if config != nil {
+		if config.SocketPath == "" {
+			config.SocketPath = "/tmp/ironic.sock"
+		}
+		if config.ConfigPath == "" {
+			config.ConfigPath = "/etc/ironic/ironic.conf"
+		}
+		if config.SharedRoot == "" {
+			config.SharedRoot = "/shared"
+		}
+
+		// Apply all default configuration values
+		config.SetDefaults()
+
+		// Set runtime-specific paths
+		config.SetRuntimePaths(config.SocketPath, config.SharedRoot)
+	}
+
 	return &ProcessManager{
 		processes: make(map[string]*Process),
 		ctx:       ctx,
@@ -50,6 +71,107 @@ func NewProcessManager(ctx context.Context, logger *slog.Logger, config *Config)
 		logger:    logger,
 		config:    config,
 	}
+}
+
+// sharedPath constructs a path relative to the configured shared root.
+func (pm *ProcessManager) sharedPath(path string) string {
+	if pm.config == nil || pm.config.SharedRoot == "" {
+		return "/shared" + path
+	}
+	return pm.config.SharedRoot + path
+}
+
+// isMariaDB returns true if the database connection is not SQLite.
+func (pm *ProcessManager) isMariaDB() bool {
+	if pm.config == nil || pm.config.Database.Connection == "" {
+		return false
+	}
+	return !strings.HasPrefix(pm.config.Database.Connection, "sqlite://")
+}
+
+// runIronicDbsync runs database synchronization before starting Ironic.
+func (pm *ProcessManager) runIronicDbsync() error {
+	pm.logger.Info("Running Ironic database synchronization")
+
+	if pm.isMariaDB() {
+		// MariaDB: retry upgrade until success
+		pm.logger.Debug("Using MariaDB, running upgrade with retry logic")
+		for {
+			cmd := exec.CommandContext(
+				pm.ctx,
+				"ironic-dbsync",
+				"--config-file",
+				pm.config.ConfigPath,
+				"upgrade",
+			)
+			if err := cmd.Run(); err != nil {
+				pm.logger.Warn("ironic-dbsync failed, retrying", "error", err)
+				select {
+				case <-pm.ctx.Done():
+					return fmt.Errorf("database sync cancelled: %w", pm.ctx.Err())
+				case <-time.After(1 * time.Second):
+					continue
+				}
+			}
+			pm.logger.Info("Database upgrade completed successfully")
+			break
+		}
+	} else {
+		// SQLite: copy template and create schema if needed
+		pm.logger.Debug("Using SQLite, checking schema version")
+
+		// Create database directory if needed
+		dbDir := pm.sharedPath("/var/lib/ironic")
+		if err := os.MkdirAll(dbDir, 0o755); err != nil {
+			return fmt.Errorf("failed to create database directory: %w", err)
+		}
+
+		// Copy template database if it doesn't exist
+		dbPath := filepath.Join(dbDir, "ironic.sqlite")
+		templatePath := "/var/lib/ironic/ironic.sqlite"
+
+		if _, err := os.Stat(dbPath); os.IsNotExist(err) {
+			if _, err := os.Stat(templatePath); err == nil {
+				if err := pm.copyFile(templatePath, dbPath); err != nil {
+					pm.logger.Warn("Failed to copy template database", "error", err)
+				} else {
+					pm.logger.Debug("Copied template database", "from", templatePath, "to", dbPath)
+				}
+			}
+		}
+
+		// Check database version
+		versionCmd := exec.CommandContext(pm.ctx, "ironic-dbsync", "--config-file", pm.config.ConfigPath, "version")
+		output, err := versionCmd.Output()
+		if err != nil {
+			return fmt.Errorf("failed to check database version: %w", err)
+		}
+
+		version := strings.TrimSpace(string(output))
+		pm.logger.Debug("Database version", "version", version)
+
+		if version == "None" {
+			pm.logger.Info("Creating database schema")
+			createCmd := exec.CommandContext(pm.ctx, "ironic-dbsync", "--config-file", pm.config.ConfigPath, "create_schema")
+			if err := createCmd.Run(); err != nil {
+				return fmt.Errorf("failed to create database schema: %w", err)
+			}
+			pm.logger.Info("Database schema created successfully")
+		} else {
+			pm.logger.Info("Database schema already exists", "version", version)
+		}
+	}
+
+	return nil
+}
+
+// copyFile copies a file from src to dst.
+func (pm *ProcessManager) copyFile(src, dst string) error {
+	data, err := os.ReadFile(src)
+	if err != nil {
+		return err
+	}
+	return os.WriteFile(dst, data, 0o644)
 }
 
 // Start begins supervising all processes.
@@ -66,10 +188,24 @@ func (pm *ProcessManager) Start() error {
 		return fmt.Errorf("failed to generate Ironic config: %w", err)
 	}
 
+	// Create default policy file
+	if err := pm.createDefaultPolicy(); err != nil {
+		return fmt.Errorf("failed to create default policy: %w", err)
+	}
+
+	// Run database synchronization (unless skipped)
+	if !pm.config.SkipDBSync {
+		if err := pm.runIronicDbsync(); err != nil {
+			return fmt.Errorf("failed to synchronize database: %w", err)
+		}
+	} else {
+		pm.logger.Info("Skipping database synchronization (SkipDBSync=true)")
+	}
+
 	// Start all-in-one Ironic process
 	if err := pm.startProcess("ironic", []string{
 		"/usr/bin/ironic",
-		"--config-file", ironicConfigPath,
+		"--config-file", pm.config.ConfigPath,
 	}); err != nil {
 		return fmt.Errorf("failed to start ironic: %w", err)
 	}
@@ -83,13 +219,13 @@ func (pm *ProcessManager) Start() error {
 
 // prepareSocketDir ensures the socket directory is ready.
 func (pm *ProcessManager) prepareSocketDir() error {
-	socketDir := filepath.Dir(ironicSocketPath)
+	socketDir := filepath.Dir(pm.config.SocketPath)
 	if err := os.MkdirAll(socketDir, 0o755); err != nil {
 		return err
 	}
 
 	// Remove existing socket if it exists
-	if err := os.RemoveAll(ironicSocketPath); err != nil && !os.IsNotExist(err) {
+	if err := os.RemoveAll(pm.config.SocketPath); err != nil && !os.IsNotExist(err) {
 		return err
 	}
 
@@ -98,7 +234,7 @@ func (pm *ProcessManager) prepareSocketDir() error {
 
 // generateIronicConfig creates the Ironic configuration file.
 func (pm *ProcessManager) generateIronicConfig() error {
-	configDir := filepath.Dir(ironicConfigPath)
+	configDir := filepath.Dir(pm.config.ConfigPath)
 	if err := os.MkdirAll(configDir, 0o755); err != nil {
 		return err
 	}
@@ -108,59 +244,12 @@ func (pm *ProcessManager) generateIronicConfig() error {
 		cfg = &Config{}
 	}
 
-	// Set default values for all-in-one operation with Unix sockets
-	if cfg.Default.LogFile == "" {
-		cfg.Default.LogFile = "/shared/log/ironic/ironic.log"
-	}
-
-	if cfg.Default.RPCTransport == "" {
-		cfg.Default.RPCTransport = "json-rpc"
-	}
-
-	if cfg.API.UnixSocket == "" {
-		cfg.API.UnixSocket = ironicSocketPath
-	}
-
-	if cfg.API.UnixSocketMode == "" {
-		cfg.API.UnixSocketMode = "0666"
-	}
-
-	if cfg.JSONRPC.UnixSocket == "" {
-		cfg.JSONRPC.UnixSocket = "/tmp/ironic-rpc.sock"
-	}
-
-	if cfg.JSONRPC.UnixSocketMode == "" {
-		cfg.JSONRPC.UnixSocketMode = "0666"
-	}
-
-	if cfg.JSONRPC.AuthStrategy == "" {
-		cfg.JSONRPC.AuthStrategy = "noauth"
-	}
-
-	if cfg.OsloMessagingNotifications.Driver == "" {
-		cfg.OsloMessagingNotifications.Driver = "noop"
-	}
-
-	if cfg.Conductor.APIURL == "" {
-		cfg.Conductor.APIURL = fmt.Sprintf("http+unix://%s", ironicSocketPath)
-	}
-
-	// Set up database for all-in-one operation
-	if cfg.Database.Connection == "" {
-		cfg.Database.Connection = "sqlite:////var/lib/ironic/ironic.db"
-	}
-
-	// Configure for standalone operation
-	if cfg.Default.AuthStrategy == "" {
-		cfg.Default.AuthStrategy = "noauth"
-	}
-
 	config, err := cfg.Marshal()
 	if err != nil {
 		return fmt.Errorf("failed to marshal Ironic config: %w", err)
 	}
 
-	return os.WriteFile(ironicConfigPath, config, 0o644)
+	return os.WriteFile(pm.config.ConfigPath, config, 0o644)
 }
 
 // startProcess starts and supervises a single process.
@@ -322,7 +411,7 @@ func (pm *ProcessManager) performHealthChecks() {
 
 // checkSocketHealth verifies the Unix socket is responsive.
 func (pm *ProcessManager) checkSocketHealth() error {
-	conn, err := net.DialTimeout("unix", ironicSocketPath, 5*time.Second)
+	conn, err := net.DialTimeout("unix", pm.config.SocketPath, 5*time.Second)
 	if err != nil {
 		return err
 	}
@@ -361,4 +450,53 @@ func (pm *ProcessManager) Shutdown() {
 			"Shutdown timeout reached, some processes may not have stopped gracefully",
 		)
 	}
+}
+
+// createDefaultPolicy creates a default policy.yaml file for Ironic with the specified permissions.
+func (pm *ProcessManager) createDefaultPolicy() error {
+	// Default policy configuration as a map
+	policyMap := map[string]string{
+		"show_password":                           "",
+		"show_instance_secrets":                   "",
+		"baremetal:node:get:last_error":           "",
+		"baremetal:node:get:reservation":          "",
+		"baremetal:node:get:driver_internal_info": "",
+		"baremetal:node:get:driver_info":          "",
+		"baremetal:node:update:driver_info":       "",
+		"baremetal:allocation:get":                "",
+		"baremetal:allocation:list_all":           "",
+		"baremetal:node:update:properties":        "",
+		"baremetal:node:update:chassis_uuid":      "",
+		"baremetal:node:update:instance_uuid":     "",
+		"baremetal:node:update:lessee":            "",
+		"baremetal:node:update:owner":             "",
+		"baremetal:node:update:driver_interfaces": "",
+		"baremetal:node:update:network_data":      "",
+		"baremetal:node:update:conductor_group":   "",
+		"baremetal:node:update:name":              "",
+		"baremetal:node:update:retired":           "",
+	}
+
+	// Marshal the map to YAML
+	yamlData, err := yaml.Marshal(policyMap)
+	if err != nil {
+		return fmt.Errorf("failed to marshal policy to YAML: %w", err)
+	}
+
+	// Determine the policy file path (in the same directory as the Ironic config)
+	configDir := filepath.Dir(pm.config.ConfigPath)
+	policyPath := filepath.Join(configDir, "policy.yaml")
+
+	// Ensure the directory exists
+	if err := os.MkdirAll(configDir, 0o755); err != nil {
+		return fmt.Errorf("failed to create config directory: %w", err)
+	}
+
+	// Write the policy file
+	if err := os.WriteFile(policyPath, yamlData, 0o644); err != nil {
+		return fmt.Errorf("failed to write policy file: %w", err)
+	}
+
+	pm.logger.Debug("Created default policy file", "path", policyPath)
+	return nil
 }

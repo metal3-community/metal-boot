@@ -19,6 +19,11 @@ builds:
       - amd64
       - arm64
 
+upx:
+  - enabled: true
+    compress: best
+    lzma: true
+
 kos:
   - repositories:
       - "ghcr.io/{{.Env.REPO}}"
@@ -35,3 +40,10 @@ kos:
     disable: false
     base_image: docker.io/chainguard/static
     local_domain: "ghcr.io/metal3-community/metal-boot"
+
+docker_signs:
+  - cmd: cosign
+    args:
+      - "sign"
+      - "--yes"
+      - "${artifact}@${digest}"
