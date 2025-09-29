@@ -8,11 +8,13 @@ import (
 	"net"
 	"net/http"
 	"net/url"
+	"os"
 	"path"
 	"strings"
 
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/config"
+	"github.com/metal3-community/metal-boot/internal/util"
 )
 
 // scriptHandler handles iPXE script requests.
@@ -33,20 +35,18 @@ func New(logger *slog.Logger, cfg *config.Config, backend backend.BackendReader)
 
 // ServeHTTP handles iPXE script requests.
 // It supports two path patterns:
-// 1. Legacy: /<mac address>/auto.ipxe
+// 1. Legacy: /<mac address>/boot.ipxe
 // 2. New: v1/boot/<mac address>/boot.ipxe.
 func (h *scriptHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	reqLogger := h.logger.With("method", r.Method, "path", r.URL.Path)
 	reqLogger.Debug("Handling iPXE script request")
 
 	basePath := path.Base(r.URL.Path)
-	if basePath != "auto.ipxe" && basePath != "boot.ipxe" {
+	if basePath != "boot.ipxe" {
 		reqLogger.Info("URL path not supported")
 		w.WriteHeader(http.StatusNotFound)
 		return
 	}
-
-	ctx := r.Context()
 
 	// Should we serve a custom ipxe script?
 	// This gates serving PXE file by
@@ -57,53 +57,58 @@ func (h *scriptHandler) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	// without a tink workflow present.
 
 	// Try to get the MAC address from the URL path, if not available get the source IP address.
-	if ha, err := getMAC(r.URL.Path); err == nil {
-		hw, err := h.getByMac(ctx, ha)
-		if err != nil && h.config.IpxeHttpScript.StaticIPXEEnabled {
-			reqLogger.Info("Serving static ipxe script", "mac", ha, "error", err)
-			h.serveStaticIPXEScript(w)
-			return
-		}
-		if err != nil || !hw.AllowNetboot {
-			w.WriteHeader(http.StatusNotFound)
-			reqLogger.Info(
-				"The hardware data for this machine, or lack thereof, does not allow it to pxe",
-				"client", ha,
-				"error", err,
-			)
-			return
-		}
-		h.serveBootScript(ctx, w, path.Base(r.URL.Path), hw)
-		return
-	}
 
-	if ip, err := getIP(r.RemoteAddr); err == nil {
-		hw, err := h.getByIP(ctx, ip)
-		if err != nil && h.config.IpxeHttpScript.StaticIPXEEnabled {
-			reqLogger.Info("Serving static ipxe script", "client", r.RemoteAddr, "error", err)
-			h.serveStaticIPXEScript(w)
-			return
-		}
-		if err != nil || !hw.AllowNetboot {
-			w.WriteHeader(http.StatusNotFound)
-			reqLogger.Info(
-				"The hardware data for this machine, or lack thereof, does not allow it to pxe",
-				"client", r.RemoteAddr,
-				"error", err,
-			)
-			return
-		}
-		h.serveBootScript(ctx, w, path.Base(r.URL.Path), hw)
-		return
-	}
+	macPath := r.PathValue("mac")
+	if macPath != "" {
+		// If the MAC address is provided in the URL path, use it directly.
+		if _, err := net.ParseMAC(macPath); err == nil {
 
-	// If we get here, we were unable to get the MAC address from the URL path or the source IP address.
-	w.WriteHeader(http.StatusNotFound)
-	reqLogger.Info(
-		"Unable to get the MAC address from the URL path or the source IP address",
-		"client", r.RemoteAddr,
-		"url_path", r.URL.Path,
-	)
+			rfs, err := os.OpenRoot(h.config.Static.RootDirectory)
+			if err != nil {
+				reqLogger.Error("Failed to open static root directory", "error", err)
+				w.WriteHeader(http.StatusInternalServerError)
+				return
+			}
+			defer rfs.Close()
+
+			cfgPath := path.Join("pxelinux.cfg", strings.ReplaceAll(macPath, ":", "-"))
+			fallbackPath := "inspector.ipxe"
+
+			if util.ExistsInRoot(rfs, cfgPath) {
+				pxeConfig, err := rfs.ReadFile(cfgPath)
+				if err != nil {
+					reqLogger.Error("Failed to read PXE config file", "file", cfgPath, "error", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				if _, err := w.Write(pxeConfig); err != nil {
+					reqLogger.Error("Unable to write PXE config", "error", err)
+					return
+				}
+				reqLogger.Info("Served PXE config file", "file", cfgPath)
+				return
+			} else if util.ExistsInRoot(rfs, fallbackPath) {
+				inspectorScript, err := rfs.ReadFile(fallbackPath)
+				if err != nil {
+					reqLogger.Error("Failed to read inspector iPXE script", "file", fallbackPath, "error", err)
+					w.WriteHeader(http.StatusInternalServerError)
+					return
+				}
+				w.Header().Set("Content-Type", "text/plain")
+				if _, err := w.Write(inspectorScript); err != nil {
+					reqLogger.Error("Unable to write inspector iPXE script", "error", err)
+					return
+				}
+				reqLogger.Info("Served inspector iPXE script", "file", fallbackPath)
+				return
+			} else {
+				reqLogger.Info("No PXE config or inspector script found, serving static iPXE script")
+				h.serveStaticIPXEScript(w)
+				return
+			}
+		}
+	}
 }
 
 type data struct {
@@ -201,7 +206,17 @@ func (h *scriptHandler) serveBootScript(
 	}
 
 	switch name {
-	case "auto.ipxe":
+	case "boot.ipxe":
+		if hw.IPXEScript != "" {
+			_, err := w.Write([]byte(hw.IPXEScript))
+			if err != nil {
+				w.WriteHeader(http.StatusInternalServerError)
+				reqLogger.Error("Error writing iPXE script", "error", err)
+				return
+			}
+			return
+		}
+
 		s, err := h.defaultScript(hw)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -253,15 +268,6 @@ func (h *scriptHandler) customScript(hw data) (string, error) {
 	return "", errors.New("no custom script or chain defined in the hardware data")
 }
 
-func getIP(remoteAddr string) (net.IP, error) {
-	host, _, err := net.SplitHostPort(remoteAddr)
-	if err != nil {
-		return net.IP{}, fmt.Errorf("error parsing client address: %w: client: %v", err, remoteAddr)
-	}
-	ip := net.ParseIP(host)
-	return ip, nil
-}
-
 func getMAC(urlPath string) (net.HardwareAddr, error) {
 	// Handle new pattern: v1/boot/<MAC>/boot.ipxe
 	if strings.HasPrefix(urlPath, "/v1/boot/") {
@@ -285,7 +291,7 @@ func getMAC(urlPath string) (net.HardwareAddr, error) {
 		return net.HardwareAddr{}, fmt.Errorf("unsupported v1 path pattern")
 	}
 
-	// Handle legacy pattern: /<MAC>/auto.ipxe
+	// Handle legacy pattern: /<MAC>/boot.ipxe
 	mac := path.Base(path.Dir(urlPath))
 	ha, err := net.ParseMAC(mac)
 	if err != nil {

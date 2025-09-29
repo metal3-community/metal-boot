@@ -1,6 +1,11 @@
 package ironic
 
 import (
+	"fmt"
+	"net/url"
+	"path/filepath"
+	"strings"
+
 	"github.com/metal3-community/metal-boot/internal/util"
 	toml "github.com/pelletier/go-toml/v2"
 )
@@ -69,6 +74,7 @@ type AgentConfig struct {
 	DeployLogsLocalPath string `toml:"deploy_logs_local_path,omitempty"`
 	MaxCommandAttempts  int    `toml:"max_command_attempts,omitempty"`
 	CertificatesPath    string `toml:"certificates_path,omitempty"`
+	ImageDownloadSource string `toml:"image_download_source,omitempty"`
 }
 
 type APIConfig struct {
@@ -81,20 +87,60 @@ type APIConfig struct {
 	APIWorkers     int    `toml:"api_workers,omitempty"`
 }
 
+type ArchMap map[string]string
+
+func (a *ArchMap) MarshalText() ([]byte, error) {
+	if a == nil {
+		return []byte{}, nil
+	}
+	am := *a
+	if len(am) == 0 {
+		return []byte{}, nil
+	}
+	entries := []string{}
+	for k, v := range am {
+		entries = append(entries, fmt.Sprintf("%s:%s", k, v))
+	}
+	return []byte(strings.Join(entries, ",")), nil
+}
+
+func (a *ArchMap) UnmarshalText(text []byte) error {
+	if len(text) == 0 {
+		return nil
+	}
+	am := ArchMap{}
+	ts := strings.TrimPrefix(string(text), "{")
+	ts = strings.TrimSuffix(ts, "}")
+	for _, entry := range strings.Split(ts, ",") {
+		parts := strings.SplitN(entry, ":", 2)
+		if len(parts) != 2 {
+			return fmt.Errorf("invalid ArchMap entry: %s", entry)
+		}
+		key := strings.TrimSpace(parts[0])
+		value := strings.TrimSpace(parts[1])
+		if key == "" || value == "" {
+			return fmt.Errorf("invalid ArchMap entry: %s", entry)
+		}
+		am[key] = value
+	}
+	*a = am
+	return nil
+}
+
 type ConductorConfig struct {
-	AutomatedClean             *bool  `toml:"automated_clean,omitempty"`
-	APIURL                     string `toml:"api_url,omitempty"`
-	DeployCallbackTimeout      int    `toml:"deploy_callback_timeout,omitempty"`
-	BootloaderByArch           string `toml:"bootloader_by_arch,omitempty"`
-	VerifyStepPriorityOverride string `toml:"verify_step_priority_override,omitempty"`
-	NodeHistory                *bool  `toml:"node_history,omitempty"`
-	PowerStateChangeTimeout    int    `toml:"power_state_change_timeout,omitempty"`
-	DeployKernel               string `toml:"deploy_kernel,omitempty"`
-	DeployKernelByArch         string `toml:"deploy_kernel_by_arch,omitempty"`
-	DeployRamdisk              string `toml:"deploy_ramdisk,omitempty"`
-	DeployRamdiskByArch        string `toml:"deploy_ramdisk_by_arch,omitempty"`
-	DisableDeepImageInspection *bool  `toml:"disable_deep_image_inspection,omitempty"`
-	FileURLAllowedPaths        string `toml:"file_url_allowed_paths,omitempty"`
+	AutomatedClean             *bool   `toml:"automated_clean,omitempty"`
+	APIURL                     string  `toml:"api_url,omitempty"`
+	DeployCallbackTimeout      int     `toml:"deploy_callback_timeout,omitempty"`
+	BootloaderByArch           ArchMap `toml:"bootloader_by_arch,omitempty"`
+	VerifyStepPriorityOverride string  `toml:"verify_step_priority_override,omitempty"`
+	NodeHistory                *bool   `toml:"node_history,omitempty"`
+	PowerStateChangeTimeout    int     `toml:"power_state_change_timeout,omitempty"`
+	DeployKernel               string  `toml:"deploy_kernel,omitempty"`
+	DeployKernelByArch         ArchMap `toml:"deploy_kernel_by_arch,omitempty"`
+	DeployRamdisk              string  `toml:"deploy_ramdisk,omitempty"`
+	DeployRamdiskByArch        ArchMap `toml:"deploy_ramdisk_by_arch,omitempty"`
+	DisableDeepImageInspection *bool   `toml:"disable_deep_image_inspection,omitempty"`
+	FileURLAllowedPaths        string  `toml:"file_url_allowed_paths,omitempty"`
 }
 
 type DatabaseConfig struct {
@@ -278,6 +324,9 @@ func (c *Config) SetDefaults() {
 	if c.Agent.MaxCommandAttempts == 0 {
 		c.Agent.MaxCommandAttempts = 30
 	}
+	if c.Agent.ImageDownloadSource == "" {
+		c.Agent.ImageDownloadSource = "http"
+	}
 
 	// API section
 	if c.API.HostIP == "" {
@@ -410,7 +459,7 @@ func (c *Config) SetDefaults() {
 		c.PXE.BootRetryTimeout = 1200
 	}
 	if c.PXE.KernelAppendParams == "" {
-		c.PXE.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+		c.PXE.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 systemd.journald.forward_to_console=yes"
 	}
 	if c.PXE.EnableNetbootFallback == nil {
 		c.PXE.EnableNetbootFallback = util.Ptr(true)
@@ -427,12 +476,12 @@ func (c *Config) SetDefaults() {
 		c.Redfish.UseSwift = util.Ptr(false)
 	}
 	if c.Redfish.KernelAppendParams == "" {
-		c.Redfish.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+		c.Redfish.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 systemd.journald.forward_to_console=yes"
 	}
 
 	// ILO section
 	if c.ILO.KernelAppendParams == "" {
-		c.ILO.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+		c.ILO.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 systemd.journald.forward_to_console=yes"
 	}
 	if c.ILO.UseWebServerForImages == nil {
 		c.ILO.UseWebServerForImages = util.Ptr(true)
@@ -440,7 +489,7 @@ func (c *Config) SetDefaults() {
 
 	// IRMC section
 	if c.IRMC.KernelAppendParams == "" {
-		c.IRMC.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 sshkey=\"\" systemd.journald.forward_to_console=yes"
+		c.IRMC.KernelAppendParams = "nofb nomodeset vga=normal ipa-insecure=1 fips=1 systemd.journald.forward_to_console=yes"
 	}
 
 	// ProcessManager-specific defaults for Unix socket operation
@@ -478,26 +527,90 @@ func (c *Config) SetRuntimePaths(socketPath, sharedRoot string) {
 	if c.Agent.DeployLogsLocalPath == "" {
 		c.Agent.DeployLogsLocalPath = sharedRoot + "/log/ironic/deploy"
 	}
-	if c.Conductor.FileURLAllowedPaths == "" {
-		c.Conductor.FileURLAllowedPaths = sharedRoot + "/html/images,/templates"
-	}
 	if c.Deploy.HTTPRoot == "" {
-		c.Deploy.HTTPRoot = sharedRoot + "/html/"
+		c.Deploy.HTTPRoot = filepath.Join(sharedRoot, "html")
+	}
+	if c.Conductor.FileURLAllowedPaths == "" {
+		c.Conductor.FileURLAllowedPaths = strings.Join([]string{
+			c.Deploy.HTTPRoot,
+			"/templates",
+		}, ",")
 	}
 	if c.OsloMessagingNotifications.Location == "" {
 		c.OsloMessagingNotifications.Location = sharedRoot + "/ironic_prometheus_exporter"
 	}
 	if c.PXE.ImagesPath == "" {
-		c.PXE.ImagesPath = sharedRoot + "/html/tmp"
+		c.PXE.ImagesPath = filepath.Join(c.Deploy.HTTPRoot, "tmp")
 	}
 	if c.PXE.InstanceMasterPath == "" {
-		c.PXE.InstanceMasterPath = sharedRoot + "/html/master_images"
+		c.PXE.InstanceMasterPath = filepath.Join(c.Deploy.HTTPRoot, "master_images")
+	}
+	archList := []string{"x86_64", "aarch64"}
+	archLookup := map[string]string{
+		"x86_64":  "amd64",
+		"aarch64": "arm64",
+	}
+	bootloaderLookup := map[string]string{
+		"x86_64":  "ipxe.efi",
+		"aarch64": "snp.efi",
+	}
+	// Set architecture-specific defaults for bootloader, kernel, and ramdisk
+	if len(c.Conductor.BootloaderByArch) == 0 {
+		c.Conductor.BootloaderByArch = ArchMap{}
+		for _, arch := range archList {
+			bootloaderFile, ok := bootloaderLookup[arch]
+			if !ok {
+				bootloaderFile = "ipxe.efi"
+			}
+			bootloaderPath, err := url.JoinPath(c.Deploy.ExternalHTTPURL, bootloaderFile)
+			if err == nil {
+				c.Conductor.BootloaderByArch[arch] = bootloaderPath
+			}
+		}
+	}
+	if len(c.Conductor.DeployKernelByArch) == 0 {
+		c.Conductor.DeployKernelByArch = ArchMap{}
+		for _, arch := range archList {
+			archPath, ok := archLookup[arch]
+			if !ok {
+				archPath = arch
+			}
+			fileUrl, err := url.JoinPath(
+				"file://",
+				filepath.Join(c.Deploy.HTTPRoot, "images", archPath, "ironic-python-agent.kernel"),
+			)
+			if err == nil {
+				c.Conductor.DeployKernelByArch[arch] = fileUrl
+			}
+		}
+	}
+	if len(c.Conductor.DeployRamdiskByArch) == 0 {
+		c.Conductor.DeployRamdiskByArch = ArchMap{}
+		for _, arch := range archList {
+			archPath, ok := archLookup[arch]
+			if !ok {
+				archPath = arch
+			}
+			fileUrl, err := url.JoinPath(
+				"file://",
+				filepath.Join(
+					c.Deploy.HTTPRoot,
+					"images",
+					archPath,
+					"ironic-python-agent.initramfs",
+				),
+			)
+			if err == nil {
+				c.Conductor.DeployRamdiskByArch[arch] = fileUrl
+			}
+		}
+	}
+
+	if c.PXE.TFTPRoot == "" {
+		c.PXE.TFTPRoot = filepath.Join(sharedRoot, "tftpboot")
 	}
 	if c.PXE.TFTPMasterPath == "" {
-		c.PXE.TFTPMasterPath = sharedRoot + "/tftpboot/master_images"
-	}
-	if c.PXE.TFTPRoot == "" {
-		c.PXE.TFTPRoot = sharedRoot + "/tftpboot"
+		c.PXE.TFTPMasterPath = filepath.Join(c.PXE.TFTPRoot, "master_images")
 	}
 }
 

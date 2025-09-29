@@ -409,6 +409,7 @@ func (b *Backend) leaseToDHCP(lease *lease.Lease) (*data.DHCP, error) {
 
 // getNetbootData gets netboot configuration for a MAC address.
 func (b *Backend) getNetbootData(mac net.HardwareAddr) *data.Netboot {
+	ipxeUrl := filepath.Join("v1", "boot", mac.String(), "boot.ipxe")
 	// Get the host entry for this MAC
 	if util.IsRaspberryPI(mac) {
 		cfgPath := fmt.Sprintf("pxelinux.cfg/%s", mac.String())
@@ -432,7 +433,7 @@ func (b *Backend) getNetbootData(mac net.HardwareAddr) *data.Netboot {
 								IPXEScriptURL: &url.URL{
 									Scheme: "http",
 									Host:   b.httpServer,
-									Path:   cfgPath,
+									Path:   ipxeUrl,
 								},
 							}
 						}
@@ -446,7 +447,7 @@ func (b *Backend) getNetbootData(mac net.HardwareAddr) *data.Netboot {
 		IPXEScriptURL: &url.URL{
 			Scheme: "http",
 			Host:   b.httpServer,
-			Path:   "/boot.ipxe",
+			Path:   ipxeUrl,
 		},
 	}
 }

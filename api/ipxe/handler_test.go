@@ -36,8 +36,8 @@ func TestHandler_ServeHTTP_RoutingLogic(t *testing.T) {
 		expectedStatus int
 	}{
 		{
-			name:           "script request - legacy auto.ipxe",
-			path:           "/auto.ipxe",
+			name:           "script request - legacy boot.ipxe",
+			path:           "/boot.ipxe",
 			expectedStatus: http.StatusNotFound, // No backend configured, so script handler returns 404
 		},
 		{

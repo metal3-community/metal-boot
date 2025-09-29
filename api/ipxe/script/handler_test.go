@@ -14,7 +14,7 @@ func TestGetMAC(t *testing.T) {
 	}{
 		{
 			name:     "legacy path pattern",
-			urlPath:  "/d8:3a:dd:5a:44:36/auto.ipxe",
+			urlPath:  "/d8:3a:dd:5a:44:36/boot.ipxe",
 			expected: "d8:3a:dd:5a:44:36",
 		},
 		{
@@ -29,7 +29,7 @@ func TestGetMAC(t *testing.T) {
 		},
 		{
 			name:        "invalid MAC in legacy pattern",
-			urlPath:     "/invalid-mac/auto.ipxe",
+			urlPath:     "/invalid-mac/boot.ipxe",
 			expectError: true,
 		},
 		{

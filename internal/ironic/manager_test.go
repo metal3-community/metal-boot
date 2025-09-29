@@ -170,9 +170,9 @@ func TestConfig_SetDefaults(t *testing.T) {
 		if config.Default.Debug == nil || !*config.Default.Debug {
 			t.Errorf("Expected Debug to be true, got %v", config.Default.Debug)
 		}
-		if config.Default.RPCTransport != "json-rpc" {
+		if config.Default.RPCTransport != "none" {
 			t.Errorf(
-				"Expected RPCTransport to be 'json-rpc', got '%s'",
+				"Expected RPCTransport to be 'none', got '%s'",
 				config.Default.RPCTransport,
 			)
 		}
@@ -224,9 +224,9 @@ func TestConfig_SetDefaults(t *testing.T) {
 		}
 
 		// Verify other defaults are still set
-		if config.Default.RPCTransport != "json-rpc" {
+		if config.Default.RPCTransport != "none" {
 			t.Errorf(
-				"Expected RPCTransport to be 'json-rpc', got '%s'",
+				"Expected RPCTransport to be 'none', got '%s'",
 				config.Default.RPCTransport,
 			)
 		}

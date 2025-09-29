@@ -191,6 +191,7 @@ type Config struct {
 	FirmwarePath    string         `mapstructure:"firmware_path"`
 	Ironic          IronicConfig   `mapstructure:"ironic"`
 	Talos           TalosConfig    `mapstructure:"talos"`
+	SharedPath      string         `mapstructure:"shared_path"`
 }
 
 func (c *Config) GetIpxeHttpUrl() (*url.URL, error) {
@@ -279,6 +280,10 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.AddConfigPath(confDir)
 
+	sharedPath := "/shared"
+
+	viper.SetDefault("shared_path", sharedPath)
+
 	viper.SetDefault("reset_delay_sec", 45)
 
 	viper.SetDefault("address", netInfo.BindIP)
@@ -320,10 +325,10 @@ func NewConfig() (conf *Config, err error) {
 
 	viper.SetDefault("static.enabled", true)
 	viper.SetDefault("static.image_urls", []ImageURL{})
-	viper.SetDefault("static.root_directory", "/shared/html")
+	viper.SetDefault("static.root_directory", filepath.Join(sharedPath, "html"))
 
 	viper.SetDefault("dnsmasq.enabled", true)
-	viper.SetDefault("dnsmasq.root_directory", "/shared/dnsmasq")
+	viper.SetDefault("dnsmasq.root_directory", filepath.Join(sharedPath, "dnsmasq"))
 	viper.SetDefault("dnsmasq.auto_assign_enabled", false)
 	viper.SetDefault("dnsmasq.ip_pool_start", "192.168.1.100")
 	viper.SetDefault("dnsmasq.ip_pool_end", "192.168.1.200")
@@ -356,7 +361,7 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.rpc.socket.mode", "0666")
 	viper.SetDefault("ironic.enabled", false)
 	viper.SetDefault("ironic.supervisor_enabled", false)
-	viper.SetDefault("ironic.database_connection", "sqlite:////var/lib/ironic/ironic.db")
+	viper.SetDefault("ironic.database_connection", "sqlite:///var/lib/ironic/ironic.db")
 	viper.SetDefault("ironic.skip_db_sync", false)
 
 	viper.SetDefault("talos.enabled", false)

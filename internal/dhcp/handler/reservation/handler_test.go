@@ -109,7 +109,7 @@ func TestHandle(t *testing.T) {
 					ipxeScript: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "auto.ipxe",
+						Path:   "boot.ipxe",
 					},
 				},
 				IPAddr:  netip.MustParseAddr("127.0.0.1"),
@@ -158,7 +158,7 @@ func TestHandle(t *testing.T) {
 				YourIPAddr:    []byte{192, 168, 1, 100},
 				ServerIPAddr:  []byte{0, 0, 0, 0},
 				GatewayIPAddr: []byte{0, 0, 0, 0},
-				BootFileName:  "http://localhost:8181/auto.ipxe",
+				BootFileName:  "http://localhost:8181/boot.ipxe",
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptMessageType(dhcpv4.MessageTypeOffer),
 					dhcpv4.OptServerIdentifier(net.IP{127, 0, 0, 1}),
@@ -200,7 +200,7 @@ func TestHandle(t *testing.T) {
 					ipxeScript: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "auto.ipxe",
+						Path:   "boot.ipxe",
 					},
 				},
 				Netboot: Netboot{Enabled: true},
@@ -263,7 +263,7 @@ func TestHandle(t *testing.T) {
 				YourIPAddr:    []byte{192, 168, 1, 100},
 				ServerIPAddr:  []byte{0, 0, 0, 0},
 				GatewayIPAddr: []byte{0, 0, 0, 0},
-				BootFileName:  "http://localhost:8181/auto.ipxe",
+				BootFileName:  "http://localhost:8181/boot.ipxe",
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptMessageType(dhcpv4.MessageTypeAck),
 					dhcpv4.OptServerIdentifier(net.IP{127, 0, 0, 1}),
@@ -500,7 +500,7 @@ func TestUpdateMsg(t *testing.T) {
 					IPXEScriptURL: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "auto.ipxe",
+						Path:   "boot.ipxe",
 					},
 				},
 				msg: dhcpv4.MessageTypeDiscover,
@@ -510,7 +510,7 @@ func TestUpdateMsg(t *testing.T) {
 				ClientHWAddr: []byte{0x01, 0x02, 0x03, 0x04, 0x05, 0x06},
 				YourIPAddr:   []byte{192, 168, 1, 100},
 				ClientIPAddr: []byte{0, 0, 0, 0},
-				BootFileName: "http://localhost:8181/auto.ipxe",
+				BootFileName: "http://localhost:8181/boot.ipxe",
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptMessageType(dhcpv4.MessageTypeDiscover),
 					dhcpv4.OptServerIdentifier(net.IP{127, 0, 0, 1}),
@@ -538,7 +538,7 @@ func TestUpdateMsg(t *testing.T) {
 					ipxeScript: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "auto.ipxe",
+						Path:   "boot.ipxe",
 					},
 				},
 				// Listener: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 67),
@@ -623,7 +623,7 @@ func TestReadBackend(t *testing.T) {
 			},
 			wantNetboot: &data.Netboot{
 				AllowNetboot:  true,
-				IPXEScriptURL: &url.URL{Scheme: "http", Host: "localhost:8181", Path: "auto.ipxe"},
+				IPXEScriptURL: &url.URL{Scheme: "http", Host: "localhost:8181", Path: "boot.ipxe"},
 			},
 			wantErr: nil,
 		},
@@ -646,7 +646,7 @@ func TestReadBackend(t *testing.T) {
 					ipxeScript: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "auto.ipxe",
+						Path:   "boot.ipxe",
 					},
 				},
 				// Listener: netip.AddrPortFrom(netip.MustParseAddr("127.0.0.1"), 67),

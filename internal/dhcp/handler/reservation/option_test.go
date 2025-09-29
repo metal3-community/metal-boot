@@ -150,9 +150,9 @@ func TestBootfileAndNextServer(t *testing.T) {
 						dhcpv4.OptUserClass(dhcp.Ironic.String()),
 					),
 				},
-				iscript: &url.URL{Scheme: "http", Host: "localhost:8080", Path: "/auto.ipxe"},
+				iscript: &url.URL{Scheme: "http", Host: "localhost:8080", Path: "/boot.ipxe"},
 			},
-			wantBootFile: "http://localhost:8080/auto.ipxe",
+			wantBootFile: "http://localhost:8080/boot.ipxe",
 			wantNextSrv:  nil,
 		},
 		"success httpClient": {
@@ -296,7 +296,7 @@ func TestSetNetworkBootOpts(t *testing.T) {
 					return &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "/01-02-03-04-05-06/auto.ipxe",
+						Path:   "/01-02-03-04-05-06/boot.ipxe",
 					}
 				}},
 			},
@@ -315,12 +315,12 @@ func TestSetNetworkBootOpts(t *testing.T) {
 					IPXEScriptURL: &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "/01-02-03-04-05-06/auto.ipxe",
+						Path:   "/01-02-03-04-05-06/boot.ipxe",
 					},
 				},
 			},
 			want: &dhcpv4.DHCPv4{
-				BootFileName: "http://localhost:8181/01-02-03-04-05-06/auto.ipxe",
+				BootFileName: "http://localhost:8181/01-02-03-04-05-06/boot.ipxe",
 				Options: dhcpv4.OptionsFromList(
 					dhcpv4.OptGeneric(dhcpv4.OptionVendorSpecificInformation, dhcpv4.Options{
 						6:  []byte{8},
@@ -337,7 +337,7 @@ func TestSetNetworkBootOpts(t *testing.T) {
 					return &url.URL{
 						Scheme: "http",
 						Host:   "localhost:8181",
-						Path:   "/01-02-03-04-05-06/auto.ipxe",
+						Path:   "/01-02-03-04-05-06/boot.ipxe",
 					}
 				}},
 			},

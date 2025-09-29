@@ -156,7 +156,7 @@ func (h *Handler) Handle(ctx context.Context, conn *ipv4.PacketConn, p data.Pack
 		return
 	}
 
-	if strings.HasPrefix("http:///", reply.BootFileName) {
+	if strings.HasPrefix("http://", reply.BootFileName) {
 		ipxeScriptUrl := *h.Netboot.IPXEScriptURL(reply)
 		ipxeScriptUrl.Path = "/boot.ipxe"
 		reply.BootFileName = ipxeScriptUrl.String()

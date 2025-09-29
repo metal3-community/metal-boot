@@ -1,6 +1,7 @@
 package ironic
 
 import (
+	"reflect"
 	"testing"
 )
 
@@ -93,7 +94,7 @@ enabled_network_interfaces = "noop"
 enabled_power_interfaces = "ipmitool,fake,redfish,idrac-redfish,ilo"
 enabled_raid_interfaces = "no-raid,agent,fake,redfish,idrac-redfish,ilo5"
 enabled_vendor_interfaces = "no-vendor,ipmitool,idrac-redfish,redfish,ilo,fake"
-rpc_transport = "json-rpc"
+rpc_transport = "none"
 use_stderr = true
 hash_ring_algorithm = "sha256"
 my_ip = "0.0.0.0"
@@ -120,14 +121,14 @@ api_workers = 0
 [conductor]
 automated_clean = false
 deploy_callback_timeout = 4800
-bootloader_by_arch = ""
+bootloader_by_arch = "amd64:test,arm64:test"
 verify_step_priority_override = "management.clear_job_queue:90"
 node_history = false
 power_state_change_timeout = 120
 deploy_kernel = ""
-deploy_kernel_by_arch = ""
+deploy_kernel_by_arch = "amd64:test,arm64:test"
 deploy_ramdisk = ""
-deploy_ramdisk_by_arch = ""
+deploy_ramdisk_by_arch = "amd64:test,arm64:test"
 disable_deep_image_inspection = true
 file_url_allowed_paths = "/shared/html/images,/templates"
 
@@ -233,7 +234,7 @@ key_file = ""
 					EnabledPowerInterfaces:      "ipmitool,fake,redfish,idrac-redfish,ilo",
 					EnabledRaidInterfaces:       "no-raid,agent,fake,redfish,idrac-redfish,ilo5",
 					EnabledVendorInterfaces:     "no-vendor,ipmitool,idrac-redfish,redfish,ilo,fake",
-					RPCTransport:                "json-rpc",
+					RPCTransport:                "none",
 					UseStderr:                   boolPtr(true),
 					HashRingAlgorithm:           "sha256",
 					MyIP:                        "0.0.0.0",
@@ -260,14 +261,14 @@ key_file = ""
 				Conductor: ConductorConfig{
 					AutomatedClean:             boolPtr(false),
 					DeployCallbackTimeout:      4800,
-					BootloaderByArch:           "",
+					BootloaderByArch:           ArchMap{"amd64": "test", "arm64": "test"},
 					VerifyStepPriorityOverride: "management.clear_job_queue:90",
 					NodeHistory:                boolPtr(false),
 					PowerStateChangeTimeout:    120,
 					DeployKernel:               "",
-					DeployKernelByArch:         "",
+					DeployKernelByArch:         ArchMap{"amd64": "test", "arm64": "test"},
 					DeployRamdisk:              "",
-					DeployRamdiskByArch:        "",
+					DeployRamdiskByArch:        ArchMap{"amd64": "test", "arm64": "test"},
 					DisableDeepImageInspection: boolPtr(true),
 					FileURLAllowedPaths:        "/shared/html/images,/templates",
 				},
@@ -540,14 +541,14 @@ func configAPIEqual(a, b APIConfig) bool {
 func configConductorEqual(a, b ConductorConfig) bool {
 	return boolPtrEqual(a.AutomatedClean, b.AutomatedClean) &&
 		a.DeployCallbackTimeout == b.DeployCallbackTimeout &&
-		a.BootloaderByArch == b.BootloaderByArch &&
+		reflect.DeepEqual(a.BootloaderByArch, b.BootloaderByArch) &&
 		a.VerifyStepPriorityOverride == b.VerifyStepPriorityOverride &&
 		boolPtrEqual(a.NodeHistory, b.NodeHistory) &&
 		a.PowerStateChangeTimeout == b.PowerStateChangeTimeout &&
 		a.DeployKernel == b.DeployKernel &&
-		a.DeployKernelByArch == b.DeployKernelByArch &&
+		reflect.DeepEqual(a.DeployKernelByArch, b.DeployKernelByArch) &&
 		a.DeployRamdisk == b.DeployRamdisk &&
-		a.DeployRamdiskByArch == b.DeployRamdiskByArch &&
+		reflect.DeepEqual(a.DeployRamdiskByArch, b.DeployRamdiskByArch) &&
 		boolPtrEqual(a.DisableDeepImageInspection, b.DisableDeepImageInspection) &&
 		a.FileURLAllowedPaths == b.FileURLAllowedPaths
 }

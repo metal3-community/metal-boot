@@ -22,6 +22,7 @@ import (
 	"github.com/metal3-community/metal-boot/api/health"
 	"github.com/metal3-community/metal-boot/api/images/talos"
 	"github.com/metal3-community/metal-boot/api/ipxe"
+	"github.com/metal3-community/metal-boot/api/ipxe/script"
 	"github.com/metal3-community/metal-boot/api/ironic"
 	"github.com/metal3-community/metal-boot/api/iso"
 	"github.com/metal3-community/metal-boot/api/metrics"
@@ -36,6 +37,7 @@ import (
 	dhcpServer "github.com/metal3-community/metal-boot/internal/dhcp/server"
 	ironicManager "github.com/metal3-community/metal-boot/internal/ironic"
 	"github.com/metal3-community/metal-boot/internal/tftp"
+	"github.com/metal3-community/metal-boot/internal/util"
 	"golang.org/x/sync/errgroup"
 )
 
@@ -54,6 +56,16 @@ func main() {
 		slog.Error("Failed to load configuration", "error", err)
 		os.Exit(1)
 	}
+
+	httpUrl := getHttpUrl(cfg)
+
+	if cfg.Ironic.Url != "" {
+		cfg.Ironic.Url = httpUrl.String()
+	}
+
+	cfg.Dhcp.IpxeHttpUrl.Address = httpUrl.Host
+	cfg.Dhcp.IpxeHttpUrl.Port = 0
+	cfg.Dhcp.IpxeHttpUrl.Scheme = "http"
 
 	// Create structured logger from config
 	logger := cfg.Log
@@ -89,6 +101,26 @@ func main() {
 	}
 
 	logger.Info("Metal Boot shutdown complete")
+}
+
+func getHttpUrl(cfg *config.Config) *url.URL {
+	if cfg.Ironic.PublicEndpoint != "" {
+		if publicUrl, err := url.Parse(cfg.Ironic.PublicEndpoint); err == nil {
+			publicUrl.Scheme = "http"
+			return publicUrl
+
+		}
+	}
+	if ironicUrl, err := url.Parse(cfg.Ironic.Url); err == nil {
+		if ironicUrl.Scheme != "http" && ironicUrl.Scheme != "https" {
+			ironicUrl.Scheme = "http"
+		}
+		if ironicUrl.Scheme == "https" {
+			ironicUrl.Scheme = "http"
+		}
+		return ironicUrl
+	}
+	return nil
 }
 
 // createPowerBackend initializes and starts the backend service.
@@ -327,8 +359,15 @@ func configureAPIHandlers(
 	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, readerBackend, pwrBackend))
 	logger.V(1).Info("registered Redfish handler", "path", "/redfish/v1/")
 
+	apiServer.AddHandler("/v1/boot/{mac}/boot.ipxe", script.New(slogger, cfg, readerBackend))
+	logger.V(1).Info("registered iPXE script handler", "path", "/v1/boot/{mac}/boot.ipxe")
+
 	apiServer.AddHandler("/v1/", ironic.New(slogger, cfg.Ironic.Socket.Path))
 	logger.V(1).Info("registered Ironic handler", "path", "/v1/")
+
+	if err := util.DownloadIpaImages(filepath.Join(cfg.Static.RootDirectory, "images")); err != nil {
+		logger.Error(err, "failed to download iPXE images")
+	}
 
 	// Add iPXE handlers if enabled
 	if cfg.IpxeHttpScript.Enabled {
@@ -531,6 +570,21 @@ func startIronicSupervisor(
 		Level: slog.LevelInfo,
 	}))
 
+	httpUrl := cfg.Ironic.Url
+	if cfg.Ironic.PublicEndpoint != "" {
+		ironicUrl, err := url.Parse(cfg.Ironic.PublicEndpoint)
+		if err != nil {
+			return fmt.Errorf("invalid Ironic public endpoint URL: %w", err)
+		}
+		if ironicUrl.Scheme != "http" && ironicUrl.Scheme != "https" {
+			return fmt.Errorf("Ironic public endpoint must use http or https scheme")
+		}
+		if ironicUrl.Scheme == "https" {
+			ironicUrl.Scheme = "http"
+		}
+		httpUrl = ironicUrl.String()
+	}
+
 	// Create Ironic configuration, setting only values from external configuration
 	ironicConfig := &ironicManager.Config{
 		// ProcessManager configuration (not part of TOML config)
@@ -553,7 +607,7 @@ func startIronicSupervisor(
 
 		// Deploy section - set configured values
 		Deploy: ironicManager.DeployConfig{
-			HTTPURL:         cfg.Ironic.Url,
+			HTTPURL:         httpUrl,
 			ExternalHTTPURL: cfg.Ironic.PublicEndpoint,
 		},
 
