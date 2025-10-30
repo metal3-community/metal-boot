@@ -3,7 +3,7 @@ module github.com/metal3-community/metal-boot
 go 1.24.5
 
 require (
-	github.com/ccoveille/go-safecast v1.5.0
+	github.com/ccoveille/go-safecast v1.8.0
 	github.com/diskfs/go-diskfs v1.5.1
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/ghodss/yaml v1.0.0
@@ -14,6 +14,7 @@ require (
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
 	github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816110302-8e53665a98ee
 	github.com/oapi-codegen/runtime v1.1.1
+	github.com/pelletier/go-toml/v2 v2.2.3
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/prometheus/client_golang v1.17.0
 	github.com/samber/slog-http v1.7.0
@@ -69,7 +70,6 @@ require (
 	github.com/modern-go/reflect2 v1.0.2 // indirect
 	github.com/mohae/deepcopy v0.0.0-20170929034955-c48cc78d4826 // indirect
 	github.com/oapi-codegen/oapi-codegen/v2 v2.4.1 // indirect
-	github.com/pelletier/go-toml/v2 v2.2.3 // indirect
 	github.com/perimeterx/marshmallow v1.1.5 // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pkg/xattr v0.4.9 // indirect
