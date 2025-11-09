@@ -242,6 +242,8 @@ github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701 h1:pyC9PaHYZFgEKFdlp3G8
 github.com/u-root/uio v0.0.0-20240224005618-d2acac8f3701/go.mod h1:P3a5rG4X7tI17Nn3aOIAYr5HbIMukwXG0urG0WuL8OA=
 github.com/ubiquiti-community/go-unifi v1.33.13-0.20250815000754-9bfd66c219d8 h1:qsRDYb+8uC+qzbuOaGq1I6QBnEu2X8bBcUzk2xyJCxw=
 github.com/ubiquiti-community/go-unifi v1.33.13-0.20250815000754-9bfd66c219d8/go.mod h1:jBZOi0xNZNnuVczgnW8WsYM82qDypqjmBuxZQFBzmCg=
+github.com/ubiquiti-community/go-unifi v1.33.14-0.20251007072650-be0168ff88fd h1:yWpRGSLb8gec7KyrDc3Hb8fsPIBi87QSrCQAwxIvJME=
+github.com/ubiquiti-community/go-unifi v1.33.14-0.20251007072650-be0168ff88fd/go.mod h1:O5mFOGhlWP2DikgeX7ubg8WaOSOA6iWhdbpR1SiQQmc=
 github.com/ugorji/go/codec v1.2.11 h1:BMaWp1Bb6fHwEtbplGBGJ498wD+LKlNSl25MjdZY4dU=
 github.com/ugorji/go/codec v1.2.11/go.mod h1:UNopzCgEMSXjBc6AOMqYvWC1ktqTAfzJZUZgYf6w6lg=
 github.com/ulikunitz/xz v0.5.15 h1:9DNdB5s+SgV3bQ2ApL10xRc35ck0DuIX/isZvIk+ubY=

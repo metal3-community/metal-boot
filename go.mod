@@ -3,8 +3,8 @@ module github.com/metal3-community/metal-boot
 go 1.25.0
 
 require (
-	github.com/ccoveille/go-safecast/v2 v2.0.0
 	github.com/blang/semver/v4 v4.0.0
+	github.com/ccoveille/go-safecast/v2 v2.0.0
 	github.com/diskfs/go-diskfs v1.5.1
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/ghodss/yaml v1.0.0
@@ -25,7 +25,7 @@ require (
 	github.com/siderolabs/talos/pkg/machinery v1.11.1
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
-	github.com/ubiquiti-community/go-unifi v1.33.13-0.20250815000754-9bfd66c219d8
+	github.com/ubiquiti-community/go-unifi v1.33.14-0.20251007072650-be0168ff88fd
 	go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp v0.61.0
 	go.opentelemetry.io/otel v1.37.0
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.31.0
