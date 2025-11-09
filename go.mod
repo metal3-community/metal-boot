@@ -3,7 +3,7 @@ module github.com/metal3-community/metal-boot
 go 1.24.5
 
 require (
-	github.com/ccoveille/go-safecast v1.5.0
+	github.com/ccoveille/go-safecast/v2 v2.0.0
 	github.com/diskfs/go-diskfs v1.5.1
 	github.com/fsnotify/fsnotify v1.7.0
 	github.com/ghodss/yaml v1.0.0
