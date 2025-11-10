@@ -5,7 +5,7 @@ go 1.25.0
 require (
 	github.com/blang/semver/v4 v4.0.0
 	github.com/ccoveille/go-safecast/v2 v2.0.0
-	github.com/diskfs/go-diskfs v1.5.1
+	github.com/diskfs/go-diskfs v1.7.0
 	github.com/fsnotify/fsnotify v1.9.0
 	github.com/ghodss/yaml v1.0.0
 	github.com/go-logr/logr v1.4.3
@@ -40,6 +40,7 @@ require (
 )
 
 require (
+	github.com/anchore/go-lzo v0.1.0 // indirect
 	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v4 v4.3.0 // indirect
