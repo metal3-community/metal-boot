@@ -132,8 +132,8 @@ github.com/mdlayher/packet v1.1.2/go.mod h1:GEu1+n9sG5VtiRE4SydOmX5GTwyyYlteZiFU
 github.com/mdlayher/socket v0.2.1/go.mod h1:QLlNPkFR88mRUNQIzRBMfXxwKal8H7u1h3bL1CV+f0E=
 github.com/mdlayher/socket v0.5.1 h1:VZaqt6RkGkt2OE9l3GcC6nZkqD3xKeQLyfleW/uBcos=
 github.com/mdlayher/socket v0.5.1/go.mod h1:TjPLHI1UgwEv5J1B5q0zTZq12A/6H7nKmtTanQE37IQ=
-github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816110302-8e53665a98ee h1:dnh+O6hndPvnxSJ0HaQoEDJ4AZwcUtnIPQHo3duoOlw=
-github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816110302-8e53665a98ee/go.mod h1:uuvQIuj3P7rKZGdWGzBeLNWw8oVruhp3Js3m84IE4XM=
+github.com/metal3-community/uefi-firmware-manager v0.0.1 h1:RTRwYEFRcwvgzkmK6+yySQ2zvMH56rhef1DrzDeU/6E=
+github.com/metal3-community/uefi-firmware-manager v0.0.1/go.mod h1:uuvQIuj3P7rKZGdWGzBeLNWw8oVruhp3Js3m84IE4XM=
 github.com/mitchellh/go-homedir v1.1.0 h1:lukF9ziXFxDFPkA1vsr5zpc1XuPDn/wFntq5mG+4E0Y=
 github.com/mitchellh/go-homedir v1.1.0/go.mod h1:SfyaCUpYCn1Vlf4IUYiD9fPX4A5wJrkLzIz1N1q0pr0=
 github.com/modern-go/concurrent v0.0.0-20180228061459-e0a39a4cb421/go.mod h1:6dJC0mAP4ikYIbvyc7fijjWJddQyLn8Ig3JB5CqoB9Q=
