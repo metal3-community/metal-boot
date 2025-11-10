@@ -22,7 +22,7 @@ require (
 	github.com/samber/slog-http v1.7.0
 	github.com/sebest/xff v0.0.0-20210106013422-671bd2870b3a
 	github.com/siderolabs/image-factory v0.8.4
-	github.com/siderolabs/talos/pkg/machinery v1.11.1
+	github.com/siderolabs/talos/pkg/machinery v1.11.5
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
 	github.com/ubiquiti-community/go-unifi v1.33.14-0.20251007072650-be0168ff88fd
