@@ -15,7 +15,7 @@ require (
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
 	github.com/metal3-community/uefi-firmware-manager v0.0.1
-	github.com/oapi-codegen/runtime v1.1.1
+	github.com/oapi-codegen/runtime v1.1.2
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/prometheus/client_golang v1.23.2
