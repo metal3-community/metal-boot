@@ -19,7 +19,7 @@ require (
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/prometheus/client_golang v1.23.2
-	github.com/samber/slog-http v1.7.0
+	github.com/samber/slog-http v1.9.0
 	github.com/sebest/xff v0.0.0-20210106013422-671bd2870b3a
 	github.com/siderolabs/image-factory v0.8.4
 	github.com/siderolabs/talos/pkg/machinery v1.11.5
