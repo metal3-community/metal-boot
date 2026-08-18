@@ -273,9 +273,9 @@ func TestConfig_SetRuntimePaths(t *testing.T) {
 				config.PXE.TFTPRoot,
 			)
 		}
-		if config.Deploy.HTTPRoot != "/custom/shared/html/" {
+		if config.Deploy.HTTPRoot != "/custom/shared/html" {
 			t.Errorf(
-				"Expected HTTPRoot to be '/custom/shared/html/', got '%s'",
+				"Expected HTTPRoot to be '/custom/shared/html', got '%s'",
 				config.Deploy.HTTPRoot,
 			)
 		}

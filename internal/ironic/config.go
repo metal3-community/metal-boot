@@ -38,6 +38,10 @@ type Config struct {
 	ConfigPath string `toml:"-"`
 	SharedRoot string `toml:"-"`
 	SkipDBSync bool   `toml:"-"`
+	// EmbeddedAPI means metal-boot serves the Ironic API in-process (via the
+	// embedded WSGI bridge), so the supervisor only runs ironic-conductor,
+	// with json-rpc between API and conductor.
+	EmbeddedAPI bool `toml:"-"`
 }
 
 type DefaultConfig struct {

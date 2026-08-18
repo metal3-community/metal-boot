@@ -1,8 +1,0 @@
-defaultPlatforms:
-  - linux/arm64
-  - linux/amd64
-defaultBaseImage: docker.io/chainguard/static:latest
-builds:
-  - dir: ./cmd/metal-boot
-    main: .
-    id: metal-boot

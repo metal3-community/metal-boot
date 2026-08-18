@@ -77,53 +77,28 @@ func (lw *logWriter) parseAndLog(line string) {
 		}
 
 		// Map Ironic log levels to slog levels
-		ctx := context.Background()
+		slogLevel := slog.LevelInfo
 		switch level {
 		case "DEBUG":
-			lw.logger.LogAttrs(
-				ctx,
-				slog.LevelDebug,
-				logMessage,
-				attrs...,
-			)
-		case "INFO":
-			lw.logger.LogAttrs(
-				ctx,
-				slog.LevelInfo,
-				logMessage,
-				attrs...,
-			)
+			slogLevel = slog.LevelDebug
 		case "WARNING", "WARN":
-			lw.logger.LogAttrs(
-				ctx,
-				slog.LevelWarn,
-				logMessage,
-				attrs...,
-			)
-		case "ERROR":
-			lw.logger.LogAttrs(
-				ctx,
-				slog.LevelError,
-				logMessage,
-				attrs...,
-			)
-		case "CRITICAL":
-			lw.logger.LogAttrs(
-				ctx,
-				slog.LevelError,
-				logMessage,
-				attrs...,
-			)
-		default:
-			lw.logger.LogAttrs(
-				ctx,
-				slog.LevelInfo,
-				logMessage,
-				attrs...,
-			)
+			slogLevel = slog.LevelWarn
+		case "ERROR", "CRITICAL":
+			slogLevel = slog.LevelError
 		}
+		lw.logger.LogAttrs(
+			context.Background(),
+			slogLevel,
+			lw.prefix+logMessage,
+			attrs...,
+		)
 	} else {
 		// Fallback for non-matching lines
-		lw.logger.Info(line)
+		lw.logger.LogAttrs(
+			context.Background(),
+			slog.LevelInfo,
+			"Raw log line",
+			slog.String("line", lw.prefix+line),
+		)
 	}
 }

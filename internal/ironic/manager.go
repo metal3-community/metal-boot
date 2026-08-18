@@ -60,6 +60,13 @@ func NewProcessManager(ctx context.Context, logger *slog.Logger, config *Config)
 		// Apply all default configuration values
 		config.SetDefaults()
 
+		// With the API embedded in metal-boot, the conductor runs as a
+		// separate process and must talk to the API over json-rpc.
+		if config.EmbeddedAPI && (config.Default.RPCTransport == "" ||
+			config.Default.RPCTransport == "none") {
+			config.Default.RPCTransport = "json-rpc"
+		}
+
 		// Set runtime-specific paths
 		config.SetRuntimePaths(config.SocketPath, config.SharedRoot)
 	}
@@ -202,12 +209,19 @@ func (pm *ProcessManager) Start() error {
 		pm.logger.Info("Skipping database synchronization (SkipDBSync=true)")
 	}
 
-	// Start all-in-one Ironic process
-	if err := pm.startProcess("ironic", []string{
-		"/usr/bin/ironic",
+	// Start the Ironic process: the all-in-one binary normally, or only the
+	// conductor when the API is embedded in metal-boot.
+	processName := "ironic"
+	binary := "/usr/bin/ironic"
+	if pm.config.EmbeddedAPI {
+		processName = "ironic-conductor"
+		binary = "/usr/bin/ironic-conductor"
+	}
+	if err := pm.startProcess(processName, []string{
+		binary,
 		"--config-file", pm.config.ConfigPath,
 	}); err != nil {
-		return fmt.Errorf("failed to start ironic: %w", err)
+		return fmt.Errorf("failed to start %s: %w", processName, err)
 	}
 
 	// Start health check routine

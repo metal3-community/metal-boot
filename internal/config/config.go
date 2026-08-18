@@ -34,17 +34,30 @@ type RpcConfig struct {
 }
 
 type IronicConfig struct {
-	Url                string       `mapstructure:"url"`
-	PublicEndpoint     string       `mapstructure:"public_endpoint"`
-	UserName           string       `mapstructure:"username"`
-	Password           string       `mapstructure:"password"`
-	Socket             SocketConfig `mapstructure:"socket"`
-	Rpc                RpcConfig    `mapstructure:"rpc"`
-	Enabled            bool         `mapstructure:"enabled"`
-	SupervisorEnabled  bool         `mapstructure:"supervisor_enabled"`
-	DatabaseConnection string       `mapstructure:"database_connection"`
-	ConfigPath         string       `mapstructure:"config_path"`
-	SkipDBSync         bool         `mapstructure:"skip_db_sync"`
+	Url                string        `mapstructure:"url"`
+	PublicEndpoint     string        `mapstructure:"public_endpoint"`
+	UserName           string        `mapstructure:"username"`
+	Password           string        `mapstructure:"password"`
+	Socket             SocketConfig  `mapstructure:"socket"`
+	Rpc                RpcConfig     `mapstructure:"rpc"`
+	Enabled            bool          `mapstructure:"enabled"`
+	SupervisorEnabled  bool          `mapstructure:"supervisor_enabled"`
+	DatabaseConnection string        `mapstructure:"database_connection"`
+	ConfigPath         string        `mapstructure:"config_path"`
+	SkipDBSync         bool          `mapstructure:"skip_db_sync"`
+	EmbeddedWSGI       bool          `mapstructure:"embedded_wsgi"`
+	WSGIWorkers        int           `mapstructure:"wsgi_workers"`
+	PythonPath         []string      `mapstructure:"python_path"`
+	DbProxy            DbProxyConfig `mapstructure:"db_proxy"`
+}
+
+// DbProxyConfig configures the kine-style MySQL-protocol endpoint backed by
+// etcd that Ironic can use instead of MariaDB/SQLite.
+type DbProxyConfig struct {
+	Enabled       bool     `mapstructure:"enabled"`
+	Listener      string   `mapstructure:"listener"`
+	EtcdEndpoints []string `mapstructure:"etcd_endpoints"`
+	EtcdPrefix    string   `mapstructure:"etcd_prefix"`
 }
 
 type TalosConfig struct {
@@ -123,6 +136,16 @@ type DhcpConfig struct {
 	StaticIPAMEnabled bool    `mapstructure:"static_ipam_enabled"`
 	LeaseFile         string  `mapstructure:"lease_file"`
 	ConfigFile        string  `mapstructure:"config_file"`
+
+	// MacvlanEnabled creates a per-replica macvlan interface (named from the
+	// pod UID) on the host uplink and binds the DHCP listener to it, so
+	// multiple replicas can coexist without hostNetwork. Requires
+	// CAP_NET_ADMIN, CAP_SYS_ADMIN, hostPID=true, and the MY_POD_UID env var
+	// (downward API).
+	MacvlanEnabled bool `mapstructure:"macvlan_enabled"`
+	// MacvlanSourceInterface is the host parent interface for the macvlan;
+	// empty auto-detects from the host default route.
+	MacvlanSourceInterface string `mapstructure:"macvlan_source_interface"`
 }
 
 type IpxeHttpScript struct {
@@ -322,6 +345,8 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("dhcp.syslog_ip", "")
 	viper.SetDefault("dhcp.lease_file", "")
 	viper.SetDefault("dhcp.static_ipam_enabled", false)
+	viper.SetDefault("dhcp.macvlan_enabled", false)
+	viper.SetDefault("dhcp.macvlan_source_interface", "")
 
 	viper.SetDefault("static.enabled", true)
 	viper.SetDefault("static.image_urls", []ImageURL{})
@@ -363,6 +388,13 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("ironic.supervisor_enabled", false)
 	viper.SetDefault("ironic.database_connection", "sqlite:///var/lib/ironic/ironic.db")
 	viper.SetDefault("ironic.skip_db_sync", false)
+	viper.SetDefault("ironic.embedded_wsgi", false)
+	viper.SetDefault("ironic.wsgi_workers", 4)
+	viper.SetDefault("ironic.python_path", []string{})
+	viper.SetDefault("ironic.db_proxy.enabled", false)
+	viper.SetDefault("ironic.db_proxy.listener", "unix:///tmp/metal-boot-db.sock")
+	viper.SetDefault("ironic.db_proxy.etcd_endpoints", []string{})
+	viper.SetDefault("ironic.db_proxy.etcd_prefix", "/metal-boot/dbproxy")
 
 	viper.SetDefault("talos.enabled", false)
 	viper.SetDefault("talos.base_url", "https://factory.talos.dev")

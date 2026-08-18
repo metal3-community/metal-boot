@@ -1,0 +1,10 @@
+.git
+.github
+.vscode
+docs
+examples
+docker-compose.yaml
+Dockerfile
+Dockerfile.goreleaser
+*.tar
+dist

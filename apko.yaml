@@ -1,0 +1,109 @@
+# Ironic base image for metal-boot, migrated from main.tf (apko_build.default).
+#
+# Build locally:   apko build apko.yaml ghcr.io/metal3-community/ironic-image:latest image.tar
+# Publish:         apko publish apko.yaml ghcr.io/metal3-community/ironic-image:latest
+#
+# The metal-boot Go binary is layered on top of this image by ko (see .ko.yaml).
+contents:
+  repositories:
+    - https://packages.wolfi.dev/os
+    - https://metal3-community.github.io/ironic-packages/wolfi
+  keyring:
+    - https://packages.wolfi.dev/os/wolfi-signing.rsa.pub
+    - https://metal3-community.github.io/ironic-packages/melange.rsa.pub
+  packages:
+    - ca-certificates-bundle
+    - wolfi-baselayout
+    - python-3.13
+    - py3.13-pbr
+    - py3.13-alembic
+    - py3.13-bcrypt
+    - py3-cotyledon
+    - py3.13-cheroot
+    - py3.13-jinja2
+    - py3.13-jsonpatch
+    - py3.13-wrapt
+    - py3.13-prettytable
+    - py3.13-websockify
+    - py3-proliantutils
+    - py3-zeroconf
+    - py3-ironic-prometheus-exporter
+    - py3-ironic
+    - ipmitool
+
+accounts:
+  run-as: ironic
+  users:
+    - username: ironic
+      uid: 10000
+      gid: 10000
+      homedir: /var/lib/ironic
+      shell: /usr/bin/python3
+  groups:
+    - groupname: ironic
+      gid: 10000
+      members:
+        - ironic
+
+entrypoint:
+  command: /usr/bin/python3.13
+
+work-dir: /var/lib/ironic
+stop-signal: SIGTERM
+vcs-url: https://github.com/metal3-community/ironic-image
+
+archs:
+  - x86_64
+  - aarch64
+
+annotations:
+  org.opencontainers.image.title: Ironic Image
+  org.opencontainers.image.description: Ironic Image
+  org.opencontainers.image.version: "32.0.0"
+
+# Writable directories owned by the ironic user (0o777 == the 511 decimal
+# used in main.tf). Top-level trees are chowned recursively.
+paths:
+  - path: /conf
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+    recursive: true
+  - path: /conf/ironic
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+  - path: /data
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+    recursive: true
+  - path: /etc/ironic
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+  - path: /shared
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+    recursive: true
+  - path: /shared/html
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+  - path: /shared/log
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777
+  - path: /shared/tftpboot
+    type: directory
+    uid: 10000
+    gid: 10000
+    permissions: 0o777

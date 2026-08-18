@@ -24,22 +24,45 @@ upx:
     compress: best
     lzma: true
 
-kos:
-  - repositories:
-      - "ghcr.io/{{.Env.REPO}}"
-      - "{{.Env.REPO}}"
-    tags:
-      - latest
-      - "{{.ShortCommit}}"
-      - "{{if not .IsSnapshot}}{{.Version}}{{end}}"
-    bare: true
-    preserve_import_paths: false
-    platforms:
-      - linux/amd64
-      - linux/arm64
-    disable: false
-    base_image: docker.io/chainguard/static
-    local_domain: "ghcr.io/metal3-community/metal-boot"
+# Images are assembled from the apko-rendered Ironic rootfs plus the
+# UPX-compressed binary goreleaser built above (see Dockerfile.goreleaser).
+dockers:
+  - dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goos: linux
+    goarch: amd64
+    image_templates:
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-amd64"
+    build_flag_templates:
+      - "--platform=linux/amd64"
+    extra_files:
+      - apko.yaml
+      - configs/config.example.yaml
+  - dockerfile: Dockerfile.goreleaser
+    use: buildx
+    goos: linux
+    goarch: arm64
+    image_templates:
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-arm64"
+    build_flag_templates:
+      - "--platform=linux/arm64"
+    extra_files:
+      - apko.yaml
+      - configs/config.example.yaml
+
+docker_manifests:
+  - name_template: "ghcr.io/{{.Env.REPO}}:{{.Version}}"
+    image_templates:
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-amd64"
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-arm64"
+  - name_template: "ghcr.io/{{.Env.REPO}}:latest"
+    image_templates:
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-amd64"
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-arm64"
+  - name_template: "ghcr.io/{{.Env.REPO}}:{{.ShortCommit}}"
+    image_templates:
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-amd64"
+      - "ghcr.io/{{.Env.REPO}}:{{.Version}}-arm64"
 
 docker_signs:
   - cmd: cosign

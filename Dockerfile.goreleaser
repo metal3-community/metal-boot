@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+#
+# Used by goreleaser's dockers section: the context contains the prebuilt,
+# UPX-compressed metal-boot binary (goreleaser's builds + upx stages) plus
+# apko.yaml and configs/ as extra_files. The rootfs stage mirrors Dockerfile.
+
+FROM cgr.dev/chainguard/apko:latest AS apko-bin
+
+FROM --platform=$BUILDPLATFORM cgr.dev/chainguard/wolfi-base:latest AS rootfs
+COPY --from=apko-bin /usr/bin/apko /usr/bin/apko
+WORKDIR /work
+COPY apko.yaml .
+ARG TARGETARCH
+RUN apko build --sbom=false --arch "$TARGETARCH" apko.yaml ironic-base:latest /work/image.tar \
+ && mkdir -p /work/oci /rootfs \
+ && tar -xf /work/image.tar -C /work/oci \
+ && layer="" \
+ && for f in $(find /work/oci -type f); do \
+      if tar -tzf "$f" >/dev/null 2>&1; then layer="$f"; fi; \
+    done \
+ && test -n "$layer" \
+ && tar -xzf "$layer" -C /rootfs
+
+FROM scratch
+COPY --from=rootfs /rootfs/ /
+COPY metal-boot /usr/bin/metal-boot
+COPY configs/config.example.yaml /config/config.yaml
+
+LABEL org.opencontainers.image.title="metal-boot" \
+      org.opencontainers.image.description="Metal Boot with Ironic all-in-one" \
+      org.opencontainers.image.source="https://github.com/metal3-community/metal-boot"
+
+USER ironic
+WORKDIR /var/lib/ironic
+STOPSIGNAL SIGTERM
+ENTRYPOINT ["/usr/bin/metal-boot"]
