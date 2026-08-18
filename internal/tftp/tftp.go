@@ -1,340 +1,135 @@
+// Package tftp provides metal-boot's TFTP boot handler. The serving framework
+// (ServeMux, Config.Serve, middleware) lives in the server/handler/middleware
+// subpackages, ported from Tinkerbell's pkg/tftp; this file is the boot
+// handler that serves iPXE binaries and filesystem files, registered as a
+// handler.Handler on that ServeMux.
 package tftp
 
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"io"
 	"net"
-	"net/http"
-	"net/netip"
 	"os"
 	"path/filepath"
-	"regexp"
-	"strings"
 
 	"github.com/go-logr/logr"
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/dhcp/data"
 	"github.com/metal3-community/metal-boot/internal/ipxe/binary"
-	"github.com/metal3-community/uefi-firmware-manager/edk2"
-	"github.com/metal3-community/uefi-firmware-manager/manager"
 	"github.com/pin/tftp/v3"
 )
 
-type Server struct {
-	Logger        logr.Logger
-	RootDirectory string
-	Patch         string
-}
-
+// Handler serves iPXE binaries and filesystem files over TFTP. It implements
+// handler.Handler (ServeTFTP).
 type Handler struct {
 	ctx           context.Context
 	RootDirectory string
 	Patch         string
 	Log           logr.Logger
 	backend       backend.BackendReader
-	firmware      *manager.SimpleFirmwareManager
 }
 
-// ListenAndServe sets up the listener and serves TFTP requests.
-func (s *Server) ListenAndServe(
+// NewHandler creates a TFTP boot handler. backend may be nil; when set it is
+// used, best effort, to look up a per-node iPXE script by client IP.
+func NewHandler(
 	ctx context.Context,
-	addr netip.AddrPort,
-	backend backend.BackendReader,
-) error {
-	if backend == nil {
-		return fmt.Errorf("backend cannot be nil")
-	}
-
-	handler := &Handler{
+	log logr.Logger,
+	be backend.BackendReader,
+	rootDirectory string,
+	patch string,
+) (*Handler, error) {
+	return &Handler{
 		ctx:           ctx,
-		RootDirectory: s.RootDirectory,
-		Patch:         s.Patch,
-		Log:           s.Logger,
-		backend:       backend,
-	}
-
-	var err error
-	handler.firmware, err = manager.NewSimpleFirmwareManager(handler.Log)
-	if err != nil {
-		return fmt.Errorf("failed to create firmware manager: %w", err)
-	}
-
-	tftpServer := tftp.NewServer(handler.HandleRead, handler.HandleWrite)
-	if tftpServer == nil {
-		return fmt.Errorf("failed to create TFTP server")
-	}
-	tftpServer.SetBlockSize(512) // force plain RFC 1350 mode
-
-	tftpServer.SetHook(handler)
-
-	a, err := net.ResolveUDPAddr("udp", addr.String())
-	if err != nil {
-		return fmt.Errorf("failed to resolve UDP address: %w", err)
-	}
-
-	conn, err := net.ListenUDP("udp", a)
-	if err != nil {
-		return fmt.Errorf("failed to listen on UDP: %w", err)
-	}
-
-	go func() {
-		<-ctx.Done()
-		s.Logger.Info("shutting down tftp server")
-		tftpServer.Shutdown()
-	}()
-
-	s.Logger.Info("starting TFTP server", "address", addr.String())
-
-	if err := tftpServer.Serve(conn); err != nil && !errors.Is(err, http.ErrServerClosed) {
-		s.Logger.Error(err, "TFTP server error")
-		return err
-	}
-
-	return nil
+		RootDirectory: rootDirectory,
+		Patch:         patch,
+		Log:           log,
+		backend:       be,
+	}, nil
 }
 
-func (h *Handler) OnSuccess(stats tftp.TransferStats) {
-	h.Log.Info("transfer complete", "remote", stats.RemoteAddr, "path", stats.Filename)
-}
-
-func (h *Handler) OnFailure(stats tftp.TransferStats, err error) {
-	h.Log.Error(err, "transfer failed", "remote", stats.RemoteAddr, "path", stats.Filename)
+// ServeTFTP implements handler.Handler.
+func (h *Handler) ServeTFTP(filename string, rf io.ReaderFrom) error {
+	return h.HandleRead(filename, rf)
 }
 
 // HandleRead handles TFTP GET requests.
 func (h *Handler) HandleRead(fullfilepath string, rf io.ReaderFrom) (err error) {
-	// Add panic recovery to prevent crashes
 	defer func() {
 		if r := recover(); r != nil {
 			h.Log.Error(
 				fmt.Errorf("panic in HandleRead: %v", r),
-				"recovered from panic",
-				"path",
-				fullfilepath,
+				"recovered from panic", "path", fullfilepath,
 			)
 			err = fmt.Errorf("internal error during TFTP read")
 		}
 	}()
 
 	if rf == nil {
-		h.Log.Error(nil, "HandleRead called with nil ReaderFrom", "path", fullfilepath)
 		return fmt.Errorf("nil ReaderFrom parameter")
-	}
-
-	dhcpInfo, netboot, err := h.getDHCPInfo(rf)
-	if err != nil {
-		h.Log.Info("could not get DHCP info, proceeding without it", "error", err)
 	}
 
 	filename := filepath.Base(fullfilepath)
 
-	switch filename {
-	case edk2.FirmwareFileName:
-		if dhcpInfo == nil || netboot == nil || !netboot.AllowNetboot {
-			br := bytes.NewReader(edk2.Files[edk2.FirmwareFileName])
-			_, err := rf.ReadFrom(br)
-			return err
-		}
-
-		mac := dhcpInfo.MACAddress
-
-		reader, err := h.firmware.GetFirmwareReader(mac)
-		if err != nil {
-			h.Log.Error(err, "failed to get firmware reader")
-			return err
-		}
-		_, err = rf.ReadFrom(reader)
-		return err
-	case "autoexec.ipxe":
-		_, err = rf.ReadFrom(bytes.NewReader([]byte("#!ipxe\n\n"))) // Serve a minimal iPXE script
+	if filename == "autoexec.ipxe" {
+		_, err = rf.ReadFrom(bytes.NewReader([]byte("#!ipxe\n\n")))
 		return err
 	}
 
-	// Serve iPXE binaries if requested
+	// Serve iPXE binaries, optionally patched with a per-node iPXE script.
 	if content, ok := binary.Files[filename]; ok {
 		patch := h.Patch
-		if netboot != nil && len(netboot.IPXEScript) > 1 {
+		if netboot := h.netbootFor(rf); netboot != nil && len(netboot.IPXEScript) > 1 {
 			patch = netboot.IPXEScript
 		}
 		return h.serveIPXE(rf, content, patch)
 	}
 
-	// Resolve the file path, potentially swapping a serial for a MAC address
-	resolvedPath := h.resolvePath(fullfilepath, dhcpInfo)
-
-	// Serve from the filesystem if the file exists
+	// Serve from the filesystem.
 	root, err := NewRoot(h.RootDirectory)
 	if err != nil {
 		return fmt.Errorf("failed to open root directory: %w", err)
 	}
 	defer root.Close()
 
-	if file, err := root.Open(resolvedPath); err == nil {
+	if file, err := root.Open(fullfilepath); err == nil {
 		defer file.Close()
 		_, err := rf.ReadFrom(file)
 		return err
 	}
 
-	// If not on the filesystem, try serving from embedded EDK2 files
-	if content, ok := edk2.Files[resolvedPath]; ok {
-		return h.serveContent(rf, content)
-	}
-
-	// Handle generic paths for MAC-specific requests
-	parts := strings.Split(resolvedPath, "/")
-	if len(parts) > 1 {
-		if _, err := net.ParseMAC(parts[0]); err == nil {
-			genericPath := strings.Join(parts[1:], "/")
-			if content, ok := edk2.Files[genericPath]; ok {
-				return h.serveContent(rf, content)
-			}
-		}
-	}
-
-	h.Log.Info("file not found", "path", fullfilepath, "resolvedPath", resolvedPath)
+	h.Log.Info("file not found", "path", fullfilepath)
 	return os.ErrNotExist
 }
 
-// HandleWrite handles TFTP PUT requests.
-func (h *Handler) HandleWrite(fullfilepath string, wt io.WriterTo) (err error) {
-	// Add panic recovery to prevent crashes
-	defer func() {
-		if r := recover(); r != nil {
-			h.Log.Error(
-				fmt.Errorf("panic in HandleWrite: %v", r),
-				"recovered from panic",
-				"path",
-				fullfilepath,
-			)
-			err = fmt.Errorf("internal error during TFTP write")
-		}
-	}()
-
-	if wt == nil {
-		h.Log.Error(nil, "HandleWrite called with nil WriterTo", "path", fullfilepath)
-		return fmt.Errorf("nil WriterTo parameter")
-	}
-
-	dhcpInfo, _, err := h.getDHCPInfo(wt)
-	if err != nil {
-		h.Log.Info("could not get DHCP info, proceeding without it", "error", err)
-	}
-
-	resolvedPath := h.resolvePath(fullfilepath, dhcpInfo)
-
-	root, err := NewRoot(h.RootDirectory)
-	if err != nil {
-		return fmt.Errorf("failed to open root directory: %w", err)
-	}
-	defer root.Close()
-
-	dir := filepath.Dir(resolvedPath)
-	if !root.Exists(dir) {
-		if err := root.MkdirAll(dir, 0o755); err != nil {
-			return fmt.Errorf("failed to create directory %s: %w", dir, err)
-		}
-	}
-
-	file, err := root.OpenFile(resolvedPath, os.O_WRONLY|os.O_CREATE|os.O_TRUNC, 0o644)
-	if err != nil {
-		return fmt.Errorf("failed to open file for writing %s: %w", resolvedPath, err)
-	}
-	defer file.Close()
-
-	n, err := wt.WriteTo(file)
-	if err != nil {
-		return fmt.Errorf("failed to write to file %s: %w", resolvedPath, err)
-	}
-
-	h.Log.Info("file written successfully", "path", resolvedPath, "bytes", n)
-	return nil
-}
-
-func (h *Handler) getDHCPInfo(r any) (*data.DHCP, *data.Netboot, error) {
-	if r == nil {
-		return nil, nil, fmt.Errorf("transfer object is nil")
-	}
-
+// netbootFor best-effort looks up per-node netboot info by client IP. It
+// returns nil when there is no backend or the lookup fails.
+func (h *Handler) netbootFor(rf io.ReaderFrom) *data.Netboot {
 	if h.backend == nil {
-		return nil, nil, fmt.Errorf("backend is nil")
+		return nil
 	}
-
-	ip, err := getRemoteIP(r)
+	ip, err := getRemoteIP(rf)
+	if err != nil || ip == nil {
+		return nil
+	}
+	_, netboot, err := h.backend.GetByIP(h.ctx, ip)
 	if err != nil {
-		return nil, nil, err
+		h.Log.V(1).Info("no per-node netboot info", "ip", ip, "error", err)
+		return nil
 	}
-
-	if ip == nil {
-		return nil, nil, fmt.Errorf("remote IP is nil")
-	}
-
-	dhcpInfo, netboot, err := h.backend.GetByIP(h.ctx, ip)
-	if err != nil {
-		return nil, nil, fmt.Errorf("failed to get info by IP %s: %w", ip, err)
-	}
-	if dhcpInfo == nil {
-		return nil, nil, fmt.Errorf("no DHCP info found for IP: %s", ip)
-	}
-
-	return dhcpInfo, netboot, nil
-}
-
-func (h *Handler) resolvePath(fullfilepath string, dhcpInfo *data.DHCP) string {
-	parts := strings.Split(fullfilepath, "/")
-
-	if len(parts) < 2 {
-		return fullfilepath
-	}
-
-	prefix := parts[0]
-	filename := parts[len(parts)-1]
-
-	// Handle case where dhcpInfo is nil
-	if dhcpInfo == nil {
-		return fullfilepath
-	}
-
-	mac := dhcpInfo.MACAddress.String()
-	macDir := strings.ReplaceAll(mac, ":", "-")
-
-	isSerial, _ := regexp.MatchString(`^\d{2}[a-z]\d{5}$`, prefix)
-	if isSerial {
-		if filename == edk2.FirmwareFileName {
-			return strings.Replace(fullfilepath, prefix, macDir, 1)
-		} else {
-			return strings.Join(parts[1:], "/")
-		}
-	}
-
-	return fullfilepath
+	return netboot
 }
 
 func (h *Handler) serveIPXE(rf io.ReaderFrom, content []byte, patch string) error {
 	if patch == "" {
 		patch = h.Patch
 	}
-
-	patchedContent, err := binary.Patch(content, []byte(patch))
+	patched, err := binary.Patch(content, []byte(patch))
 	if err != nil {
 		return fmt.Errorf("failed to patch iPXE binary: %w", err)
 	}
-
-	return h.serveContent(rf, patchedContent)
-}
-
-func (h *Handler) serveContent(rf io.ReaderFrom, content []byte) error {
-	if rf == nil {
-		h.Log.Error(nil, "serveContent called with nil ReaderFrom")
-		return fmt.Errorf("nil ReaderFrom parameter")
-	}
-
-	_, err := rf.ReadFrom(bytes.NewReader(content))
-	if err != nil {
-		h.Log.Error(err, "failed to serve content")
-	}
+	_, err = rf.ReadFrom(bytes.NewReader(patched))
 	return err
 }
 

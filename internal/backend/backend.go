@@ -30,13 +30,6 @@ type BackendWriter interface {
 	) error
 }
 
-type BackendPower interface {
-	GetPower(context.Context, net.HardwareAddr) (*data.PowerState, error)
-	SetPower(ctx context.Context, mac net.HardwareAddr, state data.PowerState) error
-	// Cycle power on a device.
-	PowerCycle(ctx context.Context, mac net.HardwareAddr) error
-}
-
 type BackendSyncer interface {
 	// Sync the backend with the file.
 	Sync(ctx context.Context) error

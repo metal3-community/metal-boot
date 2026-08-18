@@ -219,24 +219,15 @@ func TestHandler_HandleRead(t *testing.T) {
 				backend:       mockBackend,
 			}
 
-			// Setup transfer
-			var err error
-			if tt.isWrite {
-				wt := &mockIncomingTransfer{
-					WriterTo:   &bytes.Buffer{},
-					remoteAddr: net.UDPAddr{IP: net.ParseIP("192.168.1.100")},
-				}
-				err = handler.HandleWrite(tt.fullfilepath, wt)
-			} else {
-				rf := &mockOutgoingTransfer{
-					ReaderFrom: newMockReaderFrom(),
-					remoteAddr: net.UDPAddr{IP: net.ParseIP("192.168.1.100")},
-				}
-				err = handler.HandleRead(tt.fullfilepath, rf)
-				if tt.expectedData != nil {
-					if mrf, ok := rf.ReaderFrom.(*mockReaderFrom); ok {
-						assert.Equal(t, tt.expectedData, mrf.Bytes())
-					}
+			// Setup transfer (the handler is read-only)
+			rf := &mockOutgoingTransfer{
+				ReaderFrom: newMockReaderFrom(),
+				remoteAddr: net.UDPAddr{IP: net.ParseIP("192.168.1.100")},
+			}
+			err := handler.HandleRead(tt.fullfilepath, rf)
+			if tt.expectedData != nil {
+				if mrf, ok := rf.ReaderFrom.(*mockReaderFrom); ok {
+					assert.Equal(t, tt.expectedData, mrf.Bytes())
 				}
 			}
 

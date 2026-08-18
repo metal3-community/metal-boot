@@ -18,8 +18,6 @@ require (
 	github.com/google/uuid v1.6.0
 	github.com/insomniacslk/dhcp v0.0.0-20250417080101-5f8cf70e8c5f
 	github.com/mdlayher/arp v0.0.0-20220512170110-6706a2966875
-	github.com/metal3-community/uefi-firmware-manager v0.0.1
-	github.com/oapi-codegen/runtime v1.1.1
 	github.com/pelletier/go-toml/v2 v2.2.4
 	github.com/pin/tftp/v3 v3.1.0
 	github.com/prometheus/client_golang v1.23.2
@@ -47,7 +45,6 @@ require (
 
 require (
 	filippo.io/edwards25519 v1.2.0 // indirect
-	github.com/apapsch/go-jsonmerge/v2 v2.0.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/cenkalti/backoff/v5 v5.0.3 // indirect
 	github.com/cespare/xxhash/v2 v2.3.0 // indirect
@@ -146,6 +143,5 @@ require (
 	sigs.k8s.io/structured-merge-diff/v6 v6.3.0 // indirect
 )
 
-replace github.com/bmcpi/uefi-firmware-manager => github.com/metal3-community/uefi-firmware-manager v0.0.0-20250816054819-138463a3594c
 
 tool github.com/oapi-codegen/oapi-codegen/v2/cmd/oapi-codegen

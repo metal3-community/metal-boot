@@ -26,11 +26,9 @@ import (
 	"github.com/metal3-community/metal-boot/api/ironic"
 	"github.com/metal3-community/metal-boot/api/iso"
 	"github.com/metal3-community/metal-boot/api/metrics"
-	"github.com/metal3-community/metal-boot/api/redfish"
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq"
 	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq/lease"
-	"github.com/metal3-community/metal-boot/internal/backend/power/noop"
 	"github.com/metal3-community/metal-boot/internal/config"
 	"github.com/metal3-community/metal-boot/internal/dbproxy/backend/etcdlog"
 	"github.com/metal3-community/metal-boot/internal/dbproxy/endpoint"
@@ -40,7 +38,9 @@ import (
 	dhcpServer "github.com/metal3-community/metal-boot/internal/dhcp/server"
 	ironicManager "github.com/metal3-community/metal-boot/internal/ironic"
 	"github.com/metal3-community/metal-boot/internal/ironic/wsgi"
+	"github.com/metal3-community/metal-boot/internal/osie"
 	"github.com/metal3-community/metal-boot/internal/tftp"
+	tftpserver "github.com/metal3-community/metal-boot/internal/tftp/server"
 	"github.com/metal3-community/metal-boot/internal/util"
 	"golang.org/x/sync/errgroup"
 )
@@ -82,13 +82,6 @@ func main() {
 		os.Exit(1)
 	}
 
-	// Create pwrBackend
-	pwrBackend, err := createPowerBackend(context.Background(), logger, cfg)
-	if err != nil {
-		logger.Error(err, "failed to create backend")
-		os.Exit(1)
-	}
-
 	// Set up graceful shutdown context
 	ctx, cancel := signal.NotifyContext(
 		context.Background(),
@@ -99,7 +92,7 @@ func main() {
 	defer cancel()
 
 	// Start all services
-	if err := startServices(ctx, cfg, logger, readerBackend, pwrBackend); err != nil {
+	if err := startServices(ctx, cfg, logger, readerBackend); err != nil {
 		logger.Error(err, "failed to start services")
 		os.Exit(1)
 	}
@@ -125,18 +118,6 @@ func getHttpUrl(cfg *config.Config) *url.URL {
 		return ironicUrl
 	}
 	return nil
-}
-
-// createPowerBackend returns the power-management backend. Out-of-band power
-// control is not configured by default, so this is a no-op backend; Redfish
-// power operations report the feature as unconfigured rather than failing at
-// startup.
-func createPowerBackend(
-	_ context.Context,
-	_ logr.Logger,
-	_ *config.Config,
-) (backend.BackendPower, error) {
-	return noop.New(), nil
 }
 
 func createReaderBackend(
@@ -175,7 +156,6 @@ func startServices(
 	cfg *config.Config,
 	logger logr.Logger,
 	readerBackend backend.BackendReader,
-	pwrBackend backend.BackendPower,
 ) error {
 	g, ctx := errgroup.WithContext(ctx)
 
@@ -213,14 +193,16 @@ func startServices(
 	}
 
 	// Start HTTP API server
-	if err := startHTTPServer(ctx, g, cfg, logger, readerBackend, pwrBackend, ironicHandler); err != nil {
+	if err := startHTTPServer(ctx, g, cfg, logger, readerBackend, ironicHandler); err != nil {
 		return fmt.Errorf("failed to start HTTP server: %w", err)
 	}
 
 	// Start TFTP server if enabled
 	if cfg.Tftp.Enabled {
 		logger.Info("TFTP server enabled", "root_directory", cfg.Tftp.RootDirectory)
-		startTFTPServer(ctx, g, cfg, logger, readerBackend)
+		if err := startTFTPServer(ctx, g, cfg, logger, readerBackend); err != nil {
+			return fmt.Errorf("failed to start TFTP server: %w", err)
+		}
 	}
 
 	// Start DHCP server if enabled
@@ -386,7 +368,6 @@ func startHTTPServer(
 	cfg *config.Config,
 	logger logr.Logger,
 	readerBackend backend.BackendReader,
-	pwrBackend backend.BackendPower,
 	ironicHandler http.Handler,
 ) error {
 	// Create structured logger for HTTP server
@@ -398,7 +379,7 @@ func startHTTPServer(
 	apiServer := api.New(cfg, slogger)
 
 	// Configure API handlers
-	configureAPIHandlers(apiServer, cfg, logger, readerBackend, pwrBackend, slogger, ironicHandler)
+	configureAPIHandlers(apiServer, cfg, logger, readerBackend, slogger, ironicHandler)
 
 	// Start the server in a goroutine
 	bindAddr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
@@ -445,7 +426,6 @@ func configureAPIHandlers(
 	cfg *config.Config,
 	logger logr.Logger,
 	readerBackend backend.BackendReader,
-	pwrBackend backend.BackendPower,
 	slogger *slog.Logger,
 	ironicHandler http.Handler,
 ) {
@@ -456,10 +436,6 @@ func configureAPIHandlers(
 	// Add metrics handler
 	apiServer.AddHandler("/metrics", metrics.New(slogger))
 	logger.V(1).Info("registered metrics handler", "path", "/metrics")
-
-	// Add Redfish handler
-	apiServer.AddHandler("/redfish/v1/", redfish.New(slogger, cfg, readerBackend, pwrBackend))
-	logger.V(1).Info("registered Redfish handler", "path", "/redfish/v1/")
 
 	apiServer.AddHandler("/v1/boot/{mac}/boot.ipxe", script.New(slogger, cfg, readerBackend))
 	logger.V(1).Info("registered iPXE script handler", "path", "/v1/boot/{mac}/boot.ipxe")
@@ -493,28 +469,43 @@ func configureAPIHandlers(
 	}
 }
 
-// startTFTPServer configures and starts the TFTP server.
+// startTFTPServer configures and starts the TFTP server using the ServeMux
+// framework: OSIE serves ironic-python-agent images, and the boot handler
+// serves iPXE binaries and filesystem files.
 func startTFTPServer(
 	ctx context.Context,
 	g *errgroup.Group,
 	cfg *config.Config,
 	logger logr.Logger,
-	backend backend.BackendReader,
-) {
-	ts := &tftp.Server{
-		Logger:        logger.WithName("tftp"),
-		RootDirectory: cfg.Tftp.RootDirectory,
-		Patch:         cfg.Tftp.IpxePatch,
+	readerBackend backend.BackendReader,
+) error {
+	log := logger.WithName("tftp")
+
+	bootHandler, err := tftp.NewHandler(
+		ctx, log, readerBackend, cfg.Tftp.RootDirectory, cfg.Tftp.IpxePatch,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to create TFTP boot handler: %w", err)
 	}
 
-	logger.Info("starting TFTP server", "addr", cfg.Address)
+	osieHandler := osie.NewConfig(
+		osie.WithImagePath(filepath.Join(cfg.Tftp.RootDirectory, "images")),
+	)
+
+	mux := tftpserver.NewServeMux()
+	mux.SetLogger(log)
+	// Image requests (…/images/…) are served by OSIE; everything else
+	// (iPXE binaries, EDK2 firmware, filesystem files) by the boot handler.
+	mux.Handle(`(^|/)images/`, osieHandler.TFTPHandler(log.WithName("osie")))
+	mux.SetDefaultHandler(bootHandler)
+
+	addr := fmt.Sprintf("%s:%d", cfg.Address, cfg.Tftp.Port)
+	logger.Info("starting TFTP server", "addr", addr)
+	scfg := &tftpserver.Config{}
 	g.Go(func() error {
-		return ts.ListenAndServe(
-			ctx,
-			netip.AddrPortFrom(netip.MustParseAddr(cfg.Address), 69),
-			backend,
-		)
+		return scfg.Serve(ctx, log, addr, mux)
 	})
+	return nil
 }
 
 // startDHCPServer configures and starts the DHCP server.
