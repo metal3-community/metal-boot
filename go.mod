@@ -29,7 +29,6 @@ require (
 	github.com/siderolabs/talos/pkg/machinery v1.11.5
 	github.com/spf13/viper v1.20.1
 	github.com/stretchr/testify v1.11.1
-	github.com/ubiquiti-community/go-unifi v1.33.14-0.20251007072650-be0168ff88fd
 	github.com/vishvananda/netlink v1.3.1
 	github.com/vishvananda/netns v0.0.5
 	go.etcd.io/etcd/client/v3 v3.7.1
@@ -38,7 +37,6 @@ require (
 	go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc v1.38.0
 	go.opentelemetry.io/otel/sdk v1.43.0
 	go.opentelemetry.io/otel/trace v1.43.0
-	golang.org/x/crypto v0.51.0
 	golang.org/x/net v0.55.0
 	golang.org/x/sync v0.20.0
 	golang.org/x/sys v0.45.0

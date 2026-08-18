@@ -30,7 +30,7 @@ import (
 	"github.com/metal3-community/metal-boot/internal/backend"
 	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq"
 	"github.com/metal3-community/metal-boot/internal/backend/dnsmasq/lease"
-	"github.com/metal3-community/metal-boot/internal/backend/unifi"
+	"github.com/metal3-community/metal-boot/internal/backend/power/noop"
 	"github.com/metal3-community/metal-boot/internal/config"
 	"github.com/metal3-community/metal-boot/internal/dbproxy/backend/etcdlog"
 	"github.com/metal3-community/metal-boot/internal/dbproxy/endpoint"
@@ -127,17 +127,16 @@ func getHttpUrl(cfg *config.Config) *url.URL {
 	return nil
 }
 
-// createPowerBackend initializes and starts the backend service.
+// createPowerBackend returns the power-management backend. Out-of-band power
+// control is not configured by default, so this is a no-op backend; Redfish
+// power operations report the feature as unconfigured rather than failing at
+// startup.
 func createPowerBackend(
-	ctx context.Context,
-	log logr.Logger,
-	cfg *config.Config,
+	_ context.Context,
+	_ logr.Logger,
+	_ *config.Config,
 ) (backend.BackendPower, error) {
-	backend, err := unifi.NewRemote(ctx, log, cfg)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create backend: %w", err)
-	}
-	return backend, nil
+	return noop.New(), nil
 }
 
 func createReaderBackend(

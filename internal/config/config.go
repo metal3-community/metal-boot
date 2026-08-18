@@ -68,16 +68,6 @@ type TalosConfig struct {
 	DefaultExtensions []string `mapstructure:"default_extensions"`
 }
 
-type UnifiConfig struct {
-	APIKey   string `mapstructure:"api_key"`
-	Username string `mapstructure:"username"`
-	Password string `mapstructure:"password"`
-	Endpoint string `mapstructure:"endpoint"`
-	Site     string `mapstructure:"site"`
-	Device   string `mapstructure:"device"`
-	Insecure bool   `mapstructure:"insecure"`
-}
-
 type TftpConfig struct {
 	Enabled       bool   `mapstructure:"enabled"`
 	Address       string `mapstructure:"address"`
@@ -198,7 +188,6 @@ type DnsmasqConfig struct {
 type Config struct {
 	Address         string         `mapstructure:"address"`
 	Port            int            `mapstructure:"port"`
-	Unifi           UnifiConfig    `mapstructure:"unifi"`
 	Tftp            TftpConfig     `mapstructure:"tftp"`
 	Dhcp            DhcpConfig     `mapstructure:"dhcp"`
 	LogLevel        string         `mapstructure:"log_level"`
@@ -313,12 +302,6 @@ func NewConfig() (conf *Config, err error) {
 	viper.SetDefault("port", netInfo.Port)
 	viper.SetDefault("trusted_proxies", "")
 	viper.SetDefault("backend_file_path", "backend.yaml")
-
-	viper.SetDefault("unifi.endpoint", "https://10.0.0.1")
-	viper.SetDefault("unifi.site", "default")
-	viper.SetDefault("unifi.device", "")
-	viper.SetDefault("unifi.insecure", true)
-	viper.SetDefault("unifi.api_key", "your_api_key")
 
 	viper.SetDefault("tftp.enabled", false)
 	viper.SetDefault("tftp.address", netInfo.BindIP)

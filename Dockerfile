@@ -30,26 +30,31 @@ RUN apko build --sbom=false --arch "$TARGETARCH" apko.yaml apko-alpine:edge /wor
 
 # Prune the rootfs to the minimum the Ironic runtime needs. Sizes are
 # uncompressed, measured against ghcr.io/metal3-community/metal-boot:32.0.1
-# (376 MB) with `crane export … | tar -tv`; this removes ~172 MB (→ ~204 MB):
+# (376 MB) with `crane export … | tar -tv`; this removes ~260 MB (→ ~117 MB):
 #   - __pycache__/*.pyc/*.pyi (~110 MB) — Python regenerates bytecode lazily.
 #   - site-packages test suites (~25 MB).
 #   - the redundant Python 3.14 stack (~35 MB) — `python3` is 3.13 and every
 #     ironic entry point is `#!/usr/bin/python3.13`; nothing here runs 3.14
 #     (metal-boot is built without embedded Python).
-#   - C headers, static libs, docs/man/info, and pip's bundled wheels.
-#   - apk metadata (the final image is scratch and never runs apk).
-# NOT pruned automatically — verify against your enabled ironic hardware types
-# first (the generated ironic.conf enables ilo/idrac, which import these):
-#   numpy + OpenBLAS (~78 MB): rm -rf usr/lib/python3.13/site-packages/numpy* \
-#     usr/lib/libopenblas* usr/lib/libgfortran* usr/lib/liblapack*
-#   netaddr OUI/IAB DBs (~8 MB): rm -f \
-#     usr/lib/python3.13/site-packages/netaddr/eui/oui.txt \
-#     usr/lib/python3.13/site-packages/netaddr/eui/iab.txt
+#   - numpy + OpenBLAS/gfortran (~62 MB) — only websockify (which imports it in
+#     a try/except with a pure-Python fallback) and construct (a lazy in-method
+#     import) reference numpy; ironic core and the drivers do not.
+#   - netaddr OUI/IAB databases (~9 MB) — loaded lazily only for MAC-vendor
+#     lookups, which ironic does not perform; the netaddr module itself stays.
+#   - C headers, static libs, docs/man/info, pip's bundled wheels, apk metadata.
+# find (not shell globs) is used for the version/arch-specific names so an
+# absent match is a no-op regardless of the build shell.
 RUN set -eux; cd /rootfs; \
     find . -type d -name __pycache__ -prune -exec rm -rf {} + ; \
     find . -type f \( -name '*.pyc' -o -name '*.pyi' \) -delete ; \
     find usr/lib -path '*/site-packages/*' -type d -name tests -prune -exec rm -rf {} + ; \
     rm -rf usr/lib/python3.14 usr/lib/libpython3.14.so* usr/bin/python3.14 ; \
+    find usr/lib/python3.13/site-packages -maxdepth 1 -name 'numpy*' -exec rm -rf {} + ; \
+    find usr/lib -maxdepth 1 \( -name 'libopenblas*' -o -name 'libgfortran*' -o -name 'liblapack*' \) -delete ; \
+    rm -f usr/lib/python3.13/site-packages/netaddr/eui/oui.txt \
+          usr/lib/python3.13/site-packages/netaddr/eui/oui.idx \
+          usr/lib/python3.13/site-packages/netaddr/eui/iab.txt \
+          usr/lib/python3.13/site-packages/netaddr/eui/iab.idx ; \
     rm -rf usr/include usr/share/doc usr/share/man usr/share/info \
            usr/share/gtk-doc usr/share/python-wheels ; \
     find usr/lib -type f -name '*.a' -delete ; \
