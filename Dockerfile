@@ -28,6 +28,33 @@ RUN apko build --sbom=false --arch "$TARGETARCH" apko.yaml apko-alpine:edge /wor
  && test -n "$layer" \
  && tar -xzf "$layer" -C /rootfs
 
+# Prune the rootfs to the minimum the Ironic runtime needs. Sizes are
+# uncompressed, measured against ghcr.io/metal3-community/metal-boot:32.0.1
+# (376 MB) with `crane export … | tar -tv`; this removes ~172 MB (→ ~204 MB):
+#   - __pycache__/*.pyc/*.pyi (~110 MB) — Python regenerates bytecode lazily.
+#   - site-packages test suites (~25 MB).
+#   - the redundant Python 3.14 stack (~35 MB) — `python3` is 3.13 and every
+#     ironic entry point is `#!/usr/bin/python3.13`; nothing here runs 3.14
+#     (metal-boot is built without embedded Python).
+#   - C headers, static libs, docs/man/info, and pip's bundled wheels.
+#   - apk metadata (the final image is scratch and never runs apk).
+# NOT pruned automatically — verify against your enabled ironic hardware types
+# first (the generated ironic.conf enables ilo/idrac, which import these):
+#   numpy + OpenBLAS (~78 MB): rm -rf usr/lib/python3.13/site-packages/numpy* \
+#     usr/lib/libopenblas* usr/lib/libgfortran* usr/lib/liblapack*
+#   netaddr OUI/IAB DBs (~8 MB): rm -f \
+#     usr/lib/python3.13/site-packages/netaddr/eui/oui.txt \
+#     usr/lib/python3.13/site-packages/netaddr/eui/iab.txt
+RUN set -eux; cd /rootfs; \
+    find . -type d -name __pycache__ -prune -exec rm -rf {} + ; \
+    find . -type f \( -name '*.pyc' -o -name '*.pyi' \) -delete ; \
+    find usr/lib -path '*/site-packages/*' -type d -name tests -prune -exec rm -rf {} + ; \
+    rm -rf usr/lib/python3.14 usr/lib/libpython3.14.so* usr/bin/python3.14 ; \
+    rm -rf usr/include usr/share/doc usr/share/man usr/share/info \
+           usr/share/gtk-doc usr/share/python-wheels ; \
+    find usr/lib -type f -name '*.a' -delete ; \
+    rm -rf etc/apk var/lib/db/sbom var/cache/apk usr/lib/apk
+
 # Cross-compile metal-boot on the build platform and compress it with UPX.
 FROM --platform=$BUILDPLATFORM golang:1.26-alpine AS build
 RUN apk add --no-cache upx
